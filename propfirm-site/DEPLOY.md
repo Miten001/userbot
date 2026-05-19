@@ -1,57 +1,75 @@
-# 🚀 Deploy ApexFunded — Step by Step
+# 🚀 ApexFunded — Deploy Guide
 
-The fastest way to get your site live (90 seconds). The site lives in the
-`propfirm-site/` subfolder of this repo, so make sure the **Root Directory**
-is configured correctly in Vercel.
-
----
-
-## Option A · Vercel (recommended, free)
-
-### 1. One-click import
-
-1. Go to **<https://vercel.com/new>**
-2. Click **"Continue with GitHub"** and authorize.
-3. Find **`Miten001/userbot`** in the list and click **Import**.
-
-### 2. Configure the project
-
-In the import dialog:
-
-| Setting              | Value                                                  |
-| -------------------- | ------------------------------------------------------ |
-| **Root Directory**   | `propfirm-site` ← click "Edit" and pick this folder    |
-| **Framework Preset** | `Next.js` (auto-detected once root dir is correct)     |
-| **Node Version**     | `20.x` (default)                                       |
-| **Build Command**    | leave default (`next build`)                           |
-| **Install Command**  | leave default (`npm install`)                          |
-
-### 3. Choose branch
-
-- For PR preview: deploy from `feat/apexfunded-propfirm-site`
-- For production: merge the PR first, then deploy from `main`
-
-### 4. Click **Deploy**
-
-After ~90 seconds you'll get a live URL like:
-
-> `https://userbot-xxxx.vercel.app`
-
-That's your live site. Share it anywhere.
-
-### 5. Add a custom domain (optional)
-
-In the Vercel dashboard → **Settings → Domains** → add your domain
-(e.g. `apexfunded.com`). Vercel will give you DNS records to point at it.
+There are two ways to view the live site. The **first option needs only one
+click from you** — everything else is fully automated.
 
 ---
 
-## Option B · Run locally
+## ⭐ Option 1 · GitHub Pages (auto-deploy, zero config)
+
+A GitHub Actions workflow has been set up at
+`.github/workflows/deploy-pages.yml` that automatically builds the site as a
+static export and publishes it to GitHub Pages every time you push to
+`master` / `main`.
+
+### One-time setup (1 click)
+
+1. Open the repo on GitHub: **<https://github.com/Miten001/userbot>**
+2. Click **Settings** (top right of the repo).
+3. In the left sidebar, click **Pages**.
+4. Under **"Build and deployment"** → **Source**, select
+   **"GitHub Actions"**.
+5. Save.
+
+That's it. The next push (or the workflow that already ran) will publish the
+site at:
+
+> **<https://miten001.github.io/userbot/>**
+
+You can also trigger the workflow manually anytime from the **Actions** tab →
+**Deploy ApexFunded to GitHub Pages** → **Run workflow**.
+
+### What the workflow does
+
+1. Checks out the repo.
+2. Installs Node 20 + dependencies in `propfirm-site/`.
+3. Runs `next build` with `GITHUB_PAGES=true` so Next produces a static
+   export under `propfirm-site/out/`.
+4. Uploads the artifact and deploys to Pages.
+
+The site already knows it's hosted at `/userbot/` thanks to the conditional
+`basePath` in `next.config.mjs`.
+
+---
+
+## Option 2 · Vercel (faster CDN + custom domains)
+
+If you want a top-tier CDN, push-to-deploy previews, and easy custom domains,
+deploy to Vercel.
+
+1. Go to **<https://vercel.com/new>**.
+2. Sign in with GitHub and import `Miten001/userbot`.
+3. In the import dialog:
+   - **Root Directory** → click "Edit" → select `propfirm-site`.
+   - Framework auto-detects as **Next.js**.
+4. Click **Deploy**. ~90 seconds later you get
+   `https://userbot-xxx.vercel.app`.
+
+You don't need any environment variables — Vercel runs the regular Next build
+(no static export), which is the highest-fidelity mode.
+
+### Custom domain
+
+After deploy: **Settings → Domains → Add `your-domain.com`** and follow the
+DNS instructions Vercel provides.
+
+---
+
+## Option 3 · Run locally
 
 ```bash
 git clone https://github.com/Miten001/userbot.git
 cd userbot/propfirm-site
-git checkout feat/apexfunded-propfirm-site
 npm install
 npm run dev
 ```
@@ -60,38 +78,24 @@ Open <http://localhost:3000>. Requires Node.js 18+ → <https://nodejs.org>
 
 ---
 
-## Option C · StackBlitz (in-browser, no install)
-
-Open this URL in your browser:
-
-```
-https://stackblitz.com/github/Miten001/userbot/tree/feat/apexfunded-propfirm-site/propfirm-site
-```
-
-Note: Three.js is heavy in StackBlitz. For best experience use Vercel.
-
----
-
 ## Troubleshooting
 
-- **Build fails with "module not found"** → make sure Root Directory is set to
-  `propfirm-site`, not the repo root.
-- **Blank page after deploy** → check the build logs in Vercel; typically a
-  TypeScript error. Run `npm run build` locally to reproduce.
-- **3D scene not loading** → it's dynamically imported. Wait a moment after
-  the page paints; on slow networks the chunk takes 2-3 seconds.
+| Symptom                          | Fix                                                                                |
+| -------------------------------- | ---------------------------------------------------------------------------------- |
+| Pages shows 404                  | Did you select **"GitHub Actions"** as the Pages source? Re-run the workflow.      |
+| Assets 404 on Pages              | Make sure `next.config.mjs` still has the `isPages` block (uses `basePath`).       |
+| 3D scene blank for 2-3s          | Normal — it's a dynamic import that loads after first paint.                       |
+| Vercel build fails               | Set **Root Directory** to `propfirm-site` in the project settings.                 |
+| Want a different repo path       | Change `repoBasePath` in `next.config.mjs` to `/your-repo-name`.                   |
 
 ---
 
-## Update the site after first deploy
-
-Every push to a branch triggers a preview deploy.
-Every push/merge to `main` triggers a production deploy automatically.
+## Updating the live site
 
 ```bash
 git add -A
 git commit -m "tweak: copy update"
-git push origin main
+git push origin master
 ```
 
-Done — Vercel rebuilds and ships in ~60 seconds.
+The Pages workflow auto-runs and re-deploys in ~2 minutes.
