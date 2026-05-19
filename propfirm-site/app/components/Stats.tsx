@@ -7,19 +7,19 @@ const stats = [
   {
     icon: Banknote,
     label: "Total Payouts",
-    value: "$184M+",
+    value: "$946K+",
     accent: "gold",
   },
   {
     icon: Users,
     label: "Funded Traders",
-    value: "62,400+",
+    value: "1,247+",
     accent: "royal",
   },
   {
     icon: Globe2,
     label: "Countries",
-    value: "150+",
+    value: "62+",
     accent: "emerald",
   },
   {

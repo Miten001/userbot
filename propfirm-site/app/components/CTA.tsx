@@ -35,7 +35,7 @@ export default function CTA() {
             <p className="mt-4 max-w-xl text-slate-300">
               Start your evaluation in minutes. Get instant access to up to{" "}
               <span className="font-semibold text-gold">$200,000</span> in
-              trading capital and join 62,000+ funded traders worldwide.
+              trading capital and join 1,200+ funded traders worldwide.
             </p>
 
             <div className="mt-7 flex flex-wrap items-center gap-3">
@@ -77,9 +77,9 @@ export default function CTA() {
             </div>
             <div className="mt-3 grid grid-cols-2 gap-4">
               <Stat label="Avg. Pass Rate" value="38%" sub="industry: 9%" tone="gold" />
-              <Stat label="Avg. Payout" value="$4.2K" sub="per cycle" tone="emerald" />
-              <Stat label="Best Trader" value="$612K" sub="lifetime profit" tone="rose" />
-              <Stat label="Trustpilot" value="4.8 / 5" sub="4,200+ reviews" tone="royal" />
+              <Stat label="Avg. Payout" value="$1.8K" sub="per cycle" tone="emerald" />
+              <Stat label="Best Trader" value="$42K" sub="lifetime profit" tone="rose" />
+              <Stat label="Trustpilot" value="4.7 / 5" sub="180+ reviews" tone="royal" />
             </div>
           </div>
         </div>

@@ -10,7 +10,7 @@ const items = [
     avatar: "AM",
     color: "from-gold to-rose2",
     rating: 5,
-    payout: "$18,420",
+    payout: "$4,820",
     quote:
       "Passed the $100K challenge in 9 days. Got my first payout in 18 hours. The dashboard is the cleanest I've used.",
   },
@@ -20,7 +20,7 @@ const items = [
     avatar: "SK",
     color: "from-gold-glow via-gold to-gold-500",
     rating: 5,
-    payout: "$32,810",
+    payout: "$9,400",
     elite: true,
     quote:
       "The 90% split changed everything for me. Scaled from $50K to $400K in six months. Real liquidity, no slippage games.",
@@ -31,7 +31,7 @@ const items = [
     avatar: "MR",
     color: "from-royal to-emerald2",
     rating: 5,
-    payout: "$9,540",
+    payout: "$2,820",
     quote:
       "I run my EA 24/7 — zero issues, zero hidden rules. Their support team actually answers in minutes, not days.",
   },
@@ -41,7 +41,7 @@ const items = [
     avatar: "LW",
     color: "from-emerald2 to-gold",
     rating: 5,
-    payout: "$24,000",
+    payout: "$6,200",
     quote:
       "Finally a prop firm that doesn't punish you for making money fast. No min days, no time pressure. Just trade.",
   },
@@ -51,7 +51,7 @@ const items = [
     avatar: "ED",
     color: "from-royal-400 to-rose2",
     rating: 5,
-    payout: "$12,300",
+    payout: "$3,180",
     quote:
       "I've tried 5 prop firms. ApexFunded is the only one where the rules feel built for traders, not against them.",
   },
@@ -61,7 +61,7 @@ const items = [
     avatar: "YA",
     color: "from-gold via-rose2 to-royal",
     rating: 5,
-    payout: "$41,200",
+    payout: "$11,600",
     elite: true,
     quote:
       "Withdrew via USDT in less than 2 hours. Already running on a $200K account after passing twice. Highly recommended.",

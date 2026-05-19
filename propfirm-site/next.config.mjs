@@ -4,7 +4,6 @@ const repoBasePath = "/userbot"; // GitHub Pages serves project pages at /<repo>
 
 const nextConfig = {
   reactStrictMode: true,
-  transpilePackages: ["three"],
 
   // Static export when building for GitHub Pages
   ...(isPages

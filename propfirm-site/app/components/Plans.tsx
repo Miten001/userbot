@@ -4,59 +4,55 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, Sparkles, ChevronRight, Crown } from "lucide-react";
 
-type Step = "one" | "two";
+type Step = "one" | "two" | "three";
 
-const PLANS: Record<
-  Step,
-  {
-    size: string;
-    price: string;
-    target: string;
-    daily: string;
-    overall: string;
-    split: string;
-    popular?: boolean;
-    accent: "gold" | "royal" | "emerald" | "rose";
-  }[]
-> = {
+type Plan = {
+  size: string;
+  price: string;
+  target: string;
+  daily: string;
+  overall: string;
+  split: string;
+  popular?: boolean;
+  accent: "gold" | "royal" | "emerald" | "rose";
+};
+
+const PLANS: Record<Step, Plan[]> = {
   one: [
-    { size: "$10,000", price: "$89", target: "10%", daily: "4%", overall: "6%", split: "80%", accent: "royal" },
-    { size: "$25,000", price: "$179", target: "10%", daily: "4%", overall: "6%", split: "80%", accent: "emerald" },
-    { size: "$50,000", price: "$289", target: "10%", daily: "4%", overall: "6%", split: "85%", popular: true, accent: "gold" },
-    { size: "$100,000", price: "$489", target: "10%", daily: "4%", overall: "6%", split: "85%", accent: "rose" },
-    { size: "$200,000", price: "$989", target: "10%", daily: "4%", overall: "6%", split: "90%", accent: "royal" },
+    { size: "$10,000",  price: "$89",  target: "10%",        daily: "4%", overall: "6%",  split: "80%", accent: "royal" },
+    { size: "$25,000",  price: "$179", target: "10%",        daily: "4%", overall: "6%",  split: "80%", accent: "emerald" },
+    { size: "$50,000",  price: "$289", target: "10%",        daily: "4%", overall: "6%",  split: "85%", popular: true, accent: "gold" },
+    { size: "$100,000", price: "$489", target: "10%",        daily: "4%", overall: "6%",  split: "85%", accent: "rose" },
+    { size: "$200,000", price: "$989", target: "10%",        daily: "4%", overall: "6%",  split: "90%", accent: "royal" },
   ],
   two: [
-    { size: "$10,000", price: "$59", target: "8% / 5%", daily: "5%", overall: "10%", split: "80%", accent: "royal" },
-    { size: "$25,000", price: "$129", target: "8% / 5%", daily: "5%", overall: "10%", split: "80%", accent: "emerald" },
-    { size: "$50,000", price: "$229", target: "8% / 5%", daily: "5%", overall: "10%", split: "85%", popular: true, accent: "gold" },
-    { size: "$100,000", price: "$429", target: "8% / 5%", daily: "5%", overall: "10%", split: "85%", accent: "rose" },
-    { size: "$200,000", price: "$849", target: "8% / 5%", daily: "5%", overall: "10%", split: "90%", accent: "royal" },
+    { size: "$10,000",  price: "$49",  target: "8% / 5%",    daily: "5%", overall: "10%", split: "80%", accent: "royal" },
+    { size: "$25,000",  price: "$99",  target: "8% / 5%",    daily: "5%", overall: "10%", split: "80%", accent: "emerald" },
+    { size: "$50,000",  price: "$179", target: "8% / 5%",    daily: "5%", overall: "10%", split: "85%", popular: true, accent: "gold" },
+    { size: "$100,000", price: "$329", target: "8% / 5%",    daily: "5%", overall: "10%", split: "85%", accent: "rose" },
+    { size: "$200,000", price: "$649", target: "8% / 5%",    daily: "5%", overall: "10%", split: "90%", accent: "royal" },
+  ],
+  three: [
+    { size: "$10,000",  price: "$39",  target: "6% / 4% / 3%", daily: "5%", overall: "12%", split: "75%", accent: "royal" },
+    { size: "$25,000",  price: "$79",  target: "6% / 4% / 3%", daily: "5%", overall: "12%", split: "80%", accent: "emerald" },
+    { size: "$50,000",  price: "$139", target: "6% / 4% / 3%", daily: "5%", overall: "12%", split: "85%", popular: true, accent: "gold" },
+    { size: "$100,000", price: "$259", target: "6% / 4% / 3%", daily: "5%", overall: "12%", split: "85%", accent: "rose" },
+    { size: "$200,000", price: "$499", target: "6% / 4% / 3%", daily: "5%", overall: "12%", split: "90%", accent: "royal" },
   ],
 };
 
 const accentMap = {
-  gold: {
-    glow: "from-gold/45 to-gold/0",
-    text: "text-gold",
-    border: "border-gold/40",
-  },
-  royal: {
-    glow: "from-royal/40 to-royal/0",
-    text: "text-royal-400",
-    border: "border-royal/40",
-  },
-  emerald: {
-    glow: "from-emerald2/40 to-emerald2/0",
-    text: "text-emerald2-400",
-    border: "border-emerald2/40",
-  },
-  rose: {
-    glow: "from-rose2/40 to-rose2/0",
-    text: "text-rose2-400",
-    border: "border-rose2/40",
-  },
+  gold:    { glow: "from-gold/45 to-gold/0",         text: "text-gold",          border: "border-gold/40" },
+  royal:   { glow: "from-royal/40 to-royal/0",       text: "text-royal-400",     border: "border-royal/40" },
+  emerald: { glow: "from-emerald2/40 to-emerald2/0", text: "text-emerald2-400",  border: "border-emerald2/40" },
+  rose:    { glow: "from-rose2/40 to-rose2/0",       text: "text-rose2-400",     border: "border-rose2/40" },
 };
+
+const TABS: { key: Step; label: string; sub: string }[] = [
+  { key: "one",   label: "1-Step",  sub: "Fastest" },
+  { key: "two",   label: "2-Step",  sub: "Balanced" },
+  { key: "three", label: "3-Step",  sub: "Easiest" },
+];
 
 export default function Plans() {
   const [step, setStep] = useState<Step>("one");
@@ -77,18 +73,13 @@ export default function Plans() {
           monthly subscriptions. Refunded with your first payout.
         </p>
 
-        {/* Toggle */}
+        {/* Toggle (3 options) */}
         <div className="mt-8 inline-flex rounded-full border border-white/10 bg-white/[0.04] p-1 backdrop-blur">
-          {(
-            [
-              { key: "one", label: "1-Step Challenge" },
-              { key: "two", label: "2-Step Challenge" },
-            ] as { key: Step; label: string }[]
-          ).map((t) => (
+          {TABS.map((t) => (
             <button
               key={t.key}
               onClick={() => setStep(t.key)}
-              className={`relative rounded-full px-5 py-2 text-sm font-medium transition-colors ${
+              className={`relative rounded-full px-4 py-2 text-sm font-medium transition-colors sm:px-5 ${
                 step === t.key ? "text-bg-deep" : "text-slate-300 hover:text-white"
               }`}
             >
@@ -99,7 +90,18 @@ export default function Plans() {
                   transition={{ type: "spring", stiffness: 300, damping: 28 }}
                 />
               )}
-              <span className="relative">{t.label}</span>
+              <span className="relative flex items-center gap-2">
+                {t.label}
+                <span
+                  className={`hidden rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider sm:inline-block ${
+                    step === t.key
+                      ? "bg-bg-deep/20 text-bg-deep"
+                      : "bg-white/5 text-slate-400"
+                  }`}
+                >
+                  {t.sub}
+                </span>
+              </span>
             </button>
           ))}
         </div>
@@ -123,7 +125,7 @@ export default function Plans() {
   );
 }
 
-function PlanCard({ plan }: { plan: (typeof PLANS)["one"][number] }) {
+function PlanCard({ plan }: { plan: Plan }) {
   const a = accentMap[plan.accent];
   return (
     <motion.div

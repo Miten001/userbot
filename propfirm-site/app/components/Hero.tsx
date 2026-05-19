@@ -1,6 +1,5 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
 import {
   ChevronRight,
@@ -9,15 +8,7 @@ import {
   TrendingUp,
   Crown,
 } from "lucide-react";
-
-const Hero3D = dynamic(() => import("./Hero3D"), {
-  ssr: false,
-  loading: () => (
-    <div className="grid h-full w-full place-items-center bg-gradient-to-br from-gold/10 via-royal/10 to-emerald2/10">
-      <div className="h-12 w-12 animate-spin rounded-full border-2 border-gold/30 border-t-gold" />
-    </div>
-  ),
-});
+import PairsShowcase from "./PairsShowcase";
 
 export default function Hero() {
   return (
@@ -107,9 +98,7 @@ export default function Hero() {
         {/* Right: 3D Canvas + floating cards */}
         <div className="relative h-[440px] w-full sm:h-[520px] lg:h-[600px]">
           <div className="ring-conic absolute inset-0 overflow-hidden rounded-[36px] border border-white/10 bg-bg-deep/80 shadow-glass backdrop-blur-md">
-            <Hero3D />
-            {/* Vignette overlay */}
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_50%,rgba(2,3,10,0.85)_100%)]" />
+            <PairsShowcase />
           </div>
 
           {/* Floating card — Live Account */}
