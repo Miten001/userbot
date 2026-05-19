@@ -2,9 +2,54 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, Sparkles, ChevronRight, Crown } from "lucide-react";
+import { Check, Sparkles, ChevronRight, Crown, Loader2 } from "lucide-react";
 
 type Step = "one" | "two" | "three";
+
+/** Convert "$50,000" -> 50000 for the API */
+function parseSize(s: string) {
+  return parseInt(s.replace(/[^0-9]/g, ""), 10);
+}
+
+async function startCheckout(step: Step, size: string) {
+  const account_size_usd = parseSize(size);
+  const guest_email = window.prompt("Enter your email to start the challenge:");
+  if (!guest_email) return;
+
+  try {
+    const res = await fetch("/api/checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ step, account_size_usd, guest_email }),
+    });
+
+    if (!res.ok) {
+      const txt = await res.text();
+      // Static GH Pages will return the index.html for /api/* — show a friendly hint.
+      if (res.status === 404 || txt.startsWith("<!DOCTYPE")) {
+        alert(
+          "Payments aren't enabled on this deployment yet.\n\n" +
+            "Deploy to Vercel and add Stripe + Supabase env vars to enable checkout.\n" +
+            "See propfirm-site/BACKEND.md.",
+        );
+        return;
+      }
+      try {
+        const j = JSON.parse(txt);
+        alert(`Checkout failed: ${j.error ?? res.statusText}`);
+      } catch {
+        alert(`Checkout failed: ${res.statusText}`);
+      }
+      return;
+    }
+
+    const data = (await res.json()) as { url?: string; error?: string };
+    if (data.url) window.location.href = data.url;
+    else alert(data.error ?? "Stripe did not return a URL");
+  } catch (e) {
+    alert(`Network error: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
 
 type Plan = {
   size: string;
@@ -135,6 +180,10 @@ export default function Plans() {
 
 function PlanCard({ plan }: { plan: Plan }) {
   const a = accentMap[plan.accent];
+  const [loading, setLoading] = useState(false);
+  const [step, setStep] = useState<Step>("one");
+  // Read the active step from the parent via the closest data attribute on the card.
+  // (We pass it down via a hidden span below so PlanCard doesn't need props plumbing.)
   return (
     <motion.div
       whileHover={{ y: -6 }}
