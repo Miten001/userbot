@@ -30,15 +30,27 @@ jobs:
           node-version: 20
 
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: npm install --legacy-peer-deps --no-audit --no-fund
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - name: Build static site
         env:
           GITHUB_PAGES: "true"
+          NEXT_TELEMETRY_DISABLED: "1"
         run: npm run build
 
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
+      - name: Verify build output
+        run: |
+          if [ ! -d "out" ]; then
+            echo "::error::Build output 'out/' not found"
+            ls -la
+            exit 1
+          fi
+          ls -la out/
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
