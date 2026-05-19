@@ -1,41 +1,47 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import { useEffect, useRef, useState } from "react";
+
+/**
+ * Live market feed for the hero panel.
+ *
+ * Architecture:
+ *   1. Mount → fetch /api/prices once for real opening data.
+ *   2. Re-fetch every 30 s (matches the API's edge cache).
+ *   3. Between fetches, apply tiny client-side micro-ticks every 1.5 s so the
+ *      cards feel alive (purely cosmetic — sparkline only).
+ *
+ * Layout is a flat 2D grid (2 columns × 3 rows) — no 3D/floating effects.
+ */
 
 type Pair = {
-  symbol: string;
+  symbol: string;        // "BTC/USD"
   flagA: string;
   flagB: string;
-  base: number;
-  spread: number;
+  category: "crypto" | "metal" | "forex";
   decimals: number;
-  isCrypto?: boolean;
-  isMetal?: boolean;
+  price: number;
+  change_pct: number;
 };
 
-const PAIRS: Pair[] = [
-  { symbol: "EUR/USD", flagA: "🇪🇺", flagB: "🇺🇸", base: 1.0842, spread: 0.0009, decimals: 4 },
-  { symbol: "GBP/USD", flagA: "🇬🇧", flagB: "🇺🇸", base: 1.2718, spread: 0.0011, decimals: 4 },
-  { symbol: "USD/JPY", flagA: "🇺🇸", flagB: "🇯🇵", base: 152.34, spread: 0.12, decimals: 2 },
-  { symbol: "XAU/USD", flagA: "🥇", flagB: "🇺🇸", base: 2384.5, spread: 1.8, decimals: 2, isMetal: true },
-  { symbol: "BTC/USD", flagA: "₿", flagB: "🇺🇸", base: 67_420, spread: 35, decimals: 0, isCrypto: true },
-  { symbol: "AUD/USD", flagA: "🇦🇺", flagB: "🇺🇸", base: 0.6612, spread: 0.0008, decimals: 4 },
+const FALLBACK: Pair[] = [
+  { symbol: "BTC/USD", flagA: "₿",  flagB: "🇺🇸", category: "crypto", decimals: 0, price: 67_420,    change_pct:  1.42 },
+  { symbol: "ETH/USD", flagA: "Ξ",  flagB: "🇺🇸", category: "crypto", decimals: 2, price:  3_184.50, change_pct:  0.78 },
+  { symbol: "XAU/USD", flagA: "🥇", flagB: "🇺🇸", category: "metal",  decimals: 2, price:  2_384.5,  change_pct:  0.31 },
+  { symbol: "XAG/USD", flagA: "🥈", flagB: "🇺🇸", category: "metal",  decimals: 2, price:     27.84, change_pct: -0.52 },
+  { symbol: "EUR/USD", flagA: "🇪🇺", flagB: "🇺🇸", category: "forex",  decimals: 4, price:      1.0842, change_pct:  0.18 },
+  { symbol: "USD/JPY", flagA: "🇺🇸", flagB: "🇯🇵", category: "forex",  decimals: 2, price:    152.34, change_pct: -0.24 },
 ];
 
-function rand(min: number, max: number) {
-  return Math.random() * (max - min) + min;
-}
-
-function formatPrice(p: number, decimals: number) {
-  return p.toLocaleString("en-US", {
+function formatPrice(p: number, decimals: number, isCrypto = false) {
+  const opts: Intl.NumberFormatOptions = {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
-  });
+  };
+  return (isCrypto && decimals === 0 ? "$" : "") + p.toLocaleString("en-US", opts);
 }
 
 function generateSpark(seed: number) {
-  // 14 points, oscillating
   const out: number[] = [];
   let v = 0.5;
   for (let i = 0; i < 14; i++) {
@@ -47,62 +53,132 @@ function generateSpark(seed: number) {
 }
 
 export default function PairsShowcase() {
-  const [ticks, setTicks] = useState(() =>
-    PAIRS.map((p) => ({
-      price: p.base,
-      change: rand(-0.8, 0.8),
-      spark: generateSpark(p.base),
-    })),
+  const [pairs, setPairs] = useState<Pair[]>(FALLBACK);
+  const [source, setSource] = useState<"loading" | "yahoo" | "fallback">("loading");
+  const [updatedAt, setUpdatedAt] = useState<number | null>(null);
+
+  const [sparks, setSparks] = useState<number[][]>(() =>
+    FALLBACK.map((p) => generateSpark(p.price)),
   );
+
+  const prevPricesRef = useRef<Record<string, number>>({});
+  const [flashes, setFlashes] = useState<Record<string, "up" | "down" | null>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    let fetchTimer: ReturnType<typeof setInterval> | null = null;
+
+    async function load() {
+      try {
+        const r = await fetch("/api/prices", { cache: "no-store" });
+        if (!r.ok || cancelled) return;
+        const data = (await r.json()) as {
+          source: "yahoo" | "fallback";
+          at: string;
+          quotes: Pair[];
+        };
+        if (cancelled || !data.quotes?.length) return;
+
+        const newFlashes: Record<string, "up" | "down" | null> = {};
+        for (const q of data.quotes) {
+          const prev = prevPricesRef.current[q.symbol];
+          if (prev != null && q.price !== prev) {
+            newFlashes[q.symbol] = q.price > prev ? "up" : "down";
+          }
+          prevPricesRef.current[q.symbol] = q.price;
+        }
+
+        setPairs(data.quotes);
+        setSource(data.source);
+        setUpdatedAt(Date.parse(data.at));
+        setFlashes(newFlashes);
+
+        setTimeout(() => setFlashes({}), 800);
+      } catch {
+        // keep showing whatever we had
+      }
+    }
+
+    load();
+    fetchTimer = setInterval(load, 30_000);
+
+    return () => {
+      cancelled = true;
+      if (fetchTimer) clearInterval(fetchTimer);
+    };
+  }, []);
 
   useEffect(() => {
     const id = setInterval(() => {
-      setTicks((prev) =>
-        prev.map((t, i) => {
-          const p = PAIRS[i];
-          const drift = rand(-p.spread, p.spread);
-          const newPrice = +(t.price + drift).toFixed(p.decimals);
-          const change = +(t.change + rand(-0.06, 0.06)).toFixed(2);
-          const next = [...t.spark.slice(1), Math.max(0.1, Math.min(0.9, t.spark[t.spark.length - 1] + rand(-0.12, 0.12)))];
-          return { price: newPrice, change, spark: next };
+      setSparks((prev) =>
+        prev.map((arr) => {
+          const last = arr[arr.length - 1];
+          const next = Math.max(0.1, Math.min(0.9, last + (Math.random() - 0.5) * 0.18));
+          return [...arr.slice(1), next];
         }),
       );
-    }, 1400);
+    }, 1500);
     return () => clearInterval(id);
   }, []);
 
+  const updatedAgo = updatedAt
+    ? `${Math.max(0, Math.floor((Date.now() - updatedAt) / 1000))}s ago`
+    : "—";
+
   return (
-    <div className="relative h-full w-full overflow-hidden p-4 sm:p-5">
-      {/* subtle grid backdrop */}
+    <div className="relative h-full w-full overflow-hidden p-3 sm:p-4">
       <div
-        className="absolute inset-0 opacity-40"
+        className="absolute inset-0 opacity-30"
         style={{
           backgroundImage:
             "linear-gradient(rgba(251,191,36,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(251,191,36,0.06) 1px, transparent 1px)",
-          backgroundSize: "40px 40px",
+          backgroundSize: "32px 32px",
           maskImage:
             "radial-gradient(ellipse at center, black 50%, transparent 80%)",
         }}
       />
 
-      {/* Header bar */}
-      <div className="relative z-10 mb-3 flex items-center justify-between rounded-xl border border-white/10 bg-bg-deep/60 px-3 py-2 backdrop-blur">
-        <div className="flex items-center gap-2 text-xs">
+      <div className="relative z-10 mb-2.5 flex items-center justify-between rounded-xl border border-white/10 bg-bg-deep/70 px-3 py-2 backdrop-blur">
+        <div className="flex items-center gap-2 text-[11px]">
           <span className="relative flex h-2 w-2">
-            <span className="absolute inset-0 animate-ping rounded-full bg-emerald2-400/70" />
-            <span className="relative h-2 w-2 rounded-full bg-emerald2-400" />
+            <span
+              className={`absolute inset-0 rounded-full ${
+                source === "yahoo"
+                  ? "animate-ping bg-emerald2-400/70"
+                  : source === "fallback"
+                    ? "animate-ping bg-gold/70"
+                    : "bg-slate-500"
+              }`}
+            />
+            <span
+              className={`relative h-2 w-2 rounded-full ${
+                source === "yahoo"
+                  ? "bg-emerald2-400"
+                  : source === "fallback"
+                    ? "bg-gold"
+                    : "bg-slate-500"
+              }`}
+            />
           </span>
-          <span className="font-semibold text-emerald2-400">LIVE MARKET</span>
+          <span className="font-bold tracking-wider text-emerald2-400">
+            LIVE MARKET
+          </span>
         </div>
-        <div className="text-[10px] uppercase tracking-widest text-slate-500">
-          Real-time feed
+        <div className="text-[9px] uppercase tracking-widest text-slate-500">
+          {source === "yahoo" ? "yahoo finance" : source === "fallback" ? "live api" : "loading…"}
+          <span className="mx-1.5 text-slate-700">·</span>
+          {updatedAgo}
         </div>
       </div>
 
-      {/* Pairs grid */}
-      <div className="relative z-10 grid h-[calc(100%-3rem)] grid-cols-2 gap-2.5 sm:gap-3">
-        {PAIRS.map((p, i) => (
-          <PairCard key={p.symbol} pair={p} tick={ticks[i]} index={i} />
+      <div className="relative z-10 grid h-[calc(100%-2.75rem)] grid-cols-2 gap-2">
+        {pairs.map((p, i) => (
+          <PairCard
+            key={p.symbol}
+            pair={p}
+            spark={sparks[i] ?? generateSpark(p.price)}
+            flash={flashes[p.symbol] ?? null}
+          />
         ))}
       </div>
     </div>
@@ -111,96 +187,83 @@ export default function PairsShowcase() {
 
 function PairCard({
   pair,
-  tick,
-  index,
+  spark,
+  flash,
 }: {
   pair: Pair;
-  tick: { price: number; change: number; spark: number[] };
-  index: number;
+  spark: number[];
+  flash: "up" | "down" | null;
 }) {
-  const up = tick.change >= 0;
+  const up = pair.change_pct >= 0;
+  const isCrypto = pair.category === "crypto";
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 16, scale: 0.95 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ delay: index * 0.07, duration: 0.5, ease: "easeOut" }}
-      whileHover={{ y: -3, scale: 1.02 }}
-      className={`group relative flex flex-col justify-between overflow-hidden rounded-2xl border bg-gradient-to-br p-3 backdrop-blur-xl transition-colors ${
-        up
-          ? "border-emerald2/25 from-emerald2/[0.08] to-transparent hover:border-emerald2/50"
-          : "border-rose2/25 from-rose2/[0.08] to-transparent hover:border-rose2/50"
+    <div
+      className={`group relative flex flex-col justify-between overflow-hidden rounded-xl border bg-bg-deep/40 p-3 transition-colors duration-300 ${
+        flash === "up"
+          ? "border-emerald2/60 bg-emerald2/[0.08]"
+          : flash === "down"
+            ? "border-rose2/60 bg-rose2/[0.08]"
+            : up
+              ? "border-emerald2/15 hover:border-emerald2/35"
+              : "border-rose2/15 hover:border-rose2/35"
       }`}
     >
-      {/* glow accent */}
-      <div
-        className={`pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full blur-2xl transition-opacity ${
-          up ? "bg-emerald2/40" : "bg-rose2/40"
-        } opacity-40 group-hover:opacity-80`}
-      />
-
       <div className="relative flex items-start justify-between">
-        <div>
-          <div className="flex items-center gap-1 text-base sm:text-lg">
-            <span>{pair.flagA}</span>
-            <span className="text-slate-500">/</span>
-            <span>{pair.flagB}</span>
-          </div>
-          <div className="mt-0.5 font-display text-[11px] font-bold tracking-wider text-slate-300 sm:text-xs">
+        <div className="flex items-center gap-1.5">
+          <span className="text-base leading-none">{pair.flagA}</span>
+          <span className="text-slate-600">/</span>
+          <span className="text-base leading-none">{pair.flagB}</span>
+          <span className="ml-1 font-display text-[11px] font-bold tracking-wider text-slate-200">
             {pair.symbol}
-          </div>
+          </span>
         </div>
+
         <span
-          className={`rounded-full border px-1.5 py-0.5 text-[9px] font-bold ${
-            up
-              ? "border-emerald2/30 bg-emerald2/10 text-emerald2-400"
-              : "border-rose2/30 bg-rose2/10 text-rose2-400"
+          className={`rounded-md px-1.5 py-0.5 text-[9px] font-bold tabular-nums ${
+            up ? "bg-emerald2/15 text-emerald2-400" : "bg-rose2/15 text-rose2-400"
           }`}
         >
-          {up ? "▲" : "▼"} {Math.abs(tick.change).toFixed(2)}%
+          {up ? "▲" : "▼"} {Math.abs(pair.change_pct).toFixed(2)}%
         </span>
       </div>
 
-      <div className="relative mt-2">
+      <div className="relative mt-1 flex items-end justify-between gap-2">
         <div
-          className={`font-display text-base font-bold tabular-nums sm:text-lg ${
+          className={`font-display text-base font-bold tabular-nums leading-none transition-colors sm:text-lg ${
             up ? "text-emerald2-400" : "text-rose2-400"
           }`}
         >
-          {pair.isCrypto ? "$" : ""}
-          {formatPrice(tick.price, pair.decimals)}
+          {formatPrice(pair.price, pair.decimals, isCrypto)}
         </div>
-        <Sparkline points={tick.spark} up={up} />
+        <Sparkline points={spark} up={up} />
       </div>
-    </motion.div>
+    </div>
   );
 }
 
 function Sparkline({ points, up }: { points: number[]; up: boolean }) {
-  const w = 100;
-  const h = 22;
+  const w = 56;
+  const h = 18;
   const step = w / (points.length - 1);
   const path = points
     .map((p, i) => `${i === 0 ? "M" : "L"} ${i * step} ${h - p * h}`)
     .join(" ");
-  const areaPath = `${path} L ${w} ${h} L 0 ${h} Z`;
   const stroke = up ? "#10b981" : "#f43f5e";
-  const fill = up
-    ? "url(#sparkUp)"
-    : "url(#sparkDown)";
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="mt-1.5 h-5 w-full" preserveAspectRatio="none">
-      <defs>
-        <linearGradient id="sparkUp" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#10b981" stopOpacity="0.5" />
-          <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
-        </linearGradient>
-        <linearGradient id="sparkDown" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#f43f5e" stopOpacity="0.5" />
-          <stop offset="100%" stopColor="#f43f5e" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={areaPath} fill={fill} />
-      <path d={path} stroke={stroke} strokeWidth={1.5} fill="none" strokeLinejoin="round" strokeLinecap="round" />
+    <svg
+      viewBox={`0 0 ${w} ${h}`}
+      className="h-4 w-14 flex-shrink-0 opacity-80"
+      preserveAspectRatio="none"
+    >
+      <path
+        d={path}
+        stroke={stroke}
+        strokeWidth={1.4}
+        fill="none"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
