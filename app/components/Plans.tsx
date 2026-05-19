@@ -6,12 +6,12 @@ import { Check, Sparkles, ChevronRight, Crown, Loader2 } from "lucide-react";
 
 type Step = "one" | "two" | "three";
 
-/** Convert "$50,000" -> 50000 for the API */
+/** "$50,000" -> 50000 (for the API request) */
 function parseSize(s: string) {
   return parseInt(s.replace(/[^0-9]/g, ""), 10);
 }
 
-async function startCheckout(step: Step, size: string) {
+async function startCheckout(step: Step, size: string): Promise<void> {
   const account_size_usd = parseSize(size);
   const guest_email = window.prompt("Enter your email to start the challenge:");
   if (!guest_email) return;
@@ -25,12 +25,12 @@ async function startCheckout(step: Step, size: string) {
 
     if (!res.ok) {
       const txt = await res.text();
-      // Static GH Pages will return the index.html for /api/* — show a friendly hint.
+      // Static / preview deploys may return the index.html for /api/* — show a friendly hint.
       if (res.status === 404 || txt.startsWith("<!DOCTYPE")) {
         alert(
           "Payments aren't enabled on this deployment yet.\n\n" +
             "Deploy to Vercel and add Stripe + Supabase env vars to enable checkout.\n" +
-            "See propfirm-site/BACKEND.md.",
+            "See SETUP.md.",
         );
         return;
       }
@@ -101,9 +101,9 @@ const accentMap = {
 };
 
 const TABS: { key: Step; label: string; sub: string }[] = [
-  { key: "one",   label: "1-Step",  sub: "Fastest" },
-  { key: "two",   label: "2-Step",  sub: "Balanced" },
-  { key: "three", label: "3-Step",  sub: "Easiest" },
+  { key: "one",   label: "1-Step", sub: "Fastest"  },
+  { key: "two",   label: "2-Step", sub: "Balanced" },
+  { key: "three", label: "3-Step", sub: "Easiest"  },
 ];
 
 export default function Plans() {
@@ -170,7 +170,7 @@ export default function Plans() {
           className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4"
         >
           {plans.map((p) => (
-            <PlanCard key={p.size} plan={p} />
+            <PlanCard key={p.size} plan={p} step={step} />
           ))}
         </motion.div>
       </AnimatePresence>
@@ -178,12 +178,21 @@ export default function Plans() {
   );
 }
 
-function PlanCard({ plan }: { plan: Plan }) {
+function PlanCard({ plan, step }: { plan: Plan; step: Step }) {
   const a = accentMap[plan.accent];
   const [loading, setLoading] = useState(false);
-  const [step, setStep] = useState<Step>("one");
-  // Read the active step from the parent via the closest data attribute on the card.
-  // (We pass it down via a hidden span below so PlanCard doesn't need props plumbing.)
+
+  async function onClickStart(e: React.MouseEvent<HTMLAnchorElement>) {
+    e.preventDefault();
+    if (loading) return;
+    setLoading(true);
+    try {
+      await startCheckout(step, plan.size);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <motion.div
       whileHover={{ y: -6 }}
@@ -219,9 +228,7 @@ function PlanCard({ plan }: { plan: Plan }) {
         )}
 
         <div className="relative">
-          <div className="text-xs uppercase tracking-wider text-slate-400">
-            Account Size
-          </div>
+          <div className="text-xs uppercase tracking-wider text-slate-400">Account Size</div>
           <div className="mt-1 font-display text-2xl font-bold tracking-tight sm:text-3xl">
             {plan.size}
           </div>
@@ -247,15 +254,26 @@ function PlanCard({ plan }: { plan: Plan }) {
 
           <a
             href="#"
+            onClick={onClickStart}
+            aria-busy={loading}
             className={`mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full py-2.5 text-sm font-semibold transition-all ${
               plan.popular
                 ? "btn-primary"
                 : "border border-white/15 bg-white/5 text-white hover:border-gold/40 hover:bg-white/10"
-            }`}
+            } ${loading ? "pointer-events-none opacity-70" : ""}`}
           >
-            {plan.popular && <Crown className="h-4 w-4" />}
-            Start Now
-            <ChevronRight className="h-4 w-4" />
+            {loading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Starting…
+              </>
+            ) : (
+              <>
+                {plan.popular && <Crown className="h-4 w-4" />}
+                Start Now
+                <ChevronRight className="h-4 w-4" />
+              </>
+            )}
           </a>
         </div>
       </div>

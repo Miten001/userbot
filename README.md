@@ -1,182 +1,86 @@
-<h1 align="center">
-  <b>†hê Hêllẞø† 🇮🇳</b>
-</h1>
+# ApexFunded — Forex Prop Firm Platform
 
-<p align="center">
-  <img src="https://telegra.ph/file/078df46ef8b32f89aef40.jpg" alt="The-HellBot">
-</p>
+A premium forex proprietary trading firm website + backend, built with Next.js 14, Supabase, and Stripe.
 
-<h6 align="center">
-  <b>⚡ ʟɛɢɛռɖaʀʏ ᴀғ ɦɛʟʟɮօt ⚡</b>
-</h6>
+🌐 **Live site:** deploy to Vercel (see [`SETUP.md`](./SETUP.md))
 
-<h3 align="center">
-  <b>A Smooth & Fast Telegram Userbot Based On Telethon Bot Library.</b>
-</h3>
+---
 
-------
-![GitHub forks](https://img.shields.io/github/forks/The-HellBot/HellBot?style=social)
-![GitHub Repo stars](https://img.shields.io/github/stars/The-HellBot/Hellbot?style=social)
+## Stack
 
-![Repo Size](https://img.shields.io/github/repo-size/The-HellBot/HellBot?&style=social&logo=github)
-![Branch](https://img.shields.io/badge/Branch-Master-white?&style=social&logo=github)
+- **Next.js 14** (App Router) + **TypeScript**
+- **Tailwind CSS** — glassmorphism + gradient utilities, gold/emerald/royal premium palette
+- **Framer Motion** — scroll & hover animations
+- **lucide-react** — icons
+- **Supabase** — auth + Postgres database (RLS-protected)
+- **Stripe** — checkout + webhooks
+- **MetaApi** (optional) — real MT5 account provisioning
 
-![Maintenance](https://img.shields.io/badge/Maintained%3F-Yes-white?&style=social&logo=hugo)
-![GitHub license](https://img.shields.io/github/license/The-HellBot/HellBot?&style=social&logo=github)
+---
 
-![Python](https://img.shields.io/badge/Python-v3.10-white?style=social&logo=python)
-![GitHub language count](https://img.shields.io/github/languages/count/The-HellBot/HellBot?&style=social&logo=hyper)
+## Frontend Sections
 
-[![Telegram Group](https://img.shields.io/badge/Telegram-Group-white?&style=social&logo=telegram)](https://t.me/hellbot_chat)
-[![Telegram Channel](https://img.shields.io/badge/Telegram-Channel-white?&style=social&logo=telegram)](https://t.me/its_hellbot)
+1. **Navbar** — sticky pill, scroll-aware glass blur
+2. **Hero** — copy + animated live forex pairs grid (EUR/USD, GBP/USD, USD/JPY, XAU/USD, BTC/USD, AUD/USD)
+3. **Stats** + partners marquee
+4. **Funding Plans** — 7 account sizes ($2.5K → $200K) × 3 challenge types (1/2/3-step)
+5. **How It Works** — 3 steps with raised icon plates
+6. **Features** — bento grid (split meter, payout chips, country flags)
+7. **Trading Rules** — Allowed vs Not Allowed
+8. **Testimonials** — 6 trader stories with payout pills
+9. **FAQ** — animated accordion
+10. **CTA** — conic-gradient border card
+11. **Footer** — newsletter + socials + risk disclaimer
 
-[![Documentation](https://img.shields.io/badge/Documentations-docs.hellbot.tech-white?&style=social&logo=gitbook)](https://hellbot.tech)
+---
 
-------
-## Deploy 🚀
-- [![Heroku](https://img.shields.io/badge/HellBot-Deploy%20To%20Heroku-black?style=for-the-badge&logo=heroku)](#Deploy-To-Heroku)
+## Backend
 
-- [![Railway](https://img.shields.io/badge/HellBot-Deploy%20On%20Railway-black?style=for-the-badge&logo=railway)](#Deploy-on-Railway)
+| Path | Purpose |
+|---|---|
+| `app/api/checkout/route.ts` | POST — creates Stripe Checkout session + pending challenge row |
+| `app/api/webhooks/stripe/route.ts` | Verifies signature → activates challenge → provisions MT5 account |
+| `app/api/account/route.ts` | GET — returns user's accounts (RLS-protected) |
+| `lib/stripe.ts` | Stripe client + plan catalog (single source of truth for prices) |
+| `lib/db.ts` | Supabase clients (browser, server, admin) |
+| `lib/mt5.ts` | MT5 provider abstraction — Mock + MetaApi |
+| `supabase/schema.sql` | Full database schema with RLS policies |
 
-- [![Locally](https://img.shields.io/badge/HellBot-Deploy%20Locally-black?style=for-the-badge&logo=linux)](#Deploy-Locally)
+---
 
-------
-## YouTube 📺
-- [![YouTube Channel Subscribers](https://img.shields.io/youtube/channel/subscribers/UC7Jr0FnRApx5nJASUfOjqJQ?style=social)](https://youtube.com/channel/UC7Jr0FnRApx5nJASUfOjqJQ)
-- [![YouTube Video Views](https://img.shields.io/youtube/views/leMyoT-qDH4?label=Tutorial+•+Heroku+•&style=social)](https://youtu.be/leMyoT-qDH4)
+## Quick Start
 
-------
-## Deploy To Heroku
-- Get All The Necessary Variables And Deploy To Heroku.
-- Some Mandatory Variables Are listed [Here](#Variables).
-- Fork & Star this repo.
-- Click on below button to access deploy page.
-- NOTE: Click on deploy button from your fork only.
-- [![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy)
+### Local development
 
-------
-## Deploy on Railway
-- Get all the necessary variables and deploy on railway.
-- Every mandatory variables are listed [Here](#Variables).
-- Fork & Star this repo.
-- Some commands might not work properly on railway.
-- Due to railway's privacy policy I removed railway button from repo. But you can get deploy guide in our [@HellBot_Chat](https://t.me/hellbot_chat). Type `#railway` to get deploy guide.
+```bash
+git clone https://github.com/Miten001/userbot.git
+cd userbot
+cp .env.example .env.local   # fill in your keys
+npm install
+npm run dev
+```
 
-------
-## Deploy Locally
-- Get detailed guide at [docs.hellbot.tech](https://docs.hellbot.tech/hellbot-userbot/deploy-locally)
+Open <http://localhost:3000>.
 
-------
-## Variables
+### Deploy
 
-- `APP_ID`  =  Get this value from my.telegram.org
-- `API_HASH`  =  Get this value from my.telegram.org
-- `HELLBOT_SESSION`  =  Get this by using [Repl.it](#Repl) or from [terminal](#Terminal)
-- `BOT_TOKEN`  =  Make A Bot From [@BotFather](https://t.me/botfather) and paste it's token.
-- `HANDLER`  =  Your command handler.
-- `DATABASE_URL`  =  A Postgresql database url.
+See [**`SETUP.md`**](./SETUP.md) for the full step-by-step guide
+(Vercel + Supabase + Stripe + MetaApi).
 
-`For all config variables and their detailed explanation go to` [docs.hellbot.tech](https://docs.hellbot.tech/hellbot-userbot/config-variables)
+---
 
-------
-## HellBot Session
+## Customization
 
-### Repl
-- Open Repl Link.
-- Click on Green Play Button.
-- Wait for requirements to finish.
-- Do human verification.
-- Select the type of session.
-    - HellBot Session
-        - Fill API ID, API HASH, Phone number (with country code).
-        - Paste the OTP received on Telegram.
-        - If You have Enabled 2-Step Verification then fill your password.
-        - Your HellBot Session Will be saved in your Telegram Saved Message.
-    - Telethon
-        - Fill API ID, API HASH, Phone number (with country code).
-        - Paste the OTP received on Telegram.
-        - If You have Enabled 2-Step Verification then fill your password.
-        - Your Telethon Session Will be saved in your Telegram Saved Message.
-    - Pyrogram
-        - Fill API ID, API HASH, Phone number (with country code).
-        - Paste the OTP received on Telegram.
-        - If You have Enabled 2-Step Verification then fill your password.
-        - Your Pyrogram Session will be saved in your Telegram Saved Message.
-    - Instagram
-        - Fill instagram username and password.
-        - If asked for OTP check yout email and fill up the OTP from there.
-        - Your Instagram Session will be displayed on the screen.
-        - Copy it carefully and Do Not Share With Anyone!
-        - Using a fake account is recommended.
+| Cheez | File |
+|---|---|
+| Brand colors | `tailwind.config.ts` |
+| Plans pricing | `app/components/Plans.tsx` + `lib/stripe.ts` (keep them in sync) |
+| Testimonials | `app/components/Testimonials.tsx` |
+| FAQ | `app/components/FAQ.tsx` |
+| Forex pairs | `app/components/PairsShowcase.tsx` |
 
-- [![Replit](https://img.shields.io/badge/HellBot-Run%20On%20ReplIT-black?style=for-the-badge&logo=replit)](https://replit.com/@TheHellBot/HellBot?v=1)
+---
 
-### Terminal
-- Open the terminal.
-- Paste this code.
+## License
 
-`pkg install python wget -y && pip install telethon && pip install pyrogram && pip install instagrapi && wget https://raw.githubusercontent.com/The-HellBot/HellBot/master/hell_string.py && python3 hell_string.py`
-
-- Select the type of session.
-    - HellBot Session
-        - Fill API ID, API HASH, Phone number (with country code).
-        - Paste the OTP received on Telegram.
-        - If You have Enabled 2-Step Verification then fill your password.
-        - Your Telethon Session Will be saved in your Telegram Saved Message.
-    - Telethon
-        - Fill API ID, API HASH, Phone number (with country code).
-        - Paste the OTP received on Telegram.
-        - If You have Enabled 2-Step Verification then fill your password.
-        - Your Telethon Session Will be saved in your Telegram Saved Message.
-    - Pyrogram
-        - Fill API ID, API HASH, Phone number (with country code).
-        - Paste the OTP received on Telegram.
-        - If You have Enabled 2-Step Verification then fill your password.
-        - Your Pyrogram Session will be saved in your Telegram Saved Message.
-    - Instagram
-        - Fill instagram username and password.
-        - If asked for OTP check yout email and fill up the OTP from there.
-        - Your Instagram Session will be displayed on the screen.
-        - Copy it carefully and Do Not Share With Anyone!
-        - Using a fake account is recommended.
-- Note that Termux Doesn't show passwords when filled. Just paste your password and hit enter.
-
-------
-## Disclaimer
-- We won't be responsible for any kind of ban due to this bot.
-- HellBot was made for fun purpose and to make group management easier.
-- It's your concern if you spam and gets your account banned.
-- Also, Forks won't be entertained.
-- If you fork this repo and edit plugins, it's your concern for further updates.
-- Forking Repo is fine. But if you edit something we will not provide any help.
-- In short, Fork At Your Own Risk.
-
-------
-# License
-
-<p align="center">
-    <img src="https://www.gnu.org/graphics/gplv3-or-later.png" alt="HellBot License">
-</p>
-
-<h4 align="center">
-    Copyright (C) 2023 <a href="https://github.com/The-HellBot">The-HellBot</a>
-</h4>
-
-Project [HellBot](https://github.com/The-HellBot/HellBot) is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-You should have received a copy of the GNU General Public License
-along with this program. If not, see <https://www.gnu.org/licenses/>.
-
-------
-## Credits
-
-- 💖 All the Dependencies
-- 💖 [Team HellBot](https://github.com/The-HellBot)
-
-------
+Proprietary — all rights reserved.
