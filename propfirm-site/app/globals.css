@@ -1,0 +1,104 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #04060b;
+  --bg-soft: #0a0e1a;
+  --accent: #22d3ee;
+  --accent-green: #34d399;
+  --accent-violet: #a78bfa;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  background: var(--bg);
+  color: #e2e8f0;
+  -webkit-font-smoothing: antialiased;
+  scroll-behavior: smooth;
+}
+
+body {
+  background-image:
+    radial-gradient(1200px 600px at 80% -10%, rgba(34, 211, 238, 0.18), transparent 60%),
+    radial-gradient(1000px 500px at 0% 10%, rgba(167, 139, 250, 0.12), transparent 60%),
+    radial-gradient(900px 600px at 50% 100%, rgba(52, 211, 153, 0.10), transparent 60%);
+  background-attachment: fixed;
+}
+
+::selection {
+  background: rgba(34, 211, 238, 0.35);
+  color: #fff;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: #06080f;
+}
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #22d3ee, #a78bfa);
+  border-radius: 999px;
+}
+
+@layer components {
+  .glass {
+    @apply bg-white/[0.03] border border-white/10 backdrop-blur-xl;
+  }
+
+  .glass-strong {
+    @apply bg-white/[0.06] border border-white/15 backdrop-blur-2xl;
+  }
+
+  .gradient-text {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(90deg, #22d3ee 0%, #a78bfa 50%, #34d399 100%);
+  }
+
+  .btn-primary {
+    @apply relative inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 font-semibold text-bg transition-transform duration-200 hover:-translate-y-0.5;
+    background-image: linear-gradient(90deg, #22d3ee 0%, #34d399 100%);
+    box-shadow: 0 10px 30px -10px rgba(34, 211, 238, 0.6),
+      inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-white/15 bg-white/5 px-6 py-3 font-medium text-white backdrop-blur-md transition-colors hover:bg-white/10;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-medium text-slate-300 backdrop-blur;
+  }
+
+  .section {
+    @apply relative mx-auto w-full max-w-7xl px-6 py-24 sm:px-10;
+  }
+
+  .h-display {
+    @apply font-display font-bold tracking-tight;
+  }
+
+  .grid-bg {
+    background-image:
+      linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: radial-gradient(ellipse at center, black 40%, transparent 75%);
+  }
+}
+
+.glow-blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(80px);
+  opacity: 0.55;
+  pointer-events: none;
+  z-index: 0;
+}
