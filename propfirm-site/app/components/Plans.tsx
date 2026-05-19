@@ -14,28 +14,35 @@ type Plan = {
   overall: string;
   split: string;
   popular?: boolean;
+  starter?: boolean;
   accent: "gold" | "royal" | "emerald" | "rose";
 };
 
 const PLANS: Record<Step, Plan[]> = {
   one: [
-    { size: "$10,000",  price: "$89",  target: "10%",        daily: "4%", overall: "6%",  split: "80%", accent: "royal" },
-    { size: "$25,000",  price: "$179", target: "10%",        daily: "4%", overall: "6%",  split: "80%", accent: "emerald" },
-    { size: "$50,000",  price: "$289", target: "10%",        daily: "4%", overall: "6%",  split: "85%", popular: true, accent: "gold" },
-    { size: "$100,000", price: "$489", target: "10%",        daily: "4%", overall: "6%",  split: "85%", accent: "rose" },
-    { size: "$200,000", price: "$989", target: "10%",        daily: "4%", overall: "6%",  split: "90%", accent: "royal" },
+    { size: "$2,500",   price: "$25",  target: "10%", daily: "4%", overall: "6%",  split: "75%", starter: true, accent: "emerald" },
+    { size: "$5,000",   price: "$45",  target: "10%", daily: "4%", overall: "6%",  split: "80%", accent: "rose" },
+    { size: "$10,000",  price: "$69",  target: "10%", daily: "4%", overall: "6%",  split: "80%", accent: "royal" },
+    { size: "$25,000",  price: "$139", target: "10%", daily: "4%", overall: "6%",  split: "80%", accent: "emerald" },
+    { size: "$50,000",  price: "$229", target: "10%", daily: "4%", overall: "6%",  split: "85%", popular: true, accent: "gold" },
+    { size: "$100,000", price: "$489", target: "10%", daily: "4%", overall: "6%",  split: "85%", accent: "rose" },
+    { size: "$200,000", price: "$989", target: "10%", daily: "4%", overall: "6%",  split: "90%", accent: "royal" },
   ],
   two: [
-    { size: "$10,000",  price: "$49",  target: "8% / 5%",    daily: "5%", overall: "10%", split: "80%", accent: "royal" },
-    { size: "$25,000",  price: "$99",  target: "8% / 5%",    daily: "5%", overall: "10%", split: "80%", accent: "emerald" },
-    { size: "$50,000",  price: "$179", target: "8% / 5%",    daily: "5%", overall: "10%", split: "85%", popular: true, accent: "gold" },
-    { size: "$100,000", price: "$329", target: "8% / 5%",    daily: "5%", overall: "10%", split: "85%", accent: "rose" },
-    { size: "$200,000", price: "$649", target: "8% / 5%",    daily: "5%", overall: "10%", split: "90%", accent: "royal" },
+    { size: "$2,500",   price: "$19",  target: "8% / 5%", daily: "5%", overall: "10%", split: "75%", starter: true, accent: "emerald" },
+    { size: "$5,000",   price: "$29",  target: "8% / 5%", daily: "5%", overall: "10%", split: "80%", accent: "rose" },
+    { size: "$10,000",  price: "$39",  target: "8% / 5%", daily: "5%", overall: "10%", split: "80%", accent: "royal" },
+    { size: "$25,000",  price: "$79",  target: "8% / 5%", daily: "5%", overall: "10%", split: "80%", accent: "emerald" },
+    { size: "$50,000",  price: "$139", target: "8% / 5%", daily: "5%", overall: "10%", split: "85%", popular: true, accent: "gold" },
+    { size: "$100,000", price: "$329", target: "8% / 5%", daily: "5%", overall: "10%", split: "85%", accent: "rose" },
+    { size: "$200,000", price: "$649", target: "8% / 5%", daily: "5%", overall: "10%", split: "90%", accent: "royal" },
   ],
   three: [
-    { size: "$10,000",  price: "$39",  target: "6% / 4% / 3%", daily: "5%", overall: "12%", split: "75%", accent: "royal" },
-    { size: "$25,000",  price: "$79",  target: "6% / 4% / 3%", daily: "5%", overall: "12%", split: "80%", accent: "emerald" },
-    { size: "$50,000",  price: "$139", target: "6% / 4% / 3%", daily: "5%", overall: "12%", split: "85%", popular: true, accent: "gold" },
+    { size: "$2,500",   price: "$15",  target: "6% / 4% / 3%", daily: "5%", overall: "12%", split: "75%", starter: true, accent: "emerald" },
+    { size: "$5,000",   price: "$22",  target: "6% / 4% / 3%", daily: "5%", overall: "12%", split: "75%", accent: "rose" },
+    { size: "$10,000",  price: "$29",  target: "6% / 4% / 3%", daily: "5%", overall: "12%", split: "75%", accent: "royal" },
+    { size: "$25,000",  price: "$59",  target: "6% / 4% / 3%", daily: "5%", overall: "12%", split: "80%", accent: "emerald" },
+    { size: "$50,000",  price: "$109", target: "6% / 4% / 3%", daily: "5%", overall: "12%", split: "85%", popular: true, accent: "gold" },
     { size: "$100,000", price: "$259", target: "6% / 4% / 3%", daily: "5%", overall: "12%", split: "85%", accent: "rose" },
     { size: "$200,000", price: "$499", target: "6% / 4% / 3%", daily: "5%", overall: "12%", split: "90%", accent: "royal" },
   ],
@@ -69,8 +76,9 @@ export default function Plans() {
           Pick your <span className="gradient-text">capital</span>
         </h2>
         <p className="mt-3 max-w-xl text-slate-400">
-          Choose a challenge that matches your trading style. One-time fee. No
-          monthly subscriptions. Refunded with your first payout.
+          Start with as little as <span className="font-semibold text-emerald2-400">$15</span>.
+          Scale up to <span className="font-semibold text-gold">$200,000</span>.
+          One-time fee, refunded with your first payout.
         </p>
 
         {/* Toggle (3 options) */}
@@ -114,7 +122,7 @@ export default function Plans() {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -8 }}
           transition={{ duration: 0.3 }}
-          className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-5"
+          className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4"
         >
           {plans.map((p) => (
             <PlanCard key={p.size} plan={p} />
@@ -136,7 +144,7 @@ function PlanCard({ plan }: { plan: Plan }) {
       }`}
     >
       <div
-        className={`relative flex h-full flex-col overflow-hidden rounded-3xl border bg-gradient-to-b p-6 backdrop-blur-xl ${
+        className={`relative flex h-full flex-col overflow-hidden rounded-3xl border bg-gradient-to-b p-5 backdrop-blur-xl sm:p-6 ${
           plan.popular
             ? "border-gold/40 from-gold/[0.08] to-transparent bg-bg-soft/60"
             : "border-white/10 from-white/[0.04] to-transparent bg-white/[0.02]"
@@ -144,13 +152,20 @@ function PlanCard({ plan }: { plan: Plan }) {
       >
         {/* Glow accent */}
         <div
-          className={`pointer-events-none absolute -right-12 -top-12 h-44 w-44 rounded-full bg-gradient-to-br ${a.glow} opacity-70 blur-3xl`}
+          className={`pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full bg-gradient-to-br ${a.glow} opacity-70 blur-3xl`}
         />
 
         {plan.popular && (
-          <div className="absolute right-4 top-4 inline-flex items-center gap-1 rounded-full border border-gold/40 bg-gold/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-gold shadow-[inset_0_1px_0_rgba(255,255,255,0.4)]">
+          <div className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full border border-gold/40 bg-gold/15 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-gold shadow-[inset_0_1px_0_rgba(255,255,255,0.4)] sm:right-4 sm:top-4 sm:px-2.5 sm:py-1 sm:text-[10px]">
             <Crown className="h-3 w-3" />
-            Most Popular
+            Popular
+          </div>
+        )}
+
+        {plan.starter && (
+          <div className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full border border-emerald2/40 bg-emerald2/15 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald2-400 sm:right-4 sm:top-4 sm:px-2.5 sm:py-1 sm:text-[10px]">
+            <Sparkles className="h-3 w-3" />
+            Starter
           </div>
         )}
 
@@ -158,33 +173,32 @@ function PlanCard({ plan }: { plan: Plan }) {
           <div className="text-xs uppercase tracking-wider text-slate-400">
             Account Size
           </div>
-          <div className="mt-1 font-display text-3xl font-bold tracking-tight">
+          <div className="mt-1 font-display text-2xl font-bold tracking-tight sm:text-3xl">
             {plan.size}
           </div>
 
-          <div className="mt-5 flex items-baseline gap-1">
+          <div className="mt-4 flex items-baseline gap-1">
             <span
-              className={`font-display text-4xl font-bold ${
+              className={`font-display text-3xl font-bold sm:text-4xl ${
                 plan.popular ? "gradient-text" : a.text
               }`}
             >
               {plan.price}
             </span>
-            <span className="text-xs text-slate-400">one-time</span>
+            <span className="text-[11px] text-slate-400">one-time</span>
           </div>
 
-          <ul className="mt-6 space-y-3 text-sm text-slate-300">
+          <ul className="mt-5 space-y-2.5 text-sm text-slate-300">
             <Row label="Profit Target" value={plan.target} />
-            <Row label="Max Daily Loss" value={plan.daily} />
-            <Row label="Max Overall Loss" value={plan.overall} />
+            <Row label="Daily Loss" value={plan.daily} />
+            <Row label="Overall Loss" value={plan.overall} />
             <Row label="Profit Split" value={plan.split} highlight />
             <Row label="Time Limit" value="Unlimited" />
-            <Row label="EAs / News" value="Allowed" />
           </ul>
 
           <a
             href="#"
-            className={`mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full py-3 text-sm font-semibold transition-all ${
+            className={`mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full py-2.5 text-sm font-semibold transition-all ${
               plan.popular
                 ? "btn-primary"
                 : "border border-white/15 bg-white/5 text-white hover:border-gold/40 hover:bg-white/10"
@@ -211,13 +225,15 @@ function Row({
 }) {
   return (
     <li className="flex items-center justify-between gap-2 border-b border-white/5 pb-2 last:border-none">
-      <span className="flex items-center gap-2 text-slate-400">
-        <Check className="h-3.5 w-3.5 text-emerald2-400" />
+      <span className="flex items-center gap-1.5 text-xs text-slate-400 sm:text-sm">
+        <Check className="h-3 w-3 text-emerald2-400 sm:h-3.5 sm:w-3.5" />
         {label}
       </span>
       <span
         className={
-          highlight ? "font-bold text-gold" : "font-medium text-white"
+          highlight
+            ? "text-xs font-bold text-gold sm:text-sm"
+            : "text-xs font-medium text-white sm:text-sm"
         }
       >
         {value}
