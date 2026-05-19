@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, ChevronRight } from "lucide-react";
+import { Menu, X, ChevronRight, Crown } from "lucide-react";
 
 const links = [
   { href: "#plans", label: "Funding" },
@@ -31,7 +31,7 @@ export default function Navbar() {
         transition={{ duration: 0.5, ease: "easeOut" }}
         className={`flex w-full max-w-6xl items-center justify-between rounded-full border px-4 py-2.5 transition-all duration-300 sm:px-6 ${
           scrolled
-            ? "border-white/10 bg-bg/70 backdrop-blur-2xl shadow-[0_8px_30px_rgba(0,0,0,0.4)]"
+            ? "border-gold/15 bg-bg-deep/80 shadow-[0_8px_30px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(251,191,36,0.08)] backdrop-blur-2xl"
             : "border-white/[0.06] bg-white/[0.02] backdrop-blur-md"
         }`}
       >
@@ -47,7 +47,7 @@ export default function Navbar() {
             <li key={l.href}>
               <a
                 href={l.href}
-                className="rounded-full px-4 py-2 text-sm text-slate-300 transition-colors hover:bg-white/5 hover:text-white"
+                className="rounded-full px-4 py-2 text-sm text-slate-300 transition-colors hover:bg-white/5 hover:text-gold"
               >
                 {l.label}
               </a>
@@ -64,19 +64,20 @@ export default function Navbar() {
           </a>
           <a
             href="#plans"
-            className="group inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-accent to-accent-green px-4 py-2 text-sm font-semibold text-bg shadow-[0_8px_24px_-8px_rgba(34,211,238,0.6)] transition-transform hover:-translate-y-0.5"
+            className="btn-primary group !px-4 !py-2 !text-sm"
           >
+            <Crown className="h-3.5 w-3.5" />
             Get Funded
-            <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+            <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
           </a>
         </div>
 
         <button
           aria-label="Toggle menu"
           onClick={() => setOpen((v) => !v)}
-          className="grid h-10 w-10 place-items-center rounded-full border border-white/10 bg-white/5 md:hidden"
+          className="grid h-10 w-10 place-items-center rounded-full border border-gold/20 bg-white/5 md:hidden"
         >
-          {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          {open ? <X className="h-5 w-5 text-gold" /> : <Menu className="h-5 w-5 text-gold" />}
         </button>
       </motion.nav>
 
@@ -86,7 +87,7 @@ export default function Navbar() {
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
-            className="absolute left-4 right-4 top-20 z-40 rounded-3xl border border-white/10 bg-bg-soft/90 p-4 backdrop-blur-2xl md:hidden"
+            className="absolute left-4 right-4 top-20 z-40 rounded-3xl border border-gold/20 bg-bg-soft/95 p-4 shadow-gold backdrop-blur-2xl md:hidden"
           >
             <ul className="flex flex-col gap-1">
               {links.map((l) => (
@@ -94,7 +95,7 @@ export default function Navbar() {
                   <a
                     onClick={() => setOpen(false)}
                     href={l.href}
-                    className="block rounded-xl px-4 py-3 text-slate-200 hover:bg-white/5"
+                    className="block rounded-xl px-4 py-3 text-slate-200 transition-colors hover:bg-white/5 hover:text-gold"
                   >
                     {l.label}
                   </a>
@@ -102,6 +103,7 @@ export default function Navbar() {
               ))}
               <li className="mt-2">
                 <a href="#plans" className="btn-primary w-full">
+                  <Crown className="h-4 w-4" />
                   Get Funded <ChevronRight className="h-4 w-4" />
                 </a>
               </li>
@@ -116,20 +118,21 @@ export default function Navbar() {
 function Logo() {
   return (
     <span className="relative grid h-9 w-9 place-items-center">
-      <span className="absolute inset-0 rounded-xl bg-gradient-to-br from-accent via-accent-violet to-accent-green opacity-90 blur-[6px]" />
-      <span className="relative grid h-9 w-9 place-items-center rounded-xl border border-white/20 bg-bg/80 backdrop-blur">
+      <span className="absolute inset-0 rounded-xl bg-gradient-to-br from-gold-glow via-gold to-rose2 opacity-90 blur-[6px] animate-glow-pulse" />
+      <span className="relative grid h-9 w-9 place-items-center rounded-xl border border-gold/30 bg-bg-deep/80 backdrop-blur shadow-[inset_0_1px_0_rgba(251,191,36,0.4)]">
         <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none">
           <path
             d="M4 18 L10 6 L14 14 L20 4"
             stroke="url(#g)"
-            strokeWidth="2.4"
+            strokeWidth="2.6"
             strokeLinecap="round"
             strokeLinejoin="round"
           />
           <defs>
             <linearGradient id="g" x1="0" y1="0" x2="24" y2="24">
-              <stop offset="0%" stopColor="#22d3ee" />
-              <stop offset="100%" stopColor="#34d399" />
+              <stop offset="0%" stopColor="#fde68a" />
+              <stop offset="50%" stopColor="#fbbf24" />
+              <stop offset="100%" stopColor="#f59e0b" />
             </linearGradient>
           </defs>
         </svg>

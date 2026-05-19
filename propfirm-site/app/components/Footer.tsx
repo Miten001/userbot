@@ -1,6 +1,6 @@
 "use client";
 
-import { Twitter, Instagram, Youtube, Send, Linkedin } from "lucide-react";
+import { Twitter, Instagram, Youtube, Send, Linkedin, Crown } from "lucide-react";
 
 const cols = [
   {
@@ -47,8 +47,8 @@ const cols = [
 
 export default function Footer() {
   return (
-    <footer className="relative border-t border-white/10 bg-bg-soft/50 backdrop-blur-xl">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-accent/40 to-transparent" />
+    <footer className="relative border-t border-gold/10 bg-bg-soft/50 backdrop-blur-xl">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold/50 to-transparent" />
 
       <div className="mx-auto w-full max-w-7xl px-6 py-16 sm:px-10">
         <div className="grid grid-cols-2 gap-8 sm:grid-cols-3 lg:grid-cols-6">
@@ -61,15 +61,16 @@ export default function Footer() {
               </span>
             </div>
             <p className="mt-4 max-w-sm text-sm text-slate-400">
-              Trade with our capital. Keep up to 90% of the profits.
-              Industry-best splits, transparent rules, and the fastest payouts
-              in prop trading.
+              Trade with our capital. Keep up to{" "}
+              <span className="font-semibold text-gold">90%</span> of the
+              profits. Industry-best splits, transparent rules, and the fastest
+              payouts in prop trading.
             </p>
 
             {/* Newsletter */}
             <form
               onSubmit={(e) => e.preventDefault()}
-              className="mt-6 flex max-w-sm items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] p-1 backdrop-blur"
+              className="mt-6 flex max-w-sm items-center gap-2 rounded-full border border-gold/20 bg-white/[0.04] p-1 backdrop-blur"
             >
               <input
                 type="email"
@@ -78,7 +79,7 @@ export default function Footer() {
               />
               <button
                 type="submit"
-                className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-accent to-accent-green px-4 py-2 text-xs font-semibold text-bg shadow-[0_8px_20px_-8px_rgba(34,211,238,0.6)] transition-transform hover:-translate-y-0.5"
+                className="inline-flex items-center gap-1.5 rounded-full bg-gold-gradient px-4 py-2 text-xs font-bold text-bg-deep shadow-gold transition-transform hover:-translate-y-0.5"
               >
                 Subscribe
                 <Send className="h-3.5 w-3.5" />
@@ -86,11 +87,16 @@ export default function Footer() {
             </form>
 
             <div className="mt-6 flex items-center gap-2">
-              {[Twitter, Instagram, Youtube, Linkedin].map((Icon, i) => (
+              {[
+                { Icon: Twitter, color: "hover:text-gold hover:border-gold/40" },
+                { Icon: Instagram, color: "hover:text-rose2-400 hover:border-rose2/40" },
+                { Icon: Youtube, color: "hover:text-rose2-400 hover:border-rose2/40" },
+                { Icon: Linkedin, color: "hover:text-royal-400 hover:border-royal/40" },
+              ].map(({ Icon, color }, i) => (
                 <a
                   key={i}
                   href="#"
-                  className="grid h-9 w-9 place-items-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition-colors hover:border-white/20 hover:text-white"
+                  className={`grid h-9 w-9 place-items-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition-colors ${color}`}
                 >
                   <Icon className="h-4 w-4" />
                 </a>
@@ -109,7 +115,7 @@ export default function Footer() {
                   <li key={l.label}>
                     <a
                       href={l.href}
-                      className="text-sm text-slate-400 transition-colors hover:text-white"
+                      className="text-sm text-slate-400 transition-colors hover:text-gold"
                     >
                       {l.label}
                     </a>
@@ -133,11 +139,14 @@ export default function Footer() {
         </div>
 
         <div className="mt-8 flex flex-col items-center justify-between gap-3 border-t border-white/5 pt-6 text-xs text-slate-500 sm:flex-row">
-          <div>© {new Date().getFullYear()} ApexFunded Capital Ltd. All rights reserved.</div>
+          <div className="flex items-center gap-2">
+            <Crown className="h-3 w-3 text-gold" />© {new Date().getFullYear()}{" "}
+            ApexFunded Capital Ltd. All rights reserved.
+          </div>
           <div className="flex items-center gap-4">
             <span className="flex items-center gap-2">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent-green" />
-              All systems operational
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald2-400" />
+              <span className="text-emerald2-400">All systems operational</span>
             </span>
             <span>v1.4.2</span>
           </div>
@@ -150,20 +159,20 @@ export default function Footer() {
 function Logo() {
   return (
     <span className="relative grid h-8 w-8 place-items-center">
-      <span className="absolute inset-0 rounded-lg bg-gradient-to-br from-accent via-accent-violet to-accent-green opacity-90 blur-[5px]" />
-      <span className="relative grid h-8 w-8 place-items-center rounded-lg border border-white/20 bg-bg/80 backdrop-blur">
+      <span className="absolute inset-0 rounded-lg bg-gradient-to-br from-gold-glow via-gold to-rose2 opacity-90 blur-[5px]" />
+      <span className="relative grid h-8 w-8 place-items-center rounded-lg border border-gold/30 bg-bg-deep/80 backdrop-blur">
         <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none">
           <path
             d="M4 18 L10 6 L14 14 L20 4"
             stroke="url(#fg)"
-            strokeWidth="2.4"
+            strokeWidth="2.6"
             strokeLinecap="round"
             strokeLinejoin="round"
           />
           <defs>
             <linearGradient id="fg" x1="0" y1="0" x2="24" y2="24">
-              <stop offset="0%" stopColor="#22d3ee" />
-              <stop offset="100%" stopColor="#34d399" />
+              <stop offset="0%" stopColor="#fde68a" />
+              <stop offset="100%" stopColor="#f59e0b" />
             </linearGradient>
           </defs>
         </svg>

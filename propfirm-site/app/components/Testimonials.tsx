@@ -1,14 +1,14 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Star, Sparkles, Quote } from "lucide-react";
+import { Star, Quote, Crown } from "lucide-react";
 
 const items = [
   {
     name: "Arjun M.",
     role: "Funded Trader · India",
     avatar: "AM",
-    color: "from-accent to-accent-violet",
+    color: "from-gold to-rose2",
     rating: 5,
     payout: "$18,420",
     quote:
@@ -16,11 +16,12 @@ const items = [
   },
   {
     name: "Sara K.",
-    role: "Funded Trader · UAE",
+    role: "Elite Trader · UAE",
     avatar: "SK",
-    color: "from-accent-green to-accent",
+    color: "from-gold-glow via-gold to-gold-500",
     rating: 5,
     payout: "$32,810",
+    elite: true,
     quote:
       "The 90% split changed everything for me. Scaled from $50K to $400K in six months. Real liquidity, no slippage games.",
   },
@@ -28,7 +29,7 @@ const items = [
     name: "Marco R.",
     role: "Funded Trader · Brazil",
     avatar: "MR",
-    color: "from-accent-violet to-accent-green",
+    color: "from-royal to-emerald2",
     rating: 5,
     payout: "$9,540",
     quote:
@@ -38,7 +39,7 @@ const items = [
     name: "Liu W.",
     role: "Funded Trader · Singapore",
     avatar: "LW",
-    color: "from-accent to-accent-green",
+    color: "from-emerald2 to-gold",
     rating: 5,
     payout: "$24,000",
     quote:
@@ -48,7 +49,7 @@ const items = [
     name: "Emma D.",
     role: "Funded Trader · UK",
     avatar: "ED",
-    color: "from-accent-violet to-accent",
+    color: "from-royal-400 to-rose2",
     rating: 5,
     payout: "$12,300",
     quote:
@@ -56,11 +57,12 @@ const items = [
   },
   {
     name: "Yusuf A.",
-    role: "Funded Trader · Turkey",
+    role: "Elite Trader · Turkey",
     avatar: "YA",
-    color: "from-accent-green to-accent-violet",
+    color: "from-gold via-rose2 to-royal",
     rating: 5,
     payout: "$41,200",
+    elite: true,
     quote:
       "Withdrew via USDT in less than 2 hours. Already running on a $200K account after passing twice. Highly recommended.",
   },
@@ -70,8 +72,8 @@ export default function Testimonials() {
   return (
     <section className="section">
       <div className="mb-12 flex flex-col items-center text-center">
-        <span className="chip">
-          <Sparkles className="h-3.5 w-3.5 text-accent-green" />
+        <span className="chip-gold">
+          <Crown className="h-3.5 w-3.5" />
           Trader Stories
         </span>
         <h2 className="h-display mt-4 text-4xl sm:text-5xl">
@@ -91,19 +93,34 @@ export default function Testimonials() {
             viewport={{ once: true, margin: "-80px" }}
             transition={{ duration: 0.45, delay: (i % 3) * 0.08 }}
             whileHover={{ y: -4 }}
-            className="group relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.025] p-6 backdrop-blur-xl transition-colors hover:border-white/20"
+            className={`group relative overflow-hidden rounded-3xl border p-6 backdrop-blur-xl transition-colors ${
+              t.elite
+                ? "border-gold/30 bg-gradient-to-br from-gold/[0.06] to-transparent hover:border-gold/50"
+                : "border-white/10 bg-white/[0.025] hover:border-white/20"
+            }`}
           >
             <Quote className="absolute right-5 top-5 h-7 w-7 text-white/[0.06]" />
+
+            {t.elite && (
+              <div className="absolute -right-8 top-6 rotate-45 bg-gold-gradient px-10 py-1 text-[10px] font-bold uppercase tracking-wider text-bg-deep shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
+                Elite
+              </div>
+            )}
 
             {/* Header */}
             <div className="flex items-center gap-3">
               <span
-                className={`grid h-12 w-12 place-items-center rounded-full bg-gradient-to-br ${t.color} font-display text-sm font-bold text-bg shadow-[inset_0_1px_0_rgba(255,255,255,0.4)]`}
+                className={`grid h-12 w-12 place-items-center rounded-full bg-gradient-to-br ${t.color} font-display text-sm font-bold text-bg-deep shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]`}
               >
                 {t.avatar}
               </span>
               <div>
-                <div className="font-semibold text-white">{t.name}</div>
+                <div className="flex items-center gap-1.5 font-semibold text-white">
+                  {t.name}
+                  {t.elite && (
+                    <Crown className="h-3.5 w-3.5 text-gold" />
+                  )}
+                </div>
                 <div className="text-xs text-slate-400">{t.role}</div>
               </div>
             </div>
@@ -113,7 +130,7 @@ export default function Testimonials() {
               {Array.from({ length: t.rating }).map((_, k) => (
                 <Star
                   key={k}
-                  className="h-4 w-4 fill-yellow-400 text-yellow-400"
+                  className="h-4 w-4 fill-gold text-gold"
                 />
               ))}
             </div>
@@ -123,12 +140,18 @@ export default function Testimonials() {
             </p>
 
             {/* Payout pill */}
-            <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-accent-green/30 bg-accent-green/10 px-3 py-1 text-xs font-semibold text-accent-green">
+            <div
+              className={`mt-5 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-bold ${
+                t.elite
+                  ? "border-gold/40 bg-gold/10 text-gold"
+                  : "border-emerald2/30 bg-emerald2/10 text-emerald2-400"
+              }`}
+            >
               Last payout · {t.payout}
             </div>
 
             {/* Hover gradient line */}
-            <div className="pointer-events-none absolute inset-x-6 bottom-0 h-px bg-gradient-to-r from-transparent via-accent/50 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+            <div className="pointer-events-none absolute inset-x-6 bottom-0 h-px bg-gradient-to-r from-transparent via-gold/50 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
           </motion.article>
         ))}
       </div>
