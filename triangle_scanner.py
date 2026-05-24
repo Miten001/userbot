@@ -69,9 +69,25 @@ except Exception as _e:
 
 try:
     import time, csv, os, sys, base64
-    from datetime import datetime
+    from datetime import datetime, timedelta
+    from concurrent.futures import ThreadPoolExecutor, as_completed
 except Exception as _e:
     _critical(f"Standard library import error: {_e}")
+
+# Session-wide tracking for the GPU-style dashboard
+SESSION = {
+    "start_time"       : time.time(),
+    "scans"            : 0,
+    "last_scan_sec"    : 0.0,
+    "total_scan_sec"   : 0.0,
+    "trades_placed"    : 0,
+    "last_trade_time"  : None,
+    "last_trade_pair"  : None,
+    "recent_trades"    : [],   # list of dicts (last 5)
+}
+
+# How many parallel workers for candle fetching. MT5 read calls are thread-safe.
+SCAN_WORKERS = 12
 
 # colorama is OPTIONAL - if missing, run with no colors (still works on RDP)
 try:
@@ -461,8 +477,19 @@ def print_separator(char="-", color="dim"):
     print(clr(char * 64, color))
 
 
+def _fmt_uptime(secs):
+    secs = int(secs)
+    h, rem = divmod(secs, 3600)
+    m, s   = divmod(rem, 60)
+    if h:
+        return f"{h}h {m:02d}m {s:02d}s"
+    if m:
+        return f"{m}m {s:02d}s"
+    return f"{s}s"
+
+
 # ======================================================
-#  LIVE DASHBOARD  (P&L, open trades, next setups)
+#  GPU-STYLE LIVE DASHBOARD  (P&L | Session | Open | Logic)
 # ======================================================
 
 def _read_today_journal_stats():
@@ -506,65 +533,130 @@ def _box_line(content, color="blue"):
     print(clr("|", color) + " " + content + " " * pad + clr("|", color))
 
 
-def print_live_dashboard(approaching_list, scan_num):
+def print_live_dashboard(approaching_list, scan_num, scan_seconds=None):
     """
-    Show:
-      - Account balance / equity
-      - Today's realized stats (trades, wins, losses, P&L)
-      - Open positions with live P&L and current RR
-      - Next setups forming (approaching breakout) with logic + direction hint
-    Logic itself is NOT changed - this is a read-only summary panel.
+    GPU-style multi-panel live dashboard. Layout:
+        +-----------------------------------------------------------------+
+        |                    BOT STATUS  -  Scan #N                       |
+        +============== ACCOUNT ==============+======= SESSION ===========+
+        | Login / Balance / Equity / Free     | Uptime / Scans / Avg time |
+        +============= TODAY P&L =============+===== UNREALIZED P&L ======+
+        | Trades / Wins / Losses / Realized R | Open positions / Total $  |
+        +-----------------------------------------------------------------+
+        |                  OPEN POSITIONS  (live RR + P&L)                |
+        +-----------------------------------------------------------------+
+        |                  LAST TRADES TODAY                              |
+        +-----------------------------------------------------------------+
+        |                  NEXT SETUPS FORMING                            |
+        +-----------------------------------------------------------------+
+        |                  STRATEGY LOGIC                                 |
+        +-----------------------------------------------------------------+
     """
     acc = mt5.account_info()
     if acc is None:
         return
 
-    positions = mt5.positions_get(magic=202526) or []
-    n, wins, losses, realized = _read_today_journal_stats()
-    unrealized = sum(p.profit for p in positions)
+    positions       = mt5.positions_get(magic=202526) or []
+    n_today, wins, losses, realized = _read_today_journal_stats()
+    unrealized      = sum(p.profit for p in positions)
+    uptime          = _fmt_uptime(time.time() - SESSION["start_time"])
+    avg_scan        = (SESSION["total_scan_sec"] / SESSION["scans"]) if SESSION["scans"] else 0.0
+    last_scan       = SESSION.get("last_scan_sec", 0.0)
+    win_pct         = (wins / n_today * 100) if n_today else 0.0
+
+    W = 78
+    H = "+" + "=" * W + "+"
+    h = "+" + "-" * W + "+"
+
+    def title(text):
+        pad = (W - len(text)) // 2
+        line = " " * pad + text + " " * (W - pad - len(text))
+        print(clr("|", "cyan") + clr(line, "white") + clr("|", "cyan"))
+
+    def section(text, color="yellow"):
+        line = "  " + text
+        print(clr("|", "cyan") + clr(line, color) +
+              " " * (W - len(line)) + clr("|", "cyan"))
+
+    def two_col(left, right, mid=W // 2):
+        # Strip ANSI for length calc
+        def plen(s):
+            for esc in (Fore.GREEN, Fore.RED, Fore.YELLOW, Fore.CYAN, Fore.MAGENTA,
+                        Fore.WHITE, Fore.BLUE, Style.BRIGHT, Style.DIM, Style.RESET_ALL):
+                s = s.replace(esc, "")
+            return len(s)
+        l_pad = max(0, mid - plen(left))
+        r_pad = max(0, W - mid - plen(right))
+        print(clr("|", "cyan") + left + " " * l_pad + right + " " * r_pad + clr("|", "cyan"))
+
+    def one_line(content):
+        for esc in (Fore.GREEN, Fore.RED, Fore.YELLOW, Fore.CYAN, Fore.MAGENTA,
+                    Fore.WHITE, Fore.BLUE, Style.BRIGHT, Style.DIM, Style.RESET_ALL):
+            content_plain = content.replace(esc, "") if isinstance(content, str) else content
+        plain_len = len(content_plain) if isinstance(content_plain, str) else 0
+        pad = max(0, W - plain_len)
+        print(clr("|", "cyan") + content + " " * pad + clr("|", "cyan"))
 
     print()
-    print(clr("+" + "=" * 78 + "+", "blue"))
-    title = clr(f"  LIVE DASHBOARD   (after Scan #{scan_num})", "white")
-    _box_line(title, "blue")
-    print(clr("+" + "=" * 78 + "+", "blue"))
+    print(clr(H, "cyan"))
+    title(f"  BOT STATUS DASHBOARD     -     Scan #{scan_num}     -     "
+          f"{datetime.now().strftime('%H:%M:%S')}")
+    print(clr(H, "cyan"))
 
-    # ---- Account ----
-    acc_line = (clr(f"  Account:", "gray") + clr(f" {acc.login}", "white") +
-                clr("    Balance:", "gray") + clr(f" ${acc.balance:,.2f}", "white") +
-                clr("    Equity:", "gray") + clr(f" ${acc.equity:,.2f}", "white") +
-                clr("    Free:", "gray") + clr(f" ${acc.margin_free:,.2f}", "white"))
-    _box_line(acc_line, "blue")
+    # ============ ROW 1:  ACCOUNT  |  SESSION ============
+    section("ACCOUNT  /  SESSION", "yellow")
+    one_line(
+        clr("  Login   :", "gray") + clr(f" {acc.login:<14}", "white") +
+        clr("  Uptime    :", "gray") + clr(f" {uptime}", "white")
+    )
+    one_line(
+        clr("  Balance :", "gray") + clr(f" ${acc.balance:>10,.2f}   ", "white") +
+        clr("  Scans done:", "gray") + clr(f" {SESSION['scans']}", "white")
+    )
+    one_line(
+        clr("  Equity  :", "gray") + clr(f" ${acc.equity:>10,.2f}   ", "white") +
+        clr("  Last scan :", "gray") + clr(f" {last_scan:.2f}s", "white")
+    )
+    one_line(
+        clr("  Free    :", "gray") + clr(f" ${acc.margin_free:>10,.2f}   ", "white") +
+        clr("  Avg scan  :", "gray") + clr(f" {avg_scan:.2f}s", "white")
+    )
 
-    # ---- Today's stats ----
-    realized_color = "green" if realized >= 0 else "red"
-    today_line = (clr(f"  Today:", "gray") +
-                  clr(f"  Trades={n}", "white") +
-                  clr(f"   Wins={wins}", "green") +
-                  clr(f"   Losses={losses}", "red") +
-                  clr("   Realized P&L:", "gray") +
-                  clr(f" {_format_money(realized)}", realized_color))
-    _box_line(today_line, "blue")
+    # ============ ROW 2:  TODAY P&L  |  UNREALIZED ============
+    print(clr(h, "cyan"))
+    section("TODAY P&L  /  UNREALIZED P&L", "yellow")
+    rcol = "green" if realized >= 0 else "red"
+    ucol = "green" if unrealized >= 0 else "red"
+    one_line(
+        clr("  Trades  :", "gray") + clr(f" {n_today:<14}", "white") +
+        clr("  Open pos. :", "gray") + clr(f" {len(positions)}", "white")
+    )
+    one_line(
+        clr("  Wins    :", "gray") + clr(f" {wins} ({win_pct:.1f}%)", "green") +
+        " " * max(0, 8 - len(f"{wins} ({win_pct:.1f}%)")) +
+        clr("    Unrealized:", "gray") + clr(f" {_format_money(unrealized)}", ucol)
+    )
+    one_line(
+        clr("  Losses  :", "gray") + clr(f" {losses:<14}", "red") +
+        clr("  Realized  :", "gray") + clr(f" {_format_money(realized)}", rcol)
+    )
 
-    # ---- Unrealized ----
-    unr_color = "green" if unrealized >= 0 else "red"
-    unr_line = (clr(f"  Open:", "gray") +
-                clr(f"  {len(positions)} position(s)", "white") +
-                clr("       Unrealized P&L:", "gray") +
-                clr(f" {_format_money(unrealized)}", unr_color))
-    _box_line(unr_line, "blue")
-
-    print(clr("+" + "-" * 78 + "+", "blue"))
-
-    # ---- Open positions detail ----
-    if positions:
-        _box_line(clr("  OPEN POSITIONS  (live P&L + RR achieved)", "yellow"), "blue")
-        # Header
-        hdr = clr(
-            f"   {'Pair':<10} {'Side':<5} {'Entry':>10} {'Now':>10} {'SL':>10} {'TP':>10} {'P&L':>9} {'RR':>7}",
-            "dim"
+    # Last trade info line
+    if SESSION.get("last_trade_time"):
+        ago_s = int(time.time() - SESSION["last_trade_time"])
+        ago_str = _fmt_uptime(ago_s) + " ago"
+        one_line(
+            clr("  Last trade:", "gray") + clr(f" {SESSION['last_trade_pair']} - {ago_str}",
+                                              "magenta")
         )
-        _box_line(hdr, "blue")
+
+    # ============ OPEN POSITIONS PANEL ============
+    print(clr(h, "cyan"))
+    if positions:
+        section(f"OPEN POSITIONS  [{len(positions)}]   -  live P&L + RR achieved", "yellow")
+        hdr = (f"   {'Pair':<10} {'Side':<5} {'Entry':>10} {'Now':>10} "
+               f"{'SL':>10} {'TP':>10} {'P&L':>9} {'RR':>7}")
+        one_line(clr(hdr, "dim"))
         for pos in positions:
             sym       = pos.symbol
             side      = "BUY " if pos.type == 0 else "SELL"
@@ -575,45 +667,63 @@ def print_live_dashboard(approaching_list, scan_num):
             risk_dist = abs(entry - sl) if sl else 0
             move      = (now - entry) if pos.type == 0 else (entry - now)
             rr_now    = (move / risk_dist) if risk_dist > 0 else 0
-
             row_color = "green" if profit >= 0 else "red"
             row = (f"   {sym:<10} {side:<5} {entry:>10.5f} {now:>10.5f} "
                    f"{sl:>10.5f} {tp:>10.5f} "
                    f"{_format_money(profit):>9} {rr_now:>+6.2f}")
-            _box_line(clr(row, row_color), "blue")
-        print(clr("+" + "-" * 78 + "+", "blue"))
+            one_line(clr(row, row_color))
+    else:
+        section("OPEN POSITIONS  [0]   -  no live trades", "dim")
 
-    # ---- Approaching (next setups) ----
+    # ============ RECENT TRADES PANEL ============
+    print(clr(h, "cyan"))
+    recent = SESSION.get("recent_trades", [])
+    if recent:
+        section(f"LAST {len(recent)} TRADES (this session)", "yellow")
+        hdr = (f"   {'Time':<10} {'Pair':<10} {'TF':<4} {'Dir':<5} "
+               f"{'Pattern':<12} {'RR':>6} {'Lot':>6}")
+        one_line(clr(hdr, "dim"))
+        for t in recent[-5:]:
+            row = (f"   {t['time']:<10} {t['symbol']:<10} {t['tf']:<4} {t['dir']:<5} "
+                   f"{t['pattern']:<12} {t['rr']:>+5.2f}  {t['lot']:>6.2f}")
+            color = "green" if t["dir"] == "BUY" else "red"
+            one_line(clr(row, color))
+    else:
+        section("LAST TRADES (this session)  -  none yet", "dim")
+
+    # ============ NEXT SETUPS FORMING ============
+    print(clr(h, "cyan"))
     if approaching_list:
-        _box_line(clr("  NEXT SETUPS FORMING  (approaching triangle breakout)", "yellow"), "blue")
-        hdr = clr(
-            f"   {'Pair':<10} {'TF':<4} {'Pattern':<12} {'Resistance':>11} {'Support':>11} {'~Dist':>8}  Hint",
-            "dim"
-        )
-        _box_line(hdr, "blue")
-        # Sort by closest to breakout
+        section(f"NEXT SETUPS FORMING  [{len(approaching_list)}]   -  approaching breakout",
+                "yellow")
+        hdr = (f"   {'Pair':<10} {'TF':<4} {'Pattern':<12} {'Resistance':>11} "
+               f"{'Support':>11} {'~Dist':>8}  Hint")
+        one_line(clr(hdr, "dim"))
         approaching_list.sort(key=lambda a: a["distance_pct"])
-        for a in approaching_list[:8]:  # cap to top 8 nearest
+        for a in approaching_list[:6]:
             hint_color = "green" if a["hint"] == "BUY breakout" else "red"
             row_left  = (f"   {a['symbol']:<10} {a['tf']:<4} {a['pattern']:<12} "
                          f"{a['R']:>11.5f} {a['S']:>11.5f} {a['distance_pct']:>7.2f}%  ")
-            row = clr(row_left, "white") + clr(a["hint"], hint_color)
-            _box_line(row, "blue")
-        if len(approaching_list) > 8:
-            _box_line(clr(f"   ... and {len(approaching_list)-8} more", "dim"), "blue")
-        print(clr("+" + "-" * 78 + "+", "blue"))
+            one_line(clr(row_left, "white") + clr(a["hint"], hint_color))
+        if len(approaching_list) > 6:
+            one_line(clr(f"   ... and {len(approaching_list)-6} more", "dim"))
     else:
-        _box_line(clr("  No setups forming right now - waiting for triangles to mature...", "dim"), "blue")
-        print(clr("+" + "-" * 78 + "+", "blue"))
+        section("NEXT SETUPS FORMING  -  no triangles approaching breakout", "dim")
 
-    # ---- Logic legend (so user understands what triggers a trade) ----
-    _box_line(clr("  LOGIC: Triangle breakout + body>=50% of range + RR >= " +
-                  f"{MIN_RR}  -> trade taken", "dim"), "blue")
-    _box_line(clr("         ASCENDING /\\ = flat top + rising bottom    " +
-                  "DESCENDING \\/ = falling top + flat bottom", "dim"), "blue")
-    _box_line(clr("         SYMMETRICAL <> = falling top + rising bottom" +
-                  "    Trail SL @ 1:" + f"{TRAIL_AT_RR}", "dim"), "blue")
-    print(clr("+" + "=" * 78 + "+", "blue"))
+    # ============ STRATEGY LOGIC ============
+    print(clr(h, "cyan"))
+    section("STRATEGY LOGIC", "yellow")
+    one_line(clr("  Pattern :", "gray") +
+             clr(" Triangle breakout (ASCENDING /\\, DESCENDING \\/, SYMMETRICAL <>)", "white"))
+    one_line(clr("  Entry   :", "gray") +
+             clr(" Candle closes outside R/S with body >= 50% of range", "white"))
+    one_line(clr("  SL / TP :", "gray") +
+             clr(" SL at opposite triangle line   |   TP at entry +/- triangle height", "white"))
+    one_line(clr("  Filters :", "gray") +
+             clr(f" Min RR >= 1:{MIN_RR}    Risk = {RISK_PERCENT}% balance", "white"))
+    one_line(clr("  Trail   :", "gray") +
+             clr(f" Move SL to break-even at 1:{TRAIL_AT_RR}   then trail at 50% of risk", "white"))
+    print(clr(H, "cyan"))
 
 
 def print_scan_header(scan_num):
@@ -874,92 +984,163 @@ def is_already_open(symbol):
 #  MAIN SCAN
 # ======================================================
 
-def scan_all_symbols(scan_num, min_rr, risk_percent, trail_rr):
-    print_scan_header(scan_num)
-    signals = approaching = skipped = 0
-    approaching_list = []  # collected for live dashboard at end
-
-    for symbol in SYMBOLS:
+def _scan_one_pair(symbol, tf_name, tf_code, min_rr):
+    """
+    Worker function: fetch + analyze ONE (symbol, timeframe) pair.
+    Returns a result dict that the main thread can act on.
+    No order placement here (orders happen serially on main thread).
+    """
+    try:
         if not mt5.symbol_select(symbol, True):
-            continue
+            return None
+        df = get_candles(symbol, tf_code)
+        if df is None or len(df) < 30:
+            return None
+        triangle = detect_triangle(df)
+        if triangle is None:
+            return None
 
-        sym_label = clr(f"{symbol:<10}", "white")
+        breakout = check_breakout(df, triangle)
+        if breakout is None:
+            # No breakout yet -> check if approaching
+            last_c = df["close"].iloc[-1]
+            R, S, H = triangle["resistance"], triangle["support"], triangle["height"]
+            prox = H * 0.05
+            if abs(last_c - R) < prox or abs(last_c - S) < prox:
+                dist_R = abs(last_c - R)
+                dist_S = abs(last_c - S)
+                closest = min(dist_R, dist_S)
+                distance_pct = (closest / last_c * 100) if last_c else 0
+                hint = "BUY breakout" if dist_R <= dist_S else "SELL breakout"
+                return {
+                    "type": "approaching",
+                    "symbol": symbol, "tf": tf_name,
+                    "pattern": triangle["pattern"],
+                    "R": R, "S": S, "close": last_c,
+                    "distance_pct": distance_pct, "hint": hint,
+                }
+            return None
 
+        # Breakout detected -> evaluate RR
+        entry, sl, tp = breakout["entry"], breakout["sl"], breakout["tp"]
+        if abs(entry - sl) == 0:
+            return None
+        rr = abs(tp - entry) / abs(entry - sl)
+        if rr < min_rr:
+            return {
+                "type": "skip_rr", "symbol": symbol, "tf": tf_name, "rr": rr,
+            }
+        return {
+            "type": "signal",
+            "symbol": symbol, "tf": tf_name,
+            "triangle": triangle, "breakout": breakout, "rr": rr,
+        }
+    except Exception as e:
+        return {"type": "error", "symbol": symbol, "tf": tf_name, "error": str(e)}
+
+
+def scan_all_symbols(scan_num, min_rr, risk_percent, trail_rr):
+    """
+    PARALLEL scan: fetches all symbol/timeframe combos concurrently using a
+    thread pool. Order placement still happens sequentially on this thread.
+    Typical speed-up: ~30s scan -> ~3-5s on a normal broker connection.
+    """
+    print_scan_header(scan_num)
+    t0 = time.time()
+
+    signals = approaching = skipped = 0
+    approaching_list = []
+    signal_results = []
+
+    # Build list of work units
+    tasks = []
+    for symbol in SYMBOLS:
         for tf_name, tf_code in TIMEFRAMES.items():
-            df = get_candles(symbol, tf_code)
-            if df is None: continue
+            tasks.append((symbol, tf_name, tf_code))
 
-            triangle = detect_triangle(df)
-            if triangle is None: continue
-
-            breakout = check_breakout(df, triangle)
-
-            if breakout is None:
-                last_c = df["close"].iloc[-1]
-                R, S, H = triangle["resistance"], triangle["support"], triangle["height"]
-                prox = H * 0.05
-
-                if abs(last_c - R) < prox or abs(last_c - S) < prox:
-                    approaching += 1
-                    pat = triangle["pattern"]
-                    pat_icon = {"ASCENDING":"/\\","DESCENDING":"\\/","SYMMETRICAL":"<>"}.get(pat, "*")
-                    print(clr("  APPROACHING  ", "yellow") +
-                          sym_label + clr(f"[{tf_name}] ", "gray") +
-                          clr(f"{pat_icon} {pat}", "magenta") +
-                          clr(f"  R:{round(R, 5)}  S:{round(S, 5)}", "gray"))
-                    # Collect for dashboard
-                    dist_to_R = abs(last_c - R)
-                    dist_to_S = abs(last_c - S)
-                    closest   = min(dist_to_R, dist_to_S)
-                    distance_pct = (closest / last_c * 100) if last_c else 0
-                    hint = "BUY breakout" if dist_to_R <= dist_to_S else "SELL breakout"
-                    approaching_list.append({
-                        "symbol": symbol, "tf": tf_name, "pattern": pat,
-                        "R": R, "S": S, "close": last_c,
-                        "distance_pct": distance_pct, "hint": hint,
-                    })
+    # Parallel fetch + analyze
+    with ThreadPoolExecutor(max_workers=SCAN_WORKERS) as ex:
+        futures = [ex.submit(_scan_one_pair, s, tn, tc, min_rr) for s, tn, tc in tasks]
+        for fut in as_completed(futures):
+            r = fut.result()
+            if r is None:
                 continue
-
-            entry, sl, tp = breakout["entry"], breakout["sl"], breakout["tp"]
-            rr = abs(tp - entry) / abs(entry - sl) if abs(entry - sl) > 0 else 0
-
-            if rr < min_rr:
+            if r["type"] == "approaching":
+                approaching += 1
+                approaching_list.append(r)
+                pat_icon = {"ASCENDING":"/\\","DESCENDING":"\\/","SYMMETRICAL":"<>"}.get(
+                    r["pattern"], "*")
+                print(clr("  APPROACHING  ", "yellow") +
+                      clr(f"{r['symbol']:<10}", "white") +
+                      clr(f"[{r['tf']}] ", "gray") +
+                      clr(f"{pat_icon} {r['pattern']}", "magenta") +
+                      clr(f"  R:{round(r['R'], 5)}  S:{round(r['S'], 5)}", "gray"))
+            elif r["type"] == "skip_rr":
                 skipped += 1
                 print(clr("  LOW RR       ", "red") +
-                      sym_label + clr(f"[{tf_name}]", "gray") +
-                      clr(f"  RR={round(rr, 2)} (need {min_rr})", "red"))
-                continue
+                      clr(f"{r['symbol']:<10}", "white") +
+                      clr(f"[{r['tf']}]", "gray") +
+                      clr(f"  RR={round(r['rr'], 2)} (need {min_rr})", "red"))
+            elif r["type"] == "signal":
+                signal_results.append(r)
+            elif r["type"] == "error":
+                print(clr(f"  [WARN] {r['symbol']} [{r['tf']}] error: {r['error']}",
+                          "yellow"))
 
-            signals += 1
-            lot = calculate_lot(symbol, entry, sl, risk_percent)
-            print_signal_box(symbol, tf_name, triangle, breakout, rr, lot)
+    # Place orders SEQUENTIALLY (so we don't race when calling order_send)
+    for r in signal_results:
+        symbol = r["symbol"]; tf_name = r["tf"]
+        triangle = r["triangle"]; breakout = r["breakout"]; rr = r["rr"]
+        entry, sl, tp = breakout["entry"], breakout["sl"], breakout["tp"]
+        signals += 1
 
-            if is_already_open(symbol):
-                print(clr(f"  Position already open on {symbol} - skipping", "cyan"))
-                continue
+        lot = calculate_lot(symbol, entry, sl, risk_percent)
+        print_signal_box(symbol, tf_name, triangle, breakout, rr, lot)
 
-            result = place_order(symbol, breakout["direction"], entry, sl, tp, lot)
+        if is_already_open(symbol):
+            print(clr(f"  Position already open on {symbol} - skipping", "cyan"))
+            continue
 
-            if result and result.retcode == mt5.TRADE_RETCODE_DONE:
-                print(clr(f"  [OK] ORDER PLACED  Ticket#{result.order}  Lot:{lot}", "green"))
-                log_trade(symbol, tf_name, breakout["direction"],
-                          entry, sl, tp, lot, rr,
-                          breakout["height"] * 10000, triangle["pattern"],
-                          notes=f"Auto|{tf_name}|Scan#{scan_num}")
-            else:
-                err = result.retcode if result else "No response"
-                print(clr(f"  [ERROR] ORDER FAILED  {symbol}  Error:{err}", "red"))
+        result = place_order(symbol, breakout["direction"], entry, sl, tp, lot)
+        if result and result.retcode == mt5.TRADE_RETCODE_DONE:
+            print(clr(f"  [OK] ORDER PLACED  Ticket#{result.order}  Lot:{lot}", "green"))
+            log_trade(symbol, tf_name, breakout["direction"],
+                      entry, sl, tp, lot, rr,
+                      breakout["height"] * 10000, triangle["pattern"],
+                      notes=f"Auto|{tf_name}|Scan#{scan_num}")
+            # Track for dashboard
+            SESSION["trades_placed"] += 1
+            SESSION["last_trade_time"] = time.time()
+            SESSION["last_trade_pair"] = f"{symbol} ({tf_name})"
+            SESSION["recent_trades"].append({
+                "time"   : datetime.now().strftime("%H:%M:%S"),
+                "symbol" : symbol, "tf": tf_name,
+                "dir"    : breakout["direction"],
+                "pattern": triangle["pattern"],
+                "rr"     : rr, "lot": lot,
+            })
+            if len(SESSION["recent_trades"]) > 20:
+                SESSION["recent_trades"] = SESSION["recent_trades"][-20:]
+        else:
+            err = result.retcode if result else "No response"
+            print(clr(f"  [ERROR] ORDER FAILED  {symbol}  Error:{err}", "red"))
+
+    elapsed = time.time() - t0
+    SESSION["scans"] += 1
+    SESSION["last_scan_sec"] = elapsed
+    SESSION["total_scan_sec"] += elapsed
 
     print()
     print(clr("  SCAN SUMMARY  ", "bold") +
           clr(f"Signals:{signals}  ", "green") +
           clr(f"Approaching:{approaching}  ", "yellow") +
-          clr(f"Skipped:{skipped}", "red"))
+          clr(f"Skipped:{skipped}  ", "red") +
+          clr(f"({elapsed:.2f}s, {SCAN_WORKERS} parallel workers)", "cyan"))
 
     manage_trailing_sl(trail_rr)
 
-    # ---- LIVE DASHBOARD (P&L, open trades, next setups, logic) ----
-    print_live_dashboard(approaching_list, scan_num)
+    # ---- GPU-style live dashboard ----
+    print_live_dashboard(approaching_list, scan_num, scan_seconds=elapsed)
 
 # ======================================================
 #  MAIN
