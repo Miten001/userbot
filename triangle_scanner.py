@@ -19,12 +19,70 @@ TRIANGLE BREAKOUT AUTO TRADER  v2.0  -  ZERO-EDIT AUTO LOGIN EDITION
 ====================================================
 """
 
-import MetaTrader5 as mt5
-import pandas as pd
-import numpy as np
-import time, csv, os, sys, base64
-from datetime import datetime
-from colorama import init, Fore, Style
+# ====================================================================
+#  DEFENSIVE IMPORTS  (so cmd window stays open with a useful message
+#  even when something is missing - especially important on RDP / VPS)
+# ====================================================================
+import sys as _sys, os as _os, time as _time, traceback as _tb
+
+def _critical(msg, hint=""):
+    print()
+    print("=" * 64)
+    print(" [CRITICAL ERROR] " + msg)
+    print("=" * 64)
+    if hint:
+        print()
+        for line in hint.splitlines():
+            print("  " + line)
+    print()
+    print("  This window stays open for 180 seconds so you can read it...")
+    try:
+        _time.sleep(180)
+    except KeyboardInterrupt:
+        pass
+    _sys.exit(1)
+
+try:
+    import MetaTrader5 as mt5
+except Exception as _e:
+    _critical(
+        f"MetaTrader5 module not loadable: {_e}",
+        "Open cmd and run:\n"
+        "    pip install MetaTrader5 pandas numpy colorama pywin32\n"
+        "\n"
+        "If you are on a Windows RDP / VPS:\n"
+        "  - You must run pip on the SAME machine where you'll run the bot.\n"
+        "  - MetaTrader5 also requires the MT5 TERMINAL APP to be installed\n"
+        "    and RUNNING on this same Windows machine - it cannot connect to\n"
+        "    a remote MT5. Download MT5 from your broker, install it on the\n"
+        "    RDP, log in once manually, then run the bot."
+    )
+
+try:
+    import pandas as pd
+    import numpy as np
+except Exception as _e:
+    _critical(
+        f"pandas / numpy missing or broken: {_e}",
+        "Run:  pip install pandas numpy"
+    )
+
+try:
+    import time, csv, os, sys, base64
+    from datetime import datetime
+except Exception as _e:
+    _critical(f"Standard library import error: {_e}")
+
+# colorama is OPTIONAL - if missing, run with no colors (still works on RDP)
+try:
+    from colorama import init, Fore, Style
+    init(autoreset=True)
+except Exception:
+    class _NoColor:
+        def __getattr__(self, _n): return ""
+    Fore = _NoColor()
+    Style = _NoColor()
+    def init(*a, **k): pass
 
 # Windows-only imports (graceful fallback on other OS)
 try:
@@ -32,8 +90,6 @@ try:
     WINDOWS = True
 except ImportError:
     WINDOWS = False
-
-init(autoreset=True)  # Windows color support
 
 # ======================================================
 #  COLOR SHORTCUTS
@@ -114,19 +170,44 @@ def _show_setup_gui():
     """
     First-time setup: small tkinter popup window asking for credentials.
     Returns (login, password, server) on Save, or None if user closed window.
+    Falls back to terminal input if tkinter / display is not available
+    (common on stripped Windows Server RDPs or headless VPS).
     """
+    # ---- Try tkinter, but probe Tk() because some RDP/VPS lack display ----
+    tk = None
+    messagebox = None
     try:
-        import tkinter as tk
-        from tkinter import messagebox
-    except ImportError:
-        # Fallback: no GUI available -> use plain stdin (rare)
-        print(clr("\n  GUI not available. Using terminal input as fallback.", "yellow"))
+        import tkinter as _tk_mod
+        from tkinter import messagebox as _mb_mod
+        _probe = _tk_mod.Tk()
+        _probe.withdraw()
+        _probe.destroy()
+        tk = _tk_mod
+        messagebox = _mb_mod
+    except Exception as e:
+        # Fallback path: tkinter unavailable -> use stdin
+        print()
+        print("  (GUI popup not available on this machine -> using terminal input)")
+        print(f"  reason: {e}")
+        print()
+        print("  ---------- FIRST-TIME SETUP ----------")
+        print("  Enter your MT5 credentials (saved encrypted, one time only):")
+        print()
         try:
-            login    = int(input("  MT5 Account Number : "))
-            password = input("  MT5 Password       : ")
-            server   = input("  Broker Server      : ")
+            login_str = input("    MT5 Account Number : ").strip()
+            if not login_str:
+                return None
+            login = int(login_str)
+            password = input("    MT5 Password       : ")
+            server   = input("    Broker Server      : ").strip()
+            if not password or not server:
+                print("  [ERROR] All three fields are required.")
+                return None
             return login, password, server
-        except Exception:
+        except (KeyboardInterrupt, EOFError):
+            return None
+        except Exception as e2:
+            print(f"  [ERROR] Could not read input: {e2}")
             return None
 
     result = {"creds": None}
