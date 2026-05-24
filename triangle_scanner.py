@@ -68,11 +68,25 @@ except Exception as _e:
     )
 
 try:
-    import time, csv, os, sys, base64
+    import time, csv, os, sys, base64, threading
     from datetime import datetime, timedelta
     from concurrent.futures import ThreadPoolExecutor, as_completed
 except Exception as _e:
     _critical(f"Standard library import error: {_e}")
+
+# GUI dashboard module (Tkinter). Optional - falls back to cmd dashboard
+# if the file is missing or tkinter cannot start.
+try:
+    from dashboard_gui import (
+        STATE as GUI_STATE,
+        Dashboard as GUI_Dashboard,
+        StdoutTee as GUI_StdoutTee,
+        build_next_setup_text,
+    )
+    GUI_AVAILABLE = True
+except Exception as _e:
+    GUI_AVAILABLE = False
+    GUI_STATE = None
 
 # Session-wide tracking for the GPU-style dashboard
 SESSION = {
@@ -1130,6 +1144,21 @@ def scan_all_symbols(scan_num, min_rr, risk_percent, trail_rr):
     SESSION["last_scan_sec"] = elapsed
     SESSION["total_scan_sec"] += elapsed
 
+    # ---- Push everything to the GUI dashboard state ----
+    if GUI_STATE is not None:
+        try:
+            GUI_STATE.update_account(mt5.account_info())
+            GUI_STATE.update_positions(mt5.positions_get(magic=202526))
+            GUI_STATE.update_approaching(approaching_list)
+            GUI_STATE.scan_count    = SESSION["scans"]
+            GUI_STATE.last_scan_sec = elapsed
+            GUI_STATE.next_setup    = build_next_setup_text(
+                approaching_list, GUI_STATE.positions
+            )
+            GUI_STATE.set_connected(True, "")
+        except Exception:
+            pass
+
     print()
     print(clr("  SCAN SUMMARY  ", "bold") +
           clr(f"Signals:{signals}  ", "green") +
@@ -1139,12 +1168,56 @@ def scan_all_symbols(scan_num, min_rr, risk_percent, trail_rr):
 
     manage_trailing_sl(trail_rr)
 
-    # ---- GPU-style live dashboard ----
-    print_live_dashboard(approaching_list, scan_num, scan_seconds=elapsed)
+    # ---- Optional: also print the cmd-style live dashboard if no GUI ----
+    if not GUI_AVAILABLE:
+        print_live_dashboard(approaching_list, scan_num, scan_seconds=elapsed)
 
 # ======================================================
 #  MAIN
 # ======================================================
+
+def _bot_worker(login, password, server, risk, min_rr, trail, interval):
+    """
+    Background worker: connect to MT5 and run the scan loop forever.
+    Updates GUI state via GUI_STATE; never touches Tk widgets directly.
+    """
+    if GUI_STATE is not None:
+        GUI_STATE.set_connected(False, "Connecting to MT5...")
+
+    connected = wait_for_mt5_and_connect(login, password, server,
+                                         max_retries=10, wait_sec=30)
+    if not connected:
+        msg = "[ERROR] Could not connect to MT5 - terminal not running?"
+        print(clr("\n  " + msg, "red"))
+        if GUI_STATE is not None:
+            GUI_STATE.set_connected(False, msg)
+        return
+
+    info = mt5.account_info()
+    if GUI_STATE is not None:
+        GUI_STATE.update_account(info)
+        GUI_STATE.set_connected(True, "")
+
+    print_account_info(info, risk, min_rr, trail, interval)
+    setup_journal()
+    print(clr("  Bot is running! Close the dashboard window to stop.\n",
+              "green"))
+
+    scan_num = 0
+    try:
+        while True:
+            scan_num += 1
+            try:
+                scan_all_symbols(scan_num, min_rr, risk, trail)
+            except Exception as e:
+                print(clr(f"  [ERROR] scan crashed: {e}", "red"))
+                _tb.print_exc()
+            for _ in range(max(1, int(interval))):
+                time.sleep(1)
+    except Exception as e:
+        print(clr(f"  [FATAL] bot worker stopped: {e}", "red"))
+        _tb.print_exc()
+
 
 def main():
     print_banner()
@@ -1168,6 +1241,55 @@ def main():
         except Exception:
             pass
 
+    # ============================================================
+    #  GUI MODE  (default if dashboard_gui.py + Tk are available)
+    # ============================================================
+    if GUI_AVAILABLE:
+        gui_ok = True
+        try:
+            _probe = __import__("tkinter").Tk()
+            _probe.withdraw()
+            _probe.destroy()
+        except Exception as e:
+            print(clr(f"\n  [WARN] Tk not available ({e}) - falling back to cmd mode.",
+                      "yellow"))
+            gui_ok = False
+
+        if gui_ok:
+            print(clr("\n  Launching GUI dashboard window...", "cyan"))
+
+            # Pipe stdout into the GUI Console Log tab
+            try:
+                sys.stdout = GUI_StdoutTee(sys.__stdout__, GUI_STATE)
+            except Exception:
+                pass
+
+            # Start scan loop in a background daemon thread
+            t = threading.Thread(
+                target=_bot_worker,
+                args=(login, password, server, risk, min_rr, trail, interval),
+                daemon=True,
+                name="TriangleBotWorker",
+            )
+            t.start()
+
+            # GUI must run on main thread (Tk requirement)
+            dashboard = GUI_Dashboard(journal_file=JOURNAL_FILE)
+            try:
+                dashboard.run()
+            except KeyboardInterrupt:
+                pass
+            finally:
+                try:
+                    mt5.shutdown()
+                except Exception:
+                    pass
+                print(clr("  [OK] Dashboard closed. Goodbye!", "green"))
+            return
+
+    # ============================================================
+    #  FALLBACK: classic cmd mode (no Tk available)
+    # ============================================================
     print(clr("\n  Waiting for MT5 (background auto-login)...", "cyan"))
     print(clr(f"     Account : {login}  |  Server : {server}", "gray"))
 
@@ -1191,7 +1313,6 @@ def main():
         while True:
             scan_num += 1
             scan_all_symbols(scan_num, min_rr, risk, trail)
-            # Adaptive countdown: 1-sec ticks for small intervals, 5-sec for big
             tick = 1 if interval <= 10 else 5
             for remaining in range(interval, 0, -tick):
                 print(clr(f"\r  Next scan in: {remaining}s ...    ", "dim"),
