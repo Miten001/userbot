@@ -380,6 +380,161 @@ def print_separator(char="-", color="dim"):
     print(clr(char * 64, color))
 
 
+# ======================================================
+#  LIVE DASHBOARD  (P&L, open trades, next setups)
+# ======================================================
+
+def _read_today_journal_stats():
+    """Return (trade_count, wins, losses, total_realized_pnl) for today."""
+    today = datetime.now().strftime("%Y-%m-%d")
+    n = wins = losses = 0
+    pnl_total = 0.0
+    if not os.path.exists(JOURNAL_FILE):
+        return n, wins, losses, pnl_total
+    try:
+        with open(JOURNAL_FILE, newline="") as f:
+            for row in csv.DictReader(f):
+                if row.get("Date") != today:
+                    continue
+                n += 1
+                try:
+                    pnl = float(row.get("Profit_Loss", 0) or 0)
+                except Exception:
+                    pnl = 0.0
+                pnl_total += pnl
+                if pnl > 0:    wins += 1
+                elif pnl < 0:  losses += 1
+    except Exception:
+        pass
+    return n, wins, losses, pnl_total
+
+
+def _format_money(x):
+    sign = "+" if x >= 0 else "-"
+    return f"{sign}${abs(x):,.2f}"
+
+
+def _box_line(content, color="blue"):
+    """Print a content line inside the dashboard box."""
+    # Strip ANSI codes for length calc (rough - good enough)
+    plain = content
+    for esc in (Fore.GREEN, Fore.RED, Fore.YELLOW, Fore.CYAN, Fore.MAGENTA,
+                Fore.WHITE, Fore.BLUE, Style.BRIGHT, Style.DIM, Style.RESET_ALL):
+        plain = plain.replace(esc, "")
+    pad = max(0, 78 - len(plain))
+    print(clr("|", color) + " " + content + " " * pad + clr("|", color))
+
+
+def print_live_dashboard(approaching_list, scan_num):
+    """
+    Show:
+      - Account balance / equity
+      - Today's realized stats (trades, wins, losses, P&L)
+      - Open positions with live P&L and current RR
+      - Next setups forming (approaching breakout) with logic + direction hint
+    Logic itself is NOT changed - this is a read-only summary panel.
+    """
+    acc = mt5.account_info()
+    if acc is None:
+        return
+
+    positions = mt5.positions_get(magic=202526) or []
+    n, wins, losses, realized = _read_today_journal_stats()
+    unrealized = sum(p.profit for p in positions)
+
+    print()
+    print(clr("+" + "=" * 78 + "+", "blue"))
+    title = clr(f"  LIVE DASHBOARD   (after Scan #{scan_num})", "white")
+    _box_line(title, "blue")
+    print(clr("+" + "=" * 78 + "+", "blue"))
+
+    # ---- Account ----
+    acc_line = (clr(f"  Account:", "gray") + clr(f" {acc.login}", "white") +
+                clr("    Balance:", "gray") + clr(f" ${acc.balance:,.2f}", "white") +
+                clr("    Equity:", "gray") + clr(f" ${acc.equity:,.2f}", "white") +
+                clr("    Free:", "gray") + clr(f" ${acc.margin_free:,.2f}", "white"))
+    _box_line(acc_line, "blue")
+
+    # ---- Today's stats ----
+    realized_color = "green" if realized >= 0 else "red"
+    today_line = (clr(f"  Today:", "gray") +
+                  clr(f"  Trades={n}", "white") +
+                  clr(f"   Wins={wins}", "green") +
+                  clr(f"   Losses={losses}", "red") +
+                  clr("   Realized P&L:", "gray") +
+                  clr(f" {_format_money(realized)}", realized_color))
+    _box_line(today_line, "blue")
+
+    # ---- Unrealized ----
+    unr_color = "green" if unrealized >= 0 else "red"
+    unr_line = (clr(f"  Open:", "gray") +
+                clr(f"  {len(positions)} position(s)", "white") +
+                clr("       Unrealized P&L:", "gray") +
+                clr(f" {_format_money(unrealized)}", unr_color))
+    _box_line(unr_line, "blue")
+
+    print(clr("+" + "-" * 78 + "+", "blue"))
+
+    # ---- Open positions detail ----
+    if positions:
+        _box_line(clr("  OPEN POSITIONS  (live P&L + RR achieved)", "yellow"), "blue")
+        # Header
+        hdr = clr(
+            f"   {'Pair':<10} {'Side':<5} {'Entry':>10} {'Now':>10} {'SL':>10} {'TP':>10} {'P&L':>9} {'RR':>7}",
+            "dim"
+        )
+        _box_line(hdr, "blue")
+        for pos in positions:
+            sym       = pos.symbol
+            side      = "BUY " if pos.type == 0 else "SELL"
+            entry     = pos.price_open
+            now       = pos.price_current
+            sl, tp    = pos.sl, pos.tp
+            profit    = pos.profit
+            risk_dist = abs(entry - sl) if sl else 0
+            move      = (now - entry) if pos.type == 0 else (entry - now)
+            rr_now    = (move / risk_dist) if risk_dist > 0 else 0
+
+            row_color = "green" if profit >= 0 else "red"
+            row = (f"   {sym:<10} {side:<5} {entry:>10.5f} {now:>10.5f} "
+                   f"{sl:>10.5f} {tp:>10.5f} "
+                   f"{_format_money(profit):>9} {rr_now:>+6.2f}")
+            _box_line(clr(row, row_color), "blue")
+        print(clr("+" + "-" * 78 + "+", "blue"))
+
+    # ---- Approaching (next setups) ----
+    if approaching_list:
+        _box_line(clr("  NEXT SETUPS FORMING  (approaching triangle breakout)", "yellow"), "blue")
+        hdr = clr(
+            f"   {'Pair':<10} {'TF':<4} {'Pattern':<12} {'Resistance':>11} {'Support':>11} {'~Dist':>8}  Hint",
+            "dim"
+        )
+        _box_line(hdr, "blue")
+        # Sort by closest to breakout
+        approaching_list.sort(key=lambda a: a["distance_pct"])
+        for a in approaching_list[:8]:  # cap to top 8 nearest
+            hint_color = "green" if a["hint"] == "BUY breakout" else "red"
+            row_left  = (f"   {a['symbol']:<10} {a['tf']:<4} {a['pattern']:<12} "
+                         f"{a['R']:>11.5f} {a['S']:>11.5f} {a['distance_pct']:>7.2f}%  ")
+            row = clr(row_left, "white") + clr(a["hint"], hint_color)
+            _box_line(row, "blue")
+        if len(approaching_list) > 8:
+            _box_line(clr(f"   ... and {len(approaching_list)-8} more", "dim"), "blue")
+        print(clr("+" + "-" * 78 + "+", "blue"))
+    else:
+        _box_line(clr("  No setups forming right now - waiting for triangles to mature...", "dim"), "blue")
+        print(clr("+" + "-" * 78 + "+", "blue"))
+
+    # ---- Logic legend (so user understands what triggers a trade) ----
+    _box_line(clr("  LOGIC: Triangle breakout + body>=50% of range + RR >= " +
+                  f"{MIN_RR}  -> trade taken", "dim"), "blue")
+    _box_line(clr("         ASCENDING /\\ = flat top + rising bottom    " +
+                  "DESCENDING \\/ = falling top + flat bottom", "dim"), "blue")
+    _box_line(clr("         SYMMETRICAL <> = falling top + rising bottom" +
+                  "    Trail SL @ 1:" + f"{TRAIL_AT_RR}", "dim"), "blue")
+    print(clr("+" + "=" * 78 + "+", "blue"))
+
+
 def print_scan_header(scan_num):
     now  = datetime.now().strftime("%H:%M:%S")
     date = datetime.now().strftime("%Y-%m-%d")
@@ -641,6 +796,7 @@ def is_already_open(symbol):
 def scan_all_symbols(scan_num, min_rr, risk_percent, trail_rr):
     print_scan_header(scan_num)
     signals = approaching = skipped = 0
+    approaching_list = []  # collected for live dashboard at end
 
     for symbol in SYMBOLS:
         if not mt5.symbol_select(symbol, True):
@@ -670,6 +826,17 @@ def scan_all_symbols(scan_num, min_rr, risk_percent, trail_rr):
                           sym_label + clr(f"[{tf_name}] ", "gray") +
                           clr(f"{pat_icon} {pat}", "magenta") +
                           clr(f"  R:{round(R, 5)}  S:{round(S, 5)}", "gray"))
+                    # Collect for dashboard
+                    dist_to_R = abs(last_c - R)
+                    dist_to_S = abs(last_c - S)
+                    closest   = min(dist_to_R, dist_to_S)
+                    distance_pct = (closest / last_c * 100) if last_c else 0
+                    hint = "BUY breakout" if dist_to_R <= dist_to_S else "SELL breakout"
+                    approaching_list.append({
+                        "symbol": symbol, "tf": tf_name, "pattern": pat,
+                        "R": R, "S": S, "close": last_c,
+                        "distance_pct": distance_pct, "hint": hint,
+                    })
                 continue
 
             entry, sl, tp = breakout["entry"], breakout["sl"], breakout["tp"]
@@ -710,8 +877,8 @@ def scan_all_symbols(scan_num, min_rr, risk_percent, trail_rr):
 
     manage_trailing_sl(trail_rr)
 
-    if signals == 0 and approaching == 0:
-        print(clr(f"\n  No setups right now - next scan in {SCAN_INTERVAL}s...", "dim"))
+    # ---- LIVE DASHBOARD (P&L, open trades, next setups, logic) ----
+    print_live_dashboard(approaching_list, scan_num)
 
 # ======================================================
 #  MAIN
