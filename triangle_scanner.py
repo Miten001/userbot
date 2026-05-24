@@ -1,27 +1,27 @@
 """
-TRIANGLE BREAKOUT AUTO TRADER  v2.0
+TRIANGLE BREAKOUT AUTO TRADER  v2.0  -  PURE AUTO LOGIN EDITION
    Forex - BTC - ETH - Gold - Silver
    Auto Login | Auto Trade | Trail SL | Color Console
 
    Made by @codex_here
 
-SETUP:
+==================== HOW TO USE ====================
   1. pip install MetaTrader5 pandas numpy colorama pywin32
-  2. python triangle_scanner.py   ->  first run will save your config
-  3. Run again  ->  auto login + background mode starts
+  2. EDIT THE 3 LINES BELOW (MT5_LOGIN / MT5_PASSWORD / MT5_SERVER) ONCE
+  3. Run:  python triangle_scanner.py
+  4. Script opens -> AUTO LOGIN -> auto trade. NO PROMPTS, NO QUESTIONS.
 
 BACKGROUND AUTO-START (Windows Startup):
-  - Script automatically registers itself in Windows Startup
+  - Script registers itself in Windows Startup automatically
   - If MT5 is already running  ->  immediate login + scan
   - If MT5 is not found        ->  wait 30s and retry (up to 10 times)
-
-LOGIN INFO: stored in config.ini (same folder as the script)
+====================================================
 """
 
 import MetaTrader5 as mt5
 import pandas as pd
 import numpy as np
-import time, csv, os, sys, configparser
+import time, csv, os, sys
 from datetime import datetime
 from colorama import init, Fore, Style
 
@@ -55,14 +55,22 @@ C = {
 def clr(text, color): return C.get(color, "") + str(text) + Style.RESET_ALL
 
 # ======================================================
-#  DEFAULT SETTINGS
+#  >>>>>>>>>>  HARDCODED MT5 LOGIN  <<<<<<<<<<
+#  EDIT THESE 3 LINES ONCE WITH YOUR REAL CREDENTIALS
+#  Script will auto-login on every run, no prompts.
 # ======================================================
-RISK_PERCENT  = 1.0
-MIN_RR        = 2.0
-TRAIL_AT_RR   = 1.1
-SCAN_INTERVAL = 30
+MT5_LOGIN    = 12345678          # <-- your MT5 account number
+MT5_PASSWORD = "YourPasswordHere"  # <-- your MT5 password
+MT5_SERVER   = "YourBroker-Server" # <-- exact broker server (e.g. "Exness-MT5Trial7")
+
+# ======================================================
+#  TRADING SETTINGS
+# ======================================================
+RISK_PERCENT  = 1.0     # % of balance risked per trade
+MIN_RR        = 2.0     # minimum reward-to-risk to take a trade
+TRAIL_AT_RR   = 1.1     # move SL to break-even at this RR
+SCAN_INTERVAL = 30      # seconds between scans
 JOURNAL_FILE  = "trade_journal.csv"
-CONFIG_FILE   = "config.ini"
 
 TIMEFRAMES = {
     "M15": mt5.TIMEFRAME_M15,
@@ -78,71 +86,30 @@ SYMBOLS = [
 ]
 
 # ======================================================
-#  AUTO LOGIN - CONFIG FILE
+#  AUTO LOGIN - HARDCODED, NO PROMPTS
 # ======================================================
 
-def load_or_create_config():
+def load_credentials():
     """
-    First run: ask for credentials and save them.
-    Subsequent runs: read silently from config.ini.
-    NOTE: Banner is NOT printed here - main() already prints it once.
+    Returns the hardcoded MT5 credentials and trading settings.
+    NEVER prompts the user. If credentials are still placeholders,
+    print a clear error and exit so the user knows to edit the file.
     """
-    config = configparser.ConfigParser()
+    if (MT5_LOGIN in (0, 12345678)
+            or MT5_PASSWORD in ("", "YourPasswordHere")
+            or MT5_SERVER  in ("", "YourBroker-Server")):
+        print(clr("\n[ERROR] MT5 credentials not set!", "red"))
+        print(clr("        Open triangle_scanner.py and edit these 3 lines at the top:", "yellow"))
+        print(clr("            MT5_LOGIN    = <your account number>", "cyan"))
+        print(clr('            MT5_PASSWORD = "<your password>"',     "cyan"))
+        print(clr('            MT5_SERVER   = "<your broker server>"',"cyan"))
+        sys.exit(1)
 
-    if os.path.exists(CONFIG_FILE):
-        config.read(CONFIG_FILE)
-        try:
-            login    = int(config["MT5"]["login"])
-            password = config["MT5"]["password"]
-            server   = config["MT5"]["server"]
-            risk     = float(config["Settings"].get("risk_percent",  RISK_PERCENT))
-            min_rr   = float(config["Settings"].get("min_rr",        MIN_RR))
-            trail    = float(config["Settings"].get("trail_at_rr",   TRAIL_AT_RR))
-            interval = int(  config["Settings"].get("scan_interval", SCAN_INTERVAL))
-
-            print(clr("[OK] Config found! Auto-logging in...", "green"))
-            print(clr(f"   Account : {login}", "cyan"))
-            print(clr(f"   Server  : {server}", "cyan"))
-            return login, password, server, risk, min_rr, trail, interval
-        except Exception as e:
-            print(clr(f"[WARN]  Config read error: {e} - recreating config", "yellow"))
-
-    # First-time setup - ask user for credentials
-    print(clr("\n  FIRST-TIME SETUP - Enter credentials (only once):", "yellow"))
-    print(clr("   (These will be saved to config.ini)\n", "gray"))
-
-    login    = int(input(clr("   MT5 Account Number : ", "cyan")))
-    password = input(    clr("   MT5 Password       : ", "cyan"))
-    server   = input(    clr("   Broker Server      : ", "cyan"))
-
-    print(clr("\n  Trading Settings (press Enter to accept default):", "yellow"))
-    risk_in  = input(clr(f"   Risk % per trade   [{RISK_PERCENT}] : ", "cyan")).strip()
-    rr_in    = input(clr(f"   Min RR             [{MIN_RR}] : ",       "cyan")).strip()
-    trail_in = input(clr(f"   Trail at RR        [{TRAIL_AT_RR}] : ",  "cyan")).strip()
-    scan_in  = input(clr(f"   Scan interval (sec)[{SCAN_INTERVAL}] : ","cyan")).strip()
-
-    risk     = float(risk_in)  if risk_in  else RISK_PERCENT
-    min_rr   = float(rr_in)    if rr_in    else MIN_RR
-    trail    = float(trail_in) if trail_in else TRAIL_AT_RR
-    interval = int(scan_in)    if scan_in  else SCAN_INTERVAL
-
-    config["MT5"] = {
-        "login"   : str(login),
-        "password": password,
-        "server"  : server,
-    }
-    config["Settings"] = {
-        "risk_percent" : str(risk),
-        "min_rr"       : str(min_rr),
-        "trail_at_rr"  : str(trail),
-        "scan_interval": str(interval),
-    }
-
-    with open(CONFIG_FILE, "w") as f:
-        config.write(f)
-
-    print(clr(f"\n[OK] Config saved to: {CONFIG_FILE}", "green"))
-    return login, password, server, risk, min_rr, trail, interval
+    print(clr("[OK] Auto-login starting...", "green"))
+    print(clr(f"   Account : {MT5_LOGIN}", "cyan"))
+    print(clr(f"   Server  : {MT5_SERVER}", "cyan"))
+    return (MT5_LOGIN, MT5_PASSWORD, MT5_SERVER,
+            RISK_PERCENT, MIN_RR, TRAIL_AT_RR, SCAN_INTERVAL)
 
 # ======================================================
 #  BACKGROUND AUTO-START (Windows Startup)
@@ -617,9 +584,8 @@ def main():
     # Print the banner ONCE here.
     print_banner()
 
-    # Load credentials (or ask on first run). load_or_create_config no longer
-    # prints the banner, so it cannot show up twice anymore.
-    login, password, server, risk, min_rr, trail, interval = load_or_create_config()
+    # Load hardcoded credentials. Never prompts - pure auto-login.
+    login, password, server, risk, min_rr, trail, interval = load_credentials()
 
     # Register in Windows Startup the first time we see we're not registered yet
     if WINDOWS:
@@ -647,8 +613,8 @@ def main():
     if not connected:
         print(clr("\n  [ERROR] Could not connect to MT5!", "red"))
         print(clr( "     -> Open the MT5 terminal and run again", "yellow"))
-        if WINDOWS:
-            input("\n  Press Enter to exit...")
+        # No input() - pure auto-login mode. Window will close on its own.
+        time.sleep(10)
         return
 
     info = mt5.account_info()
