@@ -98,11 +98,17 @@ def load_credentials():
     if (MT5_LOGIN in (0, 12345678)
             or MT5_PASSWORD in ("", "YourPasswordHere")
             or MT5_SERVER  in ("", "YourBroker-Server")):
-        print(clr("\n[ERROR] MT5 credentials not set!", "red"))
-        print(clr("        Open triangle_scanner.py and edit these 3 lines at the top:", "yellow"))
-        print(clr("            MT5_LOGIN    = <your account number>", "cyan"))
-        print(clr('            MT5_PASSWORD = "<your password>"',     "cyan"))
-        print(clr('            MT5_SERVER   = "<your broker server>"',"cyan"))
+        print(clr("\n" + "="*60, "red"))
+        print(clr(" [ERROR] MT5 credentials NOT set!", "red"))
+        print(clr("="*60, "red"))
+        print(clr("\n  Open  triangle_scanner.py  in Notepad and edit", "yellow"))
+        print(clr("  these 3 lines at the top with YOUR real values:\n", "yellow"))
+        print(clr("      MT5_LOGIN    = <your account number>", "cyan"))
+        print(clr('      MT5_PASSWORD = "<your password>"',     "cyan"))
+        print(clr('      MT5_SERVER   = "<your broker server>"',"cyan"))
+        print(clr("\n  Then save the file and run it again.", "yellow"))
+        print(clr("\n  This window will close in 30 seconds...", "dim"))
+        time.sleep(30)
         sys.exit(1)
 
     print(clr("[OK] Auto-login starting...", "green"))
@@ -645,4 +651,26 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SystemExit:
+        raise
+    except KeyboardInterrupt:
+        pass
+    except Exception as e:
+        # ANY uncaught error -> show full traceback and pause so the
+        # cmd window doesn't close before the user can read what went wrong.
+        import traceback
+        print()
+        print(clr("="*60, "red"))
+        print(clr(" [CRASH] Uncaught error - script stopped", "red"))
+        print(clr("="*60, "red"))
+        print(clr(f"\n  {type(e).__name__}: {e}\n", "yellow"))
+        print(clr("Full traceback:", "dim"))
+        traceback.print_exc()
+        print(clr("\n  This window will close in 60 seconds...", "dim"))
+        try:
+            time.sleep(60)
+        except Exception:
+            pass
+        sys.exit(1)
