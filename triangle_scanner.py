@@ -1,5 +1,5 @@
 """
-TRIANGLE BREAKOUT AUTO TRADER  v2.0  -  PURE AUTO LOGIN EDITION
+TRIANGLE BREAKOUT AUTO TRADER  v2.0  -  ZERO-EDIT AUTO LOGIN EDITION
    Forex - BTC - ETH - Gold - Silver
    Auto Login | Auto Trade | Trail SL | Color Console
 
@@ -7,21 +7,22 @@ TRIANGLE BREAKOUT AUTO TRADER  v2.0  -  PURE AUTO LOGIN EDITION
 
 ==================== HOW TO USE ====================
   1. pip install MetaTrader5 pandas numpy colorama pywin32
-  2. EDIT THE 3 LINES BELOW (MT5_LOGIN / MT5_PASSWORD / MT5_SERVER) ONCE
-  3. Run:  python triangle_scanner.py
-  4. Script opens -> AUTO LOGIN -> auto trade. NO PROMPTS, NO QUESTIONS.
+  2. Double-click run.bat  (or:  python triangle_scanner.py)
+  3. First time only:  a small popup window asks for your MT5
+     account / password / broker server. Click "Save & Start".
+  4. Every run after that:  silent auto-login. NO window popup,
+     NO prompts, NO file editing.
 
-BACKGROUND AUTO-START (Windows Startup):
-  - Script registers itself in Windows Startup automatically
-  - If MT5 is already running  ->  immediate login + scan
-  - If MT5 is not found        ->  wait 30s and retry (up to 10 times)
+  Credentials are stored encrypted in:
+     %USERPROFILE%\\.triangle_bot\\creds.dat   (Windows)
+     ~/.triangle_bot/creds.dat                  (Linux/Mac)
 ====================================================
 """
 
 import MetaTrader5 as mt5
 import pandas as pd
 import numpy as np
-import time, csv, os, sys
+import time, csv, os, sys, base64
 from datetime import datetime
 from colorama import init, Fore, Style
 
@@ -55,15 +56,6 @@ C = {
 def clr(text, color): return C.get(color, "") + str(text) + Style.RESET_ALL
 
 # ======================================================
-#  >>>>>>>>>>  HARDCODED MT5 LOGIN  <<<<<<<<<<
-#  EDIT THESE 3 LINES ONCE WITH YOUR REAL CREDENTIALS
-#  Script will auto-login on every run, no prompts.
-# ======================================================
-MT5_LOGIN    = 12345678          # <-- your MT5 account number
-MT5_PASSWORD = "YourPasswordHere"  # <-- your MT5 password
-MT5_SERVER   = "YourBroker-Server" # <-- exact broker server (e.g. "Exness-MT5Trial7")
-
-# ======================================================
 #  TRADING SETTINGS
 # ======================================================
 RISK_PERCENT  = 1.0     # % of balance risked per trade
@@ -86,35 +78,173 @@ SYMBOLS = [
 ]
 
 # ======================================================
-#  AUTO LOGIN - HARDCODED, NO PROMPTS
+#  ENCRYPTED CREDENTIAL STORAGE
+#  - First run:   GUI popup -> save encrypted file
+#  - Future runs: read silently, auto-login
 # ======================================================
+CREDS_DIR  = os.path.join(os.path.expanduser("~"), ".triangle_bot")
+CREDS_FILE = os.path.join(CREDS_DIR, "creds.dat")
+_XOR_KEY   = b"TriangleBotV2_codex_here_secret_key_2026"
+
+def _xor_bytes(data, key):
+    return bytes(b ^ key[i % len(key)] for i, b in enumerate(data))
+
+def _save_creds(login, password, server):
+    """Encrypt + save creds to user's home directory."""
+    os.makedirs(CREDS_DIR, exist_ok=True)
+    payload   = f"{login}\n{password}\n{server}".encode("utf-8")
+    encrypted = base64.b64encode(_xor_bytes(payload, _XOR_KEY))
+    with open(CREDS_FILE, "wb") as f:
+        f.write(encrypted)
+
+def _load_creds():
+    """Return (login, password, server) or None if not saved yet / corrupt."""
+    if not os.path.exists(CREDS_FILE):
+        return None
+    try:
+        with open(CREDS_FILE, "rb") as f:
+            encrypted = f.read()
+        decrypted = _xor_bytes(base64.b64decode(encrypted), _XOR_KEY).decode("utf-8")
+        login_str, password, server = decrypted.split("\n", 2)
+        return int(login_str), password, server
+    except Exception:
+        return None
+
+def _show_setup_gui():
+    """
+    First-time setup: small tkinter popup window asking for credentials.
+    Returns (login, password, server) on Save, or None if user closed window.
+    """
+    try:
+        import tkinter as tk
+        from tkinter import messagebox
+    except ImportError:
+        # Fallback: no GUI available -> use plain stdin (rare)
+        print(clr("\n  GUI not available. Using terminal input as fallback.", "yellow"))
+        try:
+            login    = int(input("  MT5 Account Number : "))
+            password = input("  MT5 Password       : ")
+            server   = input("  Broker Server      : ")
+            return login, password, server
+        except Exception:
+            return None
+
+    result = {"creds": None}
+    root = tk.Tk()
+    root.title("Triangle Breakout Auto Trader - First-Time Setup")
+    root.geometry("480x340")
+    root.resizable(False, False)
+    root.configure(bg="#1e1e2e")
+
+    # Try to bring to front
+    try:
+        root.attributes("-topmost", True)
+        root.after(100, lambda: root.attributes("-topmost", False))
+    except Exception:
+        pass
+
+    # Title bar
+    tk.Label(root, text="TRIANGLE BREAKOUT AUTO TRADER  v2.0",
+             bg="#1e1e2e", fg="#ffd700",
+             font=("Consolas", 13, "bold")).pack(pady=(18, 4))
+    tk.Label(root, text="First-time MT5 login setup  (only once)",
+             bg="#1e1e2e", fg="#a0a0c0",
+             font=("Segoe UI", 9)).pack(pady=(0, 18))
+
+    # Inputs frame
+    frm = tk.Frame(root, bg="#1e1e2e")
+    frm.pack(padx=40, fill="x")
+
+    def add_row(row, label, show=None):
+        tk.Label(frm, text=label, bg="#1e1e2e", fg="#e0e0ff",
+                 font=("Segoe UI", 10), anchor="w", width=15
+                 ).grid(row=row, column=0, sticky="w", pady=5)
+        e = tk.Entry(frm, font=("Consolas", 10), width=28,
+                     bg="#2a2a3e", fg="white", insertbackground="white",
+                     relief="flat", show=show)
+        e.grid(row=row, column=1, padx=8, pady=5, ipady=4)
+        return e
+
+    e_login  = add_row(0, "Account Number:")
+    e_pw     = add_row(1, "Password:", show="*")
+    e_server = add_row(2, "Broker Server:")
+
+    # Helper text
+    tk.Label(root, text='(Server example:  "Exness-MT5Trial7"  -  copy from MT5 login screen)',
+             bg="#1e1e2e", fg="#666688",
+             font=("Segoe UI", 8)).pack(pady=(8, 0))
+
+    def on_save(*_):
+        try:
+            login = int(e_login.get().strip())
+        except ValueError:
+            messagebox.showerror("Invalid", "Account number must be a number.")
+            return
+        pw     = e_pw.get()
+        server = e_server.get().strip()
+        if not pw or not server:
+            messagebox.showerror("Missing", "All three fields are required.")
+            return
+        result["creds"] = (login, pw, server)
+        root.destroy()
+
+    btn = tk.Button(root, text="  Save & Start  ",
+                    bg="#28a745", fg="white",
+                    activebackground="#1e7e34", activeforeground="white",
+                    font=("Segoe UI", 11, "bold"),
+                    relief="flat", cursor="hand2",
+                    command=on_save)
+    btn.pack(pady=18, ipady=4)
+
+    tk.Label(root, text="Made by @codex_here",
+             bg="#1e1e2e", fg="#666688",
+             font=("Segoe UI", 8)).pack(side="bottom", pady=8)
+
+    # Enter key submits
+    root.bind("<Return>", on_save)
+    e_login.focus()
+    root.mainloop()
+    return result["creds"]
+
 
 def load_credentials():
     """
-    Returns the hardcoded MT5 credentials and trading settings.
-    NEVER prompts the user. If credentials are still placeholders,
-    print a clear error and exit so the user knows to edit the file.
-    """
-    if (MT5_LOGIN in (0, 12345678)
-            or MT5_PASSWORD in ("", "YourPasswordHere")
-            or MT5_SERVER  in ("", "YourBroker-Server")):
-        print(clr("\n" + "="*60, "red"))
-        print(clr(" [ERROR] MT5 credentials NOT set!", "red"))
-        print(clr("="*60, "red"))
-        print(clr("\n  Open  triangle_scanner.py  in Notepad and edit", "yellow"))
-        print(clr("  these 3 lines at the top with YOUR real values:\n", "yellow"))
-        print(clr("      MT5_LOGIN    = <your account number>", "cyan"))
-        print(clr('      MT5_PASSWORD = "<your password>"',     "cyan"))
-        print(clr('      MT5_SERVER   = "<your broker server>"',"cyan"))
-        print(clr("\n  Then save the file and run it again.", "yellow"))
-        print(clr("\n  This window will close in 30 seconds...", "dim"))
-        time.sleep(30)
-        sys.exit(1)
+    Return (login, password, server, risk, min_rr, trail, interval).
 
-    print(clr("[OK] Auto-login starting...", "green"))
-    print(clr(f"   Account : {MT5_LOGIN}", "cyan"))
-    print(clr(f"   Server  : {MT5_SERVER}", "cyan"))
-    return (MT5_LOGIN, MT5_PASSWORD, MT5_SERVER,
+    Flow:
+      1. If encrypted creds file exists -> silent auto-login.
+      2. Otherwise -> show GUI popup, save encrypted, then continue.
+      3. NEVER requires editing the .py file. NEVER prompts in cmd
+         once credentials have been saved once.
+    """
+    saved = _load_creds()
+    if saved is not None:
+        login, password, server = saved
+        print(clr("[OK] Auto-login from saved credentials...", "green"))
+        print(clr(f"   Account : {login}", "cyan"))
+        print(clr(f"   Server  : {server}", "cyan"))
+        return (login, password, server,
+                RISK_PERCENT, MIN_RR, TRAIL_AT_RR, SCAN_INTERVAL)
+
+    # First run -> open GUI for one-time setup
+    print(clr("\n  First-time setup - opening configuration window...", "yellow"))
+    print(clr("  (After this, every run will auto-login silently.)\n", "dim"))
+
+    creds = _show_setup_gui()
+    if creds is None:
+        print(clr("\n  [ERROR] Setup cancelled. Run again to retry.", "red"))
+        time.sleep(8)
+        sys.exit(0)
+
+    login, password, server = creds
+    _save_creds(login, password, server)
+
+    print(clr(f"[OK] Credentials saved (encrypted): {CREDS_FILE}", "green"))
+    print(clr("     Future runs will auto-login silently.\n", "cyan"))
+    print(clr(f"   Account : {login}", "cyan"))
+    print(clr(f"   Server  : {server}", "cyan"))
+
+    return (login, password, server,
             RISK_PERCENT, MIN_RR, TRAIL_AT_RR, SCAN_INTERVAL)
 
 # ======================================================
@@ -186,7 +316,8 @@ def wait_for_mt5_and_connect(login, password, server, max_retries=10, wait_sec=3
             # Hard failure - wrong credentials / server
             print()
             print(clr(f"  [ERROR] Login error: {err_msg} (code:{err_code})", "red"))
-            print(clr( "     Please verify your credentials in config.ini", "yellow"))
+            print(clr( "     Saved credentials may be wrong.", "yellow"))
+            print(clr(f"     Delete this file to redo setup:  {CREDS_FILE}", "yellow"))
             return False
 
         time.sleep(wait_sec)
@@ -587,10 +718,9 @@ def scan_all_symbols(scan_num, min_rr, risk_percent, trail_rr):
 # ======================================================
 
 def main():
-    # Print the banner ONCE here.
     print_banner()
 
-    # Load hardcoded credentials. Never prompts - pure auto-login.
+    # Zero-edit auto-login: read encrypted creds, or popup GUI on first run.
     login, password, server, risk, min_rr, trail, interval = load_credentials()
 
     # Register in Windows Startup the first time we see we're not registered yet
@@ -612,15 +742,13 @@ def main():
     print(clr("\n  Waiting for MT5 (background auto-login)...", "cyan"))
     print(clr(f"     Account : {login}  |  Server : {server}", "gray"))
 
-    # Wait for MT5 terminal to be open and log in automatically
     connected = wait_for_mt5_and_connect(login, password, server,
                                          max_retries=10, wait_sec=30)
 
     if not connected:
         print(clr("\n  [ERROR] Could not connect to MT5!", "red"))
         print(clr( "     -> Open the MT5 terminal and run again", "yellow"))
-        # No input() - pure auto-login mode. Window will close on its own.
-        time.sleep(10)
+        time.sleep(15)
         return
 
     info = mt5.account_info()
