@@ -133,7 +133,7 @@ def clr(text, color): return C.get(color, "") + str(text) + Style.RESET_ALL
 RISK_PERCENT  = 1.0     # % of balance risked per trade
 MIN_RR        = 2.0     # minimum reward-to-risk to take a trade
 TRAIL_AT_RR   = 1.1     # move SL to break-even at this RR
-SCAN_INTERVAL = 30      # seconds between scans
+SCAN_INTERVAL = 5       # seconds between scans (was 30; now ~continuous because parallel scan = 3-5s)
 JOURNAL_FILE  = "trade_journal.csv"
 
 TIMEFRAMES = {
@@ -1191,10 +1191,12 @@ def main():
         while True:
             scan_num += 1
             scan_all_symbols(scan_num, min_rr, risk, trail)
-            for remaining in range(interval, 0, -5):
+            # Adaptive countdown: 1-sec ticks for small intervals, 5-sec for big
+            tick = 1 if interval <= 10 else 5
+            for remaining in range(interval, 0, -tick):
                 print(clr(f"\r  Next scan in: {remaining}s ...    ", "dim"),
                       end="", flush=True)
-                time.sleep(min(5, remaining))
+                time.sleep(min(tick, remaining))
             print()
 
     except KeyboardInterrupt:
