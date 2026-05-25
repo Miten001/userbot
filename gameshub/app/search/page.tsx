@@ -12,13 +12,13 @@ export const metadata: Metadata = {
   description: "Find your next favorite browser game."
 };
 
-export default function SearchPage({
+export default async function SearchPage({
   searchParams
 }: {
   searchParams: { q?: string };
 }) {
   const q = (searchParams.q ?? "").trim();
-  const results = q ? searchGames(q) : [];
+  const results = q ? await searchGames(q) : [];
 
   return (
     <main>

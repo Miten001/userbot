@@ -1,11 +1,13 @@
 import type { MetadataRoute } from "next";
-import { games } from "@/lib/games";
+import { getAllGames } from "@/lib/games";
 import { categories } from "@/lib/categories";
 
 const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL || "https://yourdomain.com";
 
-export default function sitemap(): MetadataRoute.Sitemap {
+export const revalidate = 86400;
+
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
 
   const staticUrls: MetadataRoute.Sitemap = [
@@ -28,6 +30,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.7
   }));
 
+  const games = await getAllGames();
   const gameUrls: MetadataRoute.Sitemap = games.map((g) => ({
     url: `${SITE_URL}/game/${g.slug}`,
     lastModified: now,

@@ -9,7 +9,7 @@ import SectionHeader from "@/components/SectionHeader";
 import AdSlot from "@/components/AdSlot";
 import GamePlayer from "./GamePlayer";
 import {
-  games,
+  getAllGames,
   getGame,
   getGamesByCategory,
   getPopular
@@ -18,12 +18,19 @@ import { getCategory } from "@/lib/categories";
 
 type Params = { params: { slug: string } };
 
-export function generateStaticParams() {
-  return games.map((g) => ({ slug: g.slug }));
+export const revalidate = 86400; // 1 day
+export const dynamicParams = true; // allow on-demand pages for new games
+
+export async function generateStaticParams() {
+  const all = await getAllGames();
+  // Pre-render only the top 200 games at build time; the rest render on-demand.
+  return all.slice(0, 200).map((g) => ({ slug: g.slug }));
 }
 
-export function generateMetadata({ params }: Params): Metadata {
-  const g = getGame(params.slug);
+export async function generateMetadata({
+  params
+}: Params): Promise<Metadata> {
+  const g = await getGame(params.slug);
   if (!g) return { title: "Game not found" };
   return {
     title: g.title,
@@ -42,22 +49,26 @@ export function generateMetadata({ params }: Params): Metadata {
   };
 }
 
-export default function GamePage({ params }: Params) {
-  const game = getGame(params.slug);
+export default async function GamePage({ params }: Params) {
+  const game = await getGame(params.slug);
   if (!game) notFound();
 
   const cat = getCategory(game.category);
-  const related = getGamesByCategory(game.category)
+  const [related, popular] = await Promise.all([
+    getGamesByCategory(game.category),
+    getPopular(8)
+  ]);
+
+  const filteredRelated = related
     .filter((g) => g.slug !== game.slug)
     .slice(0, 8);
-  const more = getPopular(8).filter((g) => g.slug !== game.slug);
+  const more = popular.filter((g) => g.slug !== game.slug);
 
   return (
     <main>
       <Navbar />
 
       <div className="mx-auto max-w-7xl px-4 py-6">
-        {/* Breadcrumbs */}
         <nav className="mb-4 flex items-center gap-1 text-sm text-white/50">
           <Link href="/" className="hover:text-white">
             Home
@@ -78,11 +89,9 @@ export default function GamePage({ params }: Params) {
         </nav>
 
         <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-          {/* Player + info */}
           <div>
             <GamePlayer game={game} />
 
-            {/* Title + meta */}
             <div className="mt-5 flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h1 className="font-display text-3xl font-bold text-white">
@@ -113,14 +122,12 @@ export default function GamePage({ params }: Params) {
               </div>
             </div>
 
-            {/* In-content ad */}
             <AdSlot
               slot={process.env.NEXT_PUBLIC_AD_SLOT_INCONTENT}
               className="mt-6"
               label="In-content"
             />
 
-            {/* About */}
             <section className="mt-6 rounded-2xl border border-bg-line bg-bg-card p-5">
               <h2 className="mb-2 flex items-center gap-2 text-lg font-semibold text-white">
                 <Gamepad2 className="h-4 w-4 text-brand-400" /> About this game
@@ -148,7 +155,6 @@ export default function GamePage({ params }: Params) {
                 </>
               )}
 
-              {/* Tags */}
               {game.tags.length > 0 && (
                 <div className="mt-4 flex flex-wrap items-center gap-2">
                   <Tag className="h-3.5 w-3.5 text-white/40" />
@@ -166,7 +172,6 @@ export default function GamePage({ params }: Params) {
             </section>
           </div>
 
-          {/* Sidebar with ads + related */}
           <aside className="space-y-6">
             <AdSlot
               slot={process.env.NEXT_PUBLIC_AD_SLOT_SIDEBAR}
@@ -178,7 +183,7 @@ export default function GamePage({ params }: Params) {
             <div>
               <SectionHeader title="Related" emoji={cat?.emoji} />
               <div className="grid grid-cols-2 gap-3">
-                {related.slice(0, 6).map((g) => (
+                {filteredRelated.slice(0, 6).map((g) => (
                   <Link
                     key={g.slug}
                     href={`/game/${g.slug}`}
@@ -205,13 +210,11 @@ export default function GamePage({ params }: Params) {
           </aside>
         </div>
 
-        {/* More games row */}
         <section className="mt-12">
           <SectionHeader title="More to play" emoji="🎮" href="/" />
           <GameGrid games={more} />
         </section>
 
-        {/* Footer ad */}
         <AdSlot
           slot={process.env.NEXT_PUBLIC_AD_SLOT_FOOTER}
           className="mt-12"

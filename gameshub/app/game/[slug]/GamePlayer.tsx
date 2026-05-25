@@ -10,7 +10,7 @@ export default function GamePlayer({ game }: { game: Game }) {
   const wrapRef = useRef<HTMLDivElement>(null);
 
   const isPlaceholder =
-    game.embedUrl.includes("demo/") || game.embedUrl.includes("REPLACE");
+    game.embedUrl.includes("-demo/") || game.embedUrl.includes("REPLACE");
 
   const aspect =
     game.aspect === "4/3"

@@ -8,14 +8,17 @@ A CrazyGames-style HTML5 games portal built with **Next.js 14**, **TypeScript** 
 
 ## ✨ Features
 
-- **35+ sample games** across 11 categories (action, puzzle, racing, sports, shooting, .io, etc.)
+- **Auto-fetched 1000+ games** — pulls live from the public Gamemonetize JSON feed (no manual game adding)
+- **24-hour auto-refresh** — catalog stays fresh without rebuilds (Next.js ISR)
 - **Game player** with iframe embed, fullscreen + restart buttons, click-to-start
-- **Categories, search, related games, popular & new sections**
+- **11 categories** with auto-mapping from Gamemonetize categories
+- **Search, related games, popular & new** sections
 - **Google AdSense** — 4 pre-wired ad slots (header, sidebar, in-content, footer)
 - **SEO ready** — auto-generated `sitemap.xml` and `robots.txt`, OpenGraph + Twitter meta
 - **Mobile-first**, dark themed, fully responsive
-- **Static site generation** — every game page is pre-rendered for fast loads & SEO
+- **Static site generation** for top 200 games (build), on-demand for the rest
 - **Optional Google Analytics 4** integration
+- **Offline-safe** — falls back to a 35-game seed catalog if the feed is unreachable
 
 ---
 
@@ -34,7 +37,24 @@ Open <http://localhost:3001>
 
 ## 💰 How to make money — monetization guide
 
-### Option 1 — Google AdSense (recommended once you have traffic)
+### Step 1 — Register your site on Gamemonetize (5 minutes, no approval wait)
+
+This is what unlocks the revenue. The games themselves auto-load — you only need to register your site so Gamemonetize attributes the ad impressions to you.
+
+1. Sign up free at <https://gamemonetize.com>.
+2. Go to **My Sites → Add Site** and submit your domain (e.g. `yourgamesite.com`).
+3. Once approved (usually within 24h), grab your **Publisher ID** from your account page.
+4. Paste it into `.env.local`:
+
+   ```bash
+   NEXT_PUBLIC_GAMEMONETIZE_PUBLISHER="your-publisher-id-here"
+   ```
+
+5. Redeploy. Every game iframe URL will now include your tracking ID. Earnings show up in your Gamemonetize dashboard.
+
+> **Note:** Gamemonetize displays ads inside the games themselves (pre-roll, mid-roll). You don't need to do anything else to enable them — they're built into the game iframes.
+
+### Step 2 — Add Google AdSense for site banner ads (extra revenue)
 
 1. Apply at <https://www.google.com/adsense/start/>. Google needs your site to have real content + traffic before approving (usually a few weeks).
 2. Once approved, copy your **publisher ID** — looks like `ca-pub-1234567890123456`.
@@ -55,23 +75,6 @@ NEXT_PUBLIC_AD_SLOT_FOOTER="4444444444"
 
 5. Redeploy. The `<Script>` tag in `app/layout.tsx` only loads when `NEXT_PUBLIC_ADSENSE_CLIENT` is set, and `components/AdSlot.tsx` renders real ads when both client + slot are configured.
 
-### Option 2 — Gamemonetize.com (instant, no approval needed)
-
-The fastest path to revenue. They show ads inside the games themselves and pay you per impression. No AdSense approval required.
-
-1. Sign up free at <https://gamemonetize.com>.
-2. Pick a game from their catalog → click **Embed** → copy the iframe URL (looks like `https://html5.gamemonetize.com/<game-id>/`).
-3. In `lib/games.ts`, replace the placeholder `embedUrl` for any game with that real URL.
-4. Add your `?publisher_id=<your-id>` query string per their docs to make sure revenue is attributed to you.
-
-### Option 3 — GameDistribution.com
-
-Same idea as gamemonetize, slightly different ecosystem. Sign up at <https://gamedistribution.com>, get a publisher ID, embed games via `https://html5.gamedistribution.com/<game-id>/`.
-
-### Option 4 — Combine all three
-
-Most established games sites use **gamemonetize/gamedistribution for in-game ads** + **AdSense for site banners**. That's what this template is built for.
-
 ### Other ad networks (if AdSense rejects you)
 
 - [Ezoic](https://www.ezoic.com) — beginner-friendly, lower traffic threshold than AdSense.
@@ -82,31 +85,25 @@ To swap networks, edit `components/AdSlot.tsx` to render their snippet instead o
 
 ---
 
-## 🎮 Adding/replacing games
+## 🎮 Customizing the game catalog
 
-Open `lib/games.ts`. Each game is a simple object:
+By default the site auto-fetches **1000 games** from the public Gamemonetize JSON feed and refreshes the list every 24 hours. **You don't need to add games manually.**
 
-```ts
-{
-  slug: "my-game",                            // URL: /game/my-game
-  title: "My Game",
-  description: "Short description shown on the game page.",
-  category: "action",                         // must match a category slug
-  tags: ["fun", "fast", "1-player"],
-  thumbnail: "https://example.com/thumb.jpg", // 640x400 recommended
-  embedUrl: "https://html5.gamemonetize.com/<game-id>/",
-  aspect: "16/9",
-  plays: 50000,
-  rating: 4.5,
-  controls: ["WASD to move", "Space to jump"],
-  featured: true,
-  new: true
-}
+### Want a different category mix or fewer games?
+
+Generate a custom feed URL at <https://gamemonetize.com/rss-builder>, then set it in `.env.local`:
+
+```bash
+GAMEMONETIZE_FEED_URL="https://gamemonetize.com/rss-feed.php?format=0&amount=500&category=Action&type=html5"
 ```
 
-Add as many as you want — they automatically appear on the homepage, in their category, in search, and in the sitemap.
+### Want to add a hand-picked game on top of the auto-feed?
 
-To add a brand-new category, edit `lib/categories.ts` and add a new entry to the array. The `slug` you choose must be added to the `CategorySlug` union in `lib/types.ts`.
+Edit `lib/seed-games.ts` and add an entry. Seed games are merged in if the feed is empty.
+
+### Categories
+
+Categories live in `lib/categories.ts`. The Gamemonetize → internal-slug mapping lives in `lib/feed.ts` (`mapCategory` function) — easy to tweak.
 
 ---
 
@@ -175,7 +172,9 @@ gameshub/
 ├─ lib/
 │  ├─ types.ts             # Game + Category types
 │  ├─ categories.ts        # 11 categories
-│  └─ games.ts             # 35+ games — EDIT THIS
+│  ├─ feed.ts              # Gamemonetize feed fetcher + helpers
+│  ├─ games.ts             # Re-exports the helpers from feed.ts
+│  └─ seed-games.ts        # Hand-coded fallback list (offline-safe)
 ├─ .env.example
 ├─ next.config.mjs
 ├─ tailwind.config.ts

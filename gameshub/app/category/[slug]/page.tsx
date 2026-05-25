@@ -10,6 +10,8 @@ import { getGamesByCategory } from "@/lib/games";
 
 type Params = { params: { slug: string } };
 
+export const revalidate = 86400;
+
 export function generateStaticParams() {
   return categories.map((c) => ({ slug: c.slug }));
 }
@@ -23,11 +25,11 @@ export function generateMetadata({ params }: Params): Metadata {
   };
 }
 
-export default function CategoryPage({ params }: Params) {
+export default async function CategoryPage({ params }: Params) {
   const cat = getCategory(params.slug);
   if (!cat) notFound();
 
-  const list = getGamesByCategory(params.slug);
+  const list = await getGamesByCategory(params.slug);
 
   return (
     <main>
@@ -36,7 +38,6 @@ export default function CategoryPage({ params }: Params) {
       <div className="mx-auto max-w-7xl px-4 py-6">
         <CategoryStrip active={params.slug} />
 
-        {/* Header */}
         <div
           className={`mt-6 overflow-hidden rounded-3xl border border-bg-line bg-gradient-to-br ${cat.color} p-8 md:p-12`}
         >
@@ -58,7 +59,7 @@ export default function CategoryPage({ params }: Params) {
 
         <GameGrid
           games={list}
-          emptyMessage="No games in this category yet — add some in lib/games.ts."
+          emptyMessage="No games in this category yet — check back soon."
         />
 
         <AdSlot
