@@ -55,10 +55,15 @@ export async function getAllGames(): Promise<Game[]> {
   let games: Game[] = [];
 
   try {
+    // 8 second timeout — keeps the Vercel build from hanging forever
+    // if Gamemonetize is slow or unreachable. We fall back to seedGames.
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 8000);
     const res = await fetch(feedUrl, {
       next: { revalidate: REVALIDATE_SECONDS },
-      headers: { "user-agent": "PlayHubBot/1.0 (+https://nextjs.org)" }
-    });
+      headers: { "user-agent": "PlayHubBot/1.0 (+https://nextjs.org)" },
+      signal: ac.signal
+    }).finally(() => clearTimeout(timer));
     if (!res.ok) throw new Error(`Feed HTTP ${res.status}`);
 
     const data = await res.json();
@@ -88,8 +93,23 @@ export async function getAllGames(): Promise<Game[]> {
     );
   }
 
-  // Fallback / merge: if feed gave us nothing, use seeds
+  // Fallback / merge: if feed gave us nothing, use seeds.
+  // If somehow seeds are also empty, return a single placeholder so the
+  // build never crashes on an empty array (e.g. generateStaticParams).
   if (games.length === 0) games = seedGames;
+  if (games.length === 0) {
+    games = [
+      {
+        slug: "coming-soon",
+        title: "Coming soon",
+        description: "Games are loading. Check back in a few minutes.",
+        category: "casual",
+        tags: [],
+        thumbnail: "https://picsum.photos/seed/coming-soon/640/400",
+        embedUrl: "about:blank"
+      }
+    ];
+  }
 
   // Sprinkle some featured/new flags on top games so the homepage never looks bare
   games = decorateRanking(games);
