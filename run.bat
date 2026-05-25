@@ -1,12 +1,16 @@
 @echo off
-title Triangle Breakout Auto Trader v2.1
+title Triangle Breakout Auto Trader v2.3
 cd /d "%~dp0"
 
 echo.
 echo  ==============================================
-echo   TRIANGLE BREAKOUT AUTO TRADER  v2.1
+echo   TRIANGLE BREAKOUT AUTO TRADER  v2.3
+echo   Auto-Detect MT5 (no saved credentials)
 echo   Made by @codex_here
 echo  ==============================================
+echo.
+echo  Make sure MT5 terminal is OPEN and LOGGED IN
+echo  before this script tries to attach to it.
 echo.
 
 REM Try python launcher first, fall back to plain "python"

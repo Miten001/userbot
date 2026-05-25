@@ -1,46 +1,62 @@
 """
-TRIANGLE BREAKOUT AUTO TRADER  v2.1  -  AUTO-TRADE BUGFIX EDITION
+TRIANGLE BREAKOUT AUTO TRADER  v2.3  -  AUTO-DETECT MT5 EDITION
    Forex - BTC - ETH - Gold - Silver
-   Auto Login | Auto Trade | Trail SL | Color Console
+   Auto Detect MT5 | Auto Trade | Trail SL | Live GUI Window
 
    Made by @codex_here
 
+==================== v2.3 CHANGES ==================
+  [CHANGED]  No more saved credentials. The bot now auto-detects
+             whatever MT5 terminal is already running and logged-in
+             on this machine and attaches to it.
+
+             Workflow now is simply:
+                1. Open MT5 terminal and log in (your normal way).
+                2. Run this script.
+                3. Done. Script attaches to that session.
+
+             - No popup window asking for account / password.
+             - No file written to disk with credentials.
+             - If you change brokers or accounts, just log into the
+               new one in MT5 - the bot will pick it up next run.
+
+  [CLEANUP]  Old encrypted creds file (if any) is auto-deleted from
+                ~/.triangle_bot/creds.dat
+             so nothing sensitive is left behind.
+
+==================== v2.2 FEATURES (still in) ======
+  [GUI]  Separate live GUI dashboard window with:
+            * Account info + connection status
+            * Strategy logic panel
+            * Next trade alerts (approaching breakouts)
+            * Win-rate, trades-today, P&L stats
+            * Open positions (live RR / SL / TP / P&L)
+            * Trade journal (last 20 trades)
+         Run with default settings to get the GUI; pass --console
+         to run in old text-only mode.
+
 ==================== HOW TO USE ====================
   1. pip install MetaTrader5 pandas numpy colorama pywin32
-  2. Double-click run.bat  (or:  python triangle_scanner.py)
-  3. First time only:  a small popup window asks for your MT5
-     account / password / broker server. Click "Save & Start".
-  4. Every run after that:  silent auto-login. NO window popup,
-     NO prompts, NO file editing.
+  2. Open MT5 terminal -> log in to your broker account.
+  3. Double-click run.bat  (or:  python triangle_scanner.py)
+       -> Auto-detects MT5 + opens the live dashboard window.
+       -> Console-only mode:  python triangle_scanner.py --console
 
-  Credentials are stored encrypted in:
-     %USERPROFILE%\\.triangle_bot\\creds.dat   (Windows)
-     ~/.triangle_bot/creds.dat                  (Linux/Mac)
-
-==================== v2.1 BUGFIXES =================
-  [FIX] Breakout was being checked on the CURRENT (still forming)
-        candle - now uses the LAST CLOSED candle. This was the main
-        reason no trades were being placed.
-  [FIX] SL / TP / price now rounded to symbol.digits before sending
-        (was causing "Invalid stops" silent rejects on many brokers).
-  [FIX] Respect broker SYMBOL_TRADE_STOPS_LEVEL - SL/TP auto-pushed
-        to the broker minimum distance if they were too tight.
-  [FIX] order_send() now retries with FOK / RETURN if the broker does
-        not support IOC filling mode.
-  [FIX] is_already_open() now filters magic number manually
-        (mt5.positions_get(magic=...) does NOT actually filter).
-  [FIX] Triangle detector tolerance was using wrong units, causing it
-        to almost never trigger - rebalanced relative to triangle height.
-  [FIX] Body/range filter relaxed 50% -> 35% (real breakout candles
-        often leave a wick - we were rejecting valid breakouts).
-  [FIX] Failed orders now print the broker comment so you can see
-        WHY the broker rejected (no more silent failures).
+==================== v2.1 BUGFIXES (still in) ======
+  [FIX] Breakout now checks the LAST CLOSED candle (was using the
+        still-forming candle - main reason no trades were placed).
+  [FIX] SL/TP/price rounded to symbol.digits.
+  [FIX] Respect broker SYMBOL_TRADE_STOPS_LEVEL.
+  [FIX] order_send() retries with FOK / RETURN if IOC unsupported.
+  [FIX] is_already_open() filters magic manually.
+  [FIX] Triangle slope tolerance now relative to triangle height.
+  [FIX] Body/range filter relaxed 50% -> 35%.
+  [FIX] Failed orders print broker comment + last_error.
 ====================================================
 """
 
 # ====================================================================
-#  DEFENSIVE IMPORTS  (so cmd window stays open with a useful message
-#  even when something is missing - especially important on RDP / VPS)
+#  DEFENSIVE IMPORTS
 # ====================================================================
 import sys as _sys, os as _os, time as _time, traceback as _tb
 
@@ -87,13 +103,17 @@ except Exception as _e:
     )
 
 try:
-    import time, csv, os, sys, base64
+    import time, csv, os, sys, base64, threading
     from datetime import datetime, timedelta
     from concurrent.futures import ThreadPoolExecutor, as_completed
 except Exception as _e:
     _critical(f"Standard library import error: {_e}")
 
-# Session-wide tracking for the GPU-style dashboard
+# ----- Threading & shared state (GUI + scanner) ---------------------
+_STATE_LOCK = threading.Lock()
+_STOP_EVENT = threading.Event()
+
+# Session-wide tracking
 SESSION = {
     "start_time"       : time.time(),
     "scans"            : 0,
@@ -102,13 +122,27 @@ SESSION = {
     "trades_placed"    : 0,
     "last_trade_time"  : None,
     "last_trade_pair"  : None,
-    "recent_trades"    : [],   # list of dicts (last 5)
+    "recent_trades"    : [],
+    # GUI live state
+    "connected"        : False,
+    "account_info"     : None,
+    "approaching"      : [],      # latest approaching list
+    "open_positions"   : [],      # snapshot list of position dicts
+    "log_lines"        : [],      # rolling log for the GUI activity panel
+    "last_signals"     : [],      # last detected signals (for "next trade alert")
+    "scan_num"         : 0,
 }
 
-# How many parallel workers for candle fetching. MT5 read calls are thread-safe.
+def _push_log(line):
+    with _STATE_LOCK:
+        SESSION["log_lines"].append(f"{datetime.now().strftime('%H:%M:%S')}  {line}")
+        if len(SESSION["log_lines"]) > 200:
+            SESSION["log_lines"] = SESSION["log_lines"][-200:]
+
+# How many parallel workers for candle fetching.
 SCAN_WORKERS = 12
 
-# colorama is OPTIONAL - if missing, run with no colors (still works on RDP)
+# colorama is OPTIONAL
 try:
     from colorama import init, Fore, Style
     init(autoreset=True)
@@ -119,7 +153,7 @@ except Exception:
     Style = _NoColor()
     def init(*a, **k): pass
 
-# Windows-only imports (graceful fallback on other OS)
+# Windows-only imports
 try:
     import winreg
     WINDOWS = True
@@ -149,15 +183,13 @@ def clr(text, color): return C.get(color, "") + str(text) + Style.RESET_ALL
 # ======================================================
 #  TRADING SETTINGS
 # ======================================================
-RISK_PERCENT  = 1.0     # % of balance risked per trade
-MIN_RR        = 2.0     # minimum reward-to-risk to take a trade
-TRAIL_AT_RR   = 1.1     # move SL to break-even at this RR
-SCAN_INTERVAL = 5       # seconds between scans
+RISK_PERCENT  = 1.0
+MIN_RR        = 2.0
+TRAIL_AT_RR   = 1.1
+SCAN_INTERVAL = 5
 JOURNAL_FILE  = "trade_journal.csv"
-MAGIC         = 202526  # magic number identifying our trades
+MAGIC         = 202526
 
-# Body / range filter for the breakout candle.  v2.0 used 0.5 which was
-# too strict - many real breakouts leave a wick.  Lowered to 0.35.
 MIN_BODY_RATIO = 0.35
 
 TIMEFRAMES = {
@@ -173,8 +205,6 @@ SYMBOLS = [
     "XAUUSD","XAGUSD",
 ]
 
-# Broker filling-mode fallback chain. Different brokers support different
-# combinations - we try them in order until one is accepted.
 FILLING_MODES = [
     mt5.ORDER_FILLING_IOC,
     mt5.ORDER_FILLING_FOK,
@@ -182,190 +212,33 @@ FILLING_MODES = [
 ]
 
 # ======================================================
-#  ENCRYPTED CREDENTIAL STORAGE
-#  - First run:   GUI popup -> save encrypted file
-#  - Future runs: read silently, auto-login
+#  AUTO-DETECT MT5  (no saved credentials, no popup)
+#
+#  v2.3 change: we no longer ask for or store login/password/server.
+#  Calling mt5.initialize() with NO arguments attaches to whatever
+#  MT5 terminal is already running and logged in on this machine.
 # ======================================================
 CREDS_DIR  = os.path.join(os.path.expanduser("~"), ".triangle_bot")
-CREDS_FILE = os.path.join(CREDS_DIR, "creds.dat")
-_XOR_KEY   = b"TriangleBotV2_codex_here_secret_key_2026"
+CREDS_FILE = os.path.join(CREDS_DIR, "creds.dat")  # legacy file - cleaned up
 
-def _xor_bytes(data, key):
-    return bytes(b ^ key[i % len(key)] for i, b in enumerate(data))
-
-def _save_creds(login, password, server):
-    """Encrypt + save creds to user's home directory."""
-    os.makedirs(CREDS_DIR, exist_ok=True)
-    payload   = f"{login}\n{password}\n{server}".encode("utf-8")
-    encrypted = base64.b64encode(_xor_bytes(payload, _XOR_KEY))
-    with open(CREDS_FILE, "wb") as f:
-        f.write(encrypted)
-
-def _load_creds():
-    """Return (login, password, server) or None if not saved yet / corrupt."""
-    if not os.path.exists(CREDS_FILE):
-        return None
+def cleanup_old_creds():
+    """Delete any leftover encrypted creds file from previous versions."""
     try:
-        with open(CREDS_FILE, "rb") as f:
-            encrypted = f.read()
-        decrypted = _xor_bytes(base64.b64decode(encrypted), _XOR_KEY).decode("utf-8")
-        login_str, password, server = decrypted.split("\n", 2)
-        return int(login_str), password, server
-    except Exception:
-        return None
-
-def _show_setup_gui():
-    """
-    First-time setup: small tkinter popup window asking for credentials.
-    Returns (login, password, server) on Save, or None if user closed window.
-    Falls back to terminal input if tkinter / display is not available
-    (common on stripped Windows Server RDPs or headless VPS).
-    """
-    tk = None
-    messagebox = None
-    try:
-        import tkinter as _tk_mod
-        from tkinter import messagebox as _mb_mod
-        _probe = _tk_mod.Tk()
-        _probe.withdraw()
-        _probe.destroy()
-        tk = _tk_mod
-        messagebox = _mb_mod
-    except Exception as e:
-        print()
-        print("  (GUI popup not available on this machine -> using terminal input)")
-        print(f"  reason: {e}")
-        print()
-        print("  ---------- FIRST-TIME SETUP ----------")
-        print("  Enter your MT5 credentials (saved encrypted, one time only):")
-        print()
-        try:
-            login_str = input("    MT5 Account Number : ").strip()
-            if not login_str:
-                return None
-            login = int(login_str)
-            password = input("    MT5 Password       : ")
-            server   = input("    Broker Server      : ").strip()
-            if not password or not server:
-                print("  [ERROR] All three fields are required.")
-                return None
-            return login, password, server
-        except (KeyboardInterrupt, EOFError):
-            return None
-        except Exception as e2:
-            print(f"  [ERROR] Could not read input: {e2}")
-            return None
-
-    result = {"creds": None}
-    root = tk.Tk()
-    root.title("Triangle Breakout Auto Trader - First-Time Setup")
-    root.geometry("480x340")
-    root.resizable(False, False)
-    root.configure(bg="#1e1e2e")
-
-    try:
-        root.attributes("-topmost", True)
-        root.after(100, lambda: root.attributes("-topmost", False))
+        if os.path.exists(CREDS_FILE):
+            os.remove(CREDS_FILE)
+            print(clr(f"  [CLEANUP] Removed old saved credentials: {CREDS_FILE}", "yellow"))
     except Exception:
         pass
 
-    tk.Label(root, text="TRIANGLE BREAKOUT AUTO TRADER  v2.1",
-             bg="#1e1e2e", fg="#ffd700",
-             font=("Consolas", 13, "bold")).pack(pady=(18, 4))
-    tk.Label(root, text="First-time MT5 login setup  (only once)",
-             bg="#1e1e2e", fg="#a0a0c0",
-             font=("Segoe UI", 9)).pack(pady=(0, 18))
 
-    frm = tk.Frame(root, bg="#1e1e2e")
-    frm.pack(padx=40, fill="x")
+def load_settings():
+    """v2.3: no credentials needed. Just returns trading settings."""
+    return (RISK_PERCENT, MIN_RR, TRAIL_AT_RR, SCAN_INTERVAL)
 
-    def add_row(row, label, show=None):
-        tk.Label(frm, text=label, bg="#1e1e2e", fg="#e0e0ff",
-                 font=("Segoe UI", 10), anchor="w", width=15
-                 ).grid(row=row, column=0, sticky="w", pady=5)
-        e = tk.Entry(frm, font=("Consolas", 10), width=28,
-                     bg="#2a2a3e", fg="white", insertbackground="white",
-                     relief="flat", show=show)
-        e.grid(row=row, column=1, padx=8, pady=5, ipady=4)
-        return e
-
-    e_login  = add_row(0, "Account Number:")
-    e_pw     = add_row(1, "Password:", show="*")
-    e_server = add_row(2, "Broker Server:")
-
-    tk.Label(root, text='(Server example:  "Exness-MT5Trial7"  -  copy from MT5 login screen)',
-             bg="#1e1e2e", fg="#666688",
-             font=("Segoe UI", 8)).pack(pady=(8, 0))
-
-    def on_save(*_):
-        try:
-            login = int(e_login.get().strip())
-        except ValueError:
-            messagebox.showerror("Invalid", "Account number must be a number.")
-            return
-        pw     = e_pw.get()
-        server = e_server.get().strip()
-        if not pw or not server:
-            messagebox.showerror("Missing", "All three fields are required.")
-            return
-        result["creds"] = (login, pw, server)
-        root.destroy()
-
-    btn = tk.Button(root, text="  Save & Start  ",
-                    bg="#28a745", fg="white",
-                    activebackground="#1e7e34", activeforeground="white",
-                    font=("Segoe UI", 11, "bold"),
-                    relief="flat", cursor="hand2",
-                    command=on_save)
-    btn.pack(pady=18, ipady=4)
-
-    tk.Label(root, text="Made by @codex_here",
-             bg="#1e1e2e", fg="#666688",
-             font=("Segoe UI", 8)).pack(side="bottom", pady=8)
-
-    root.bind("<Return>", on_save)
-    e_login.focus()
-    root.mainloop()
-    return result["creds"]
-
-
-def load_credentials():
-    """
-    Return (login, password, server, risk, min_rr, trail, interval).
-    """
-    saved = _load_creds()
-    if saved is not None:
-        login, password, server = saved
-        print(clr("[OK] Auto-login from saved credentials...", "green"))
-        print(clr(f"   Account : {login}", "cyan"))
-        print(clr(f"   Server  : {server}", "cyan"))
-        return (login, password, server,
-                RISK_PERCENT, MIN_RR, TRAIL_AT_RR, SCAN_INTERVAL)
-
-    print(clr("\n  First-time setup - opening configuration window...", "yellow"))
-    print(clr("  (After this, every run will auto-login silently.)\n", "dim"))
-
-    creds = _show_setup_gui()
-    if creds is None:
-        print(clr("\n  [ERROR] Setup cancelled. Run again to retry.", "red"))
-        time.sleep(8)
-        sys.exit(0)
-
-    login, password, server = creds
-    _save_creds(login, password, server)
-
-    print(clr(f"[OK] Credentials saved (encrypted): {CREDS_FILE}", "green"))
-    print(clr("     Future runs will auto-login silently.\n", "cyan"))
-    print(clr(f"   Account : {login}", "cyan"))
-    print(clr(f"   Server  : {server}", "cyan"))
-
-    return (login, password, server,
-            RISK_PERCENT, MIN_RR, TRAIL_AT_RR, SCAN_INTERVAL)
 
 # ======================================================
-#  BACKGROUND AUTO-START (Windows Startup)
+#  WINDOWS STARTUP
 # ======================================================
-
 def register_startup():
     if not WINDOWS:
         return
@@ -381,69 +254,64 @@ def register_startup():
         winreg.SetValueEx(key, "TriangleBotV2", 0, winreg.REG_SZ, cmd)
         winreg.CloseKey(key)
         print(clr("  [OK] Registered in Windows Startup!", "green"))
-        print(clr( "     -> Will auto-start on every PC reboot", "gray"))
     except Exception as e:
         print(clr(f"  [WARN]  Startup registration failed: {e}", "yellow"))
 
 
-def remove_startup():
-    if not WINDOWS:
-        return
-    try:
-        key = winreg.OpenKey(
-            winreg.HKEY_CURRENT_USER,
-            r"Software\Microsoft\Windows\CurrentVersion\Run",
-            0, winreg.KEY_SET_VALUE
-        )
-        winreg.DeleteValue(key, "TriangleBotV2")
-        winreg.CloseKey(key)
-        print(clr("  Removed from Startup.", "yellow"))
-    except FileNotFoundError:
-        pass
-    except Exception as e:
-        print(clr(f"  [WARN]  Remove error: {e}", "yellow"))
+def wait_for_mt5_and_connect(max_retries=10, wait_sec=10):
+    """
+    v2.3: Attach to whatever MT5 terminal is currently running and
+    logged in on this machine. We do NOT supply login/password/server -
+    that means MT5 uses the live terminal session.
 
-
-def wait_for_mt5_and_connect(login, password, server, max_retries=10, wait_sec=30):
+    Retry loop in case the user opens MT5 a few seconds after the bot.
+    """
     for attempt in range(1, max_retries + 1):
-        print(clr(f"\r  MT5 connect attempt #{attempt}/{max_retries}...", "cyan"),
-              end="", flush=True)
+        print(clr(f"\r  Detecting MT5 terminal... attempt #{attempt}/{max_retries}",
+                  "cyan"), end="", flush=True)
 
-        success = mt5.initialize(login=login, password=password, server=server)
+        # NO login/password/server - attach to running terminal
+        success = mt5.initialize()
         if success:
-            print()
-            return True
+            # Verify a real account is logged in
+            acc = mt5.account_info()
+            if acc is not None and acc.login:
+                print()
+                with _STATE_LOCK:
+                    SESSION["connected"] = True
+                _push_log(f"[AUTO-DETECT] Attached to MT5 - account={acc.login} "
+                          f"server={acc.server}")
+                return True
+            else:
+                # Terminal open but not logged in
+                try: mt5.shutdown()
+                except Exception: pass
+                print()
+                print(clr("  [WARN] MT5 terminal is open but no account is logged in.",
+                          "yellow"))
+                print(clr("         Log in inside MT5 and the bot will retry...", "yellow"))
 
         err_code, err_msg = mt5.last_error()
-
-        if err_code in (-10006, -10005, 1):
-            print(clr(f"\r  MT5 not found (err:{err_code}) - retrying in {wait_sec}s...",
-                      "yellow"), end="", flush=True)
-        else:
-            print()
-            print(clr(f"  [ERROR] Login error: {err_msg} (code:{err_code})", "red"))
-            print(clr( "     Saved credentials may be wrong.", "yellow"))
-            print(clr(f"     Delete this file to redo setup:  {CREDS_FILE}", "yellow"))
-            return False
-
+        print(clr(f"\r  MT5 not detected ({err_msg}) - retrying in {wait_sec}s... ",
+                  "yellow"), end="", flush=True)
         time.sleep(wait_sec)
 
     print()
-    print(clr(f"  [ERROR] Tried {max_retries} times - MT5 terminal not detected.", "red"))
-    print(clr( "     Please open MT5 manually and rerun the script.", "yellow"))
+    print(clr(f"  [ERROR] Could not detect MT5 after {max_retries} attempts.", "red"))
+    print(clr( "     -> Open the MT5 terminal, log in to your account, then re-run.",
+              "yellow"))
     return False
 
 
 # ======================================================
-#  BANNER & UI
+#  CONSOLE BANNERS (kept for --console mode and log file)
 # ======================================================
-
 def print_banner():
     w = 62
     lines = [
-        ("TRIANGLE BREAKOUT AUTO TRADER  v2.1", "gold"),
+        ("TRIANGLE BREAKOUT AUTO TRADER  v2.3", "gold"),
         ("Forex - Crypto - Gold - Silver", "cyan"),
-        ("Auto Login | Auto Trade | Trail SL | Live Console", "gray"),
+        ("Auto-Detect MT5 | Auto Trade | Trail SL | Live GUI", "gray"),
         ("", ""),
         ("Made by  @codex_here", "magenta"),
     ]
@@ -459,48 +327,18 @@ def print_banner():
     print(clr("+" + "="*w + "+", "cyan"))
 
 
-def print_account_info(info, risk, min_rr, trail, interval):
-    w = 62
-    print(clr("+" + "="*w + "+", "green"))
-    rows = [
-        ("[OK] MT5 Connected!", "green"),
-        ("", ""),
-        (f"Account  : {info.login}", "white"),
-        (f"Balance  : ${info.balance:,.2f}  |  Equity: ${info.equity:,.2f}", "white"),
-        (f"Broker   : {info.server}", "white"),
-        (f"Currency : {info.currency}", "white"),
-        ("", ""),
-        (f"Risk/Trade: {risk}%   Min RR: 1:{min_rr}   Trail@: 1:{trail}", "yellow"),
-        (f"Symbols  : {len(SYMBOLS)}   Timeframes: {', '.join(TIMEFRAMES.keys())}", "cyan"),
-        (f"Scan     : every {interval}s   Journal: {JOURNAL_FILE}", "cyan"),
-    ]
-    for text, color in rows:
-        content = clr(text, color) if color else ""
-        spaces  = w - len(text) - 2
-        print(clr("|", "green") + " " + content + " "*max(0, spaces) + clr(" |", "green"))
-    print(clr("+" + "="*w + "+", "green"))
-    print()
-
-
-def print_separator(char="-", color="dim"):
-    print(clr(char * 64, color))
-
-
 def _fmt_uptime(secs):
     secs = int(secs)
     h, rem = divmod(secs, 3600)
     m, s   = divmod(rem, 60)
-    if h:
-        return f"{h}h {m:02d}m {s:02d}s"
-    if m:
-        return f"{m}m {s:02d}s"
+    if h: return f"{h}h {m:02d}m {s:02d}s"
+    if m: return f"{m}m {s:02d}s"
     return f"{s}s"
 
 
 # ======================================================
-#  GPU-STYLE LIVE DASHBOARD
+#  JOURNAL
 # ======================================================
-
 def _read_today_journal_stats():
     today = datetime.now().strftime("%Y-%m-%d")
     n = wins = losses = 0
@@ -510,13 +348,10 @@ def _read_today_journal_stats():
     try:
         with open(JOURNAL_FILE, newline="") as f:
             for row in csv.DictReader(f):
-                if row.get("Date") != today:
-                    continue
+                if row.get("Date") != today: continue
                 n += 1
-                try:
-                    pnl = float(row.get("Profit_Loss", 0) or 0)
-                except Exception:
-                    pnl = 0.0
+                try: pnl = float(row.get("Profit_Loss", 0) or 0)
+                except Exception: pnl = 0.0
                 pnl_total += pnl
                 if pnl > 0:    wins += 1
                 elif pnl < 0:  losses += 1
@@ -525,222 +360,39 @@ def _read_today_journal_stats():
     return n, wins, losses, pnl_total
 
 
-def _format_money(x):
-    sign = "+" if x >= 0 else "-"
-    return f"{sign}${abs(x):,.2f}"
+def _read_all_journal_stats():
+    """Total win-rate from the entire journal (for the GUI stats panel)."""
+    n = wins = losses = breakeven = 0
+    pnl_total = 0.0
+    if not os.path.exists(JOURNAL_FILE):
+        return n, wins, losses, breakeven, pnl_total
+    try:
+        with open(JOURNAL_FILE, newline="") as f:
+            for row in csv.DictReader(f):
+                n += 1
+                try: pnl = float(row.get("Profit_Loss", 0) or 0)
+                except Exception: pnl = 0.0
+                pnl_total += pnl
+                if pnl > 0:    wins += 1
+                elif pnl < 0:  losses += 1
+                else:          breakeven += 1
+    except Exception:
+        pass
+    return n, wins, losses, breakeven, pnl_total
 
 
-def print_live_dashboard(approaching_list, scan_num, scan_seconds=None):
-    acc = mt5.account_info()
-    if acc is None:
-        return
+def _read_recent_journal_rows(limit=20):
+    if not os.path.exists(JOURNAL_FILE):
+        return []
+    rows = []
+    try:
+        with open(JOURNAL_FILE, newline="") as f:
+            for row in csv.DictReader(f):
+                rows.append(row)
+    except Exception:
+        return []
+    return rows[-limit:]
 
-    positions       = _our_positions()
-    n_today, wins, losses, realized = _read_today_journal_stats()
-    unrealized      = sum(p.profit for p in positions)
-    uptime          = _fmt_uptime(time.time() - SESSION["start_time"])
-    avg_scan        = (SESSION["total_scan_sec"] / SESSION["scans"]) if SESSION["scans"] else 0.0
-    last_scan       = SESSION.get("last_scan_sec", 0.0)
-    win_pct         = (wins / n_today * 100) if n_today else 0.0
-
-    W = 78
-    H = "+" + "=" * W + "+"
-    h = "+" + "-" * W + "+"
-
-    def title(text):
-        pad = (W - len(text)) // 2
-        line = " " * pad + text + " " * (W - pad - len(text))
-        print(clr("|", "cyan") + clr(line, "white") + clr("|", "cyan"))
-
-    def section(text, color="yellow"):
-        line = "  " + text
-        print(clr("|", "cyan") + clr(line, color) +
-              " " * (W - len(line)) + clr("|", "cyan"))
-
-    def one_line(content):
-        for esc in (Fore.GREEN, Fore.RED, Fore.YELLOW, Fore.CYAN, Fore.MAGENTA,
-                    Fore.WHITE, Fore.BLUE, Style.BRIGHT, Style.DIM, Style.RESET_ALL):
-            if isinstance(content, str):
-                content_plain = content
-                for e2 in (Fore.GREEN, Fore.RED, Fore.YELLOW, Fore.CYAN, Fore.MAGENTA,
-                           Fore.WHITE, Fore.BLUE, Style.BRIGHT, Style.DIM, Style.RESET_ALL):
-                    content_plain = content_plain.replace(e2, "")
-                break
-        plain_len = len(content_plain) if isinstance(content_plain, str) else 0
-        pad = max(0, W - plain_len)
-        print(clr("|", "cyan") + content + " " * pad + clr("|", "cyan"))
-
-    print()
-    print(clr(H, "cyan"))
-    title(f"  BOT STATUS DASHBOARD     -     Scan #{scan_num}     -     "
-          f"{datetime.now().strftime('%H:%M:%S')}")
-    print(clr(H, "cyan"))
-
-    section("ACCOUNT  /  SESSION", "yellow")
-    one_line(
-        clr("  Login   :", "gray") + clr(f" {acc.login:<14}", "white") +
-        clr("  Uptime    :", "gray") + clr(f" {uptime}", "white")
-    )
-    one_line(
-        clr("  Balance :", "gray") + clr(f" ${acc.balance:>10,.2f}   ", "white") +
-        clr("  Scans done:", "gray") + clr(f" {SESSION['scans']}", "white")
-    )
-    one_line(
-        clr("  Equity  :", "gray") + clr(f" ${acc.equity:>10,.2f}   ", "white") +
-        clr("  Last scan :", "gray") + clr(f" {last_scan:.2f}s", "white")
-    )
-    one_line(
-        clr("  Free    :", "gray") + clr(f" ${acc.margin_free:>10,.2f}   ", "white") +
-        clr("  Avg scan  :", "gray") + clr(f" {avg_scan:.2f}s", "white")
-    )
-
-    print(clr(h, "cyan"))
-    section("TODAY P&L  /  UNREALIZED P&L", "yellow")
-    rcol = "green" if realized >= 0 else "red"
-    ucol = "green" if unrealized >= 0 else "red"
-    one_line(
-        clr("  Trades  :", "gray") + clr(f" {n_today:<14}", "white") +
-        clr("  Open pos. :", "gray") + clr(f" {len(positions)}", "white")
-    )
-    one_line(
-        clr("  Wins    :", "gray") + clr(f" {wins} ({win_pct:.1f}%)", "green") +
-        " " * max(0, 8 - len(f"{wins} ({win_pct:.1f}%)")) +
-        clr("    Unrealized:", "gray") + clr(f" {_format_money(unrealized)}", ucol)
-    )
-    one_line(
-        clr("  Losses  :", "gray") + clr(f" {losses:<14}", "red") +
-        clr("  Realized  :", "gray") + clr(f" {_format_money(realized)}", rcol)
-    )
-
-    if SESSION.get("last_trade_time"):
-        ago_s = int(time.time() - SESSION["last_trade_time"])
-        ago_str = _fmt_uptime(ago_s) + " ago"
-        one_line(
-            clr("  Last trade:", "gray") + clr(f" {SESSION['last_trade_pair']} - {ago_str}",
-                                              "magenta")
-        )
-
-    print(clr(h, "cyan"))
-    if positions:
-        section(f"OPEN POSITIONS  [{len(positions)}]   -  live P&L + RR achieved", "yellow")
-        hdr = (f"   {'Pair':<10} {'Side':<5} {'Entry':>10} {'Now':>10} "
-               f"{'SL':>10} {'TP':>10} {'P&L':>9} {'RR':>7}")
-        one_line(clr(hdr, "dim"))
-        for pos in positions:
-            sym       = pos.symbol
-            side      = "BUY " if pos.type == 0 else "SELL"
-            entry     = pos.price_open
-            now       = pos.price_current
-            sl, tp    = pos.sl, pos.tp
-            profit    = pos.profit
-            risk_dist = abs(entry - sl) if sl else 0
-            move      = (now - entry) if pos.type == 0 else (entry - now)
-            rr_now    = (move / risk_dist) if risk_dist > 0 else 0
-            row_color = "green" if profit >= 0 else "red"
-            row = (f"   {sym:<10} {side:<5} {entry:>10.5f} {now:>10.5f} "
-                   f"{sl:>10.5f} {tp:>10.5f} "
-                   f"{_format_money(profit):>9} {rr_now:>+6.2f}")
-            one_line(clr(row, row_color))
-    else:
-        section("OPEN POSITIONS  [0]   -  no live trades", "dim")
-
-    print(clr(h, "cyan"))
-    recent = SESSION.get("recent_trades", [])
-    if recent:
-        section(f"LAST {len(recent)} TRADES (this session)", "yellow")
-        hdr = (f"   {'Time':<10} {'Pair':<10} {'TF':<4} {'Dir':<5} "
-               f"{'Pattern':<12} {'RR':>6} {'Lot':>6}")
-        one_line(clr(hdr, "dim"))
-        for t in recent[-5:]:
-            row = (f"   {t['time']:<10} {t['symbol']:<10} {t['tf']:<4} {t['dir']:<5} "
-                   f"{t['pattern']:<12} {t['rr']:>+5.2f}  {t['lot']:>6.2f}")
-            color = "green" if t["dir"] == "BUY" else "red"
-            one_line(clr(row, color))
-    else:
-        section("LAST TRADES (this session)  -  none yet", "dim")
-
-    print(clr(h, "cyan"))
-    if approaching_list:
-        section(f"NEXT SETUPS FORMING  [{len(approaching_list)}]   -  approaching breakout",
-                "yellow")
-        hdr = (f"   {'Pair':<10} {'TF':<4} {'Pattern':<12} {'Resistance':>11} "
-               f"{'Support':>11} {'~Dist':>8}  Hint")
-        one_line(clr(hdr, "dim"))
-        approaching_list.sort(key=lambda a: a["distance_pct"])
-        for a in approaching_list[:6]:
-            hint_color = "green" if a["hint"] == "BUY breakout" else "red"
-            row_left  = (f"   {a['symbol']:<10} {a['tf']:<4} {a['pattern']:<12} "
-                         f"{a['R']:>11.5f} {a['S']:>11.5f} {a['distance_pct']:>7.2f}%  ")
-            one_line(clr(row_left, "white") + clr(a["hint"], hint_color))
-        if len(approaching_list) > 6:
-            one_line(clr(f"   ... and {len(approaching_list)-6} more", "dim"))
-    else:
-        section("NEXT SETUPS FORMING  -  no triangles approaching breakout", "dim")
-
-    print(clr(h, "cyan"))
-    section("STRATEGY LOGIC", "yellow")
-    one_line(clr("  Pattern :", "gray") +
-             clr(" Triangle breakout (ASCENDING /\\, DESCENDING \\/, SYMMETRICAL <>)", "white"))
-    one_line(clr("  Entry   :", "gray") +
-             clr(f" CLOSED candle outside R/S, body >= {int(MIN_BODY_RATIO*100)}% of range", "white"))
-    one_line(clr("  SL / TP :", "gray") +
-             clr(" SL at opposite triangle line   |   TP at entry +/- triangle height", "white"))
-    one_line(clr("  Filters :", "gray") +
-             clr(f" Min RR >= 1:{MIN_RR}    Risk = {RISK_PERCENT}% balance", "white"))
-    one_line(clr("  Trail   :", "gray") +
-             clr(f" Move SL to break-even at 1:{TRAIL_AT_RR}   then trail at 50% of risk", "white"))
-    print(clr(H, "cyan"))
-
-
-def print_scan_header(scan_num):
-    now  = datetime.now().strftime("%H:%M:%S")
-    date = datetime.now().strftime("%Y-%m-%d")
-    print()
-    print_separator("=", "cyan")
-    print(clr(f"  SCAN #{scan_num}  -  {date}  {now}  -  {len(SYMBOLS)} symbols", "cyan"))
-    print_separator("=", "cyan")
-
-
-def print_signal_box(symbol, tf_name, triangle, breakout, rr, lot):
-    direction = breakout["direction"]
-    entry, sl, tp = breakout["entry"], breakout["sl"], breakout["tp"]
-    height        = breakout["height"]
-    pattern       = triangle["pattern"]
-
-    is_buy    = direction == "BUY"
-    box_color = "green" if is_buy else "red"
-    dir_icon  = "BUY " if is_buy else "SELL"
-    pat_icon  = {"ASCENDING": "/\\", "DESCENDING": "\\/", "SYMMETRICAL": "<>"}.get(pattern, "*")
-
-    w = 52
-    print()
-    print(clr("  +" + "="*w + "+", box_color))
-    print(clr("  |", box_color) +
-          clr(f"  {dir_icon} SIGNAL  -  {symbol}  [{tf_name}]".center(w), box_color) +
-          clr("|", box_color))
-    print(clr("  +" + "="*w + "+", box_color))
-
-    rows = [
-        ("Pattern  ", f"{pat_icon} {pattern} Triangle Breakout"),
-        ("Entry    ", f"{round(entry, 5)}"),
-        ("Stop Loss", f"{round(sl, 5)}"),
-        ("Take Prof", f"{round(tp, 5)}"),
-        ("Est. RR  ", f"1:{round(rr, 2)}  ({'Excellent' if rr>=3 else 'Good' if rr>=2 else 'Low'})"),
-        ("Height   ", f"~{round(height*10000, 1)} pips"),
-        ("Lot Size ", f"{lot}"),
-    ]
-
-    for label, val in rows:
-        line   = f"  {label}: {val}"
-        spaces = w - len(line) - 1
-        print(clr("  |", box_color) + clr(line, "white") +
-              " "*max(0, spaces) + clr(" |", box_color))
-
-    print(clr("  +" + "="*w + "+", box_color))
-
-# ======================================================
-#  JOURNAL
-# ======================================================
 
 def setup_journal():
     if not os.path.exists(JOURNAL_FILE):
@@ -751,8 +403,6 @@ def setup_journal():
                 "Triangle_Height_Pips","Pattern_Type",
                 "Status","Profit_Loss","Notes"
             ])
-        print(clr(f"  Journal created: {JOURNAL_FILE}", "cyan"))
-
 
 def log_trade(symbol, tf, direction, entry, sl, tp, lot, rr, height,
               pattern, status="OPEN", pnl=0, notes=""):
@@ -767,21 +417,15 @@ def log_trade(symbol, tf, direction, entry, sl, tp, lot, rr, height,
         ])
 
 # ======================================================
-#  CANDLE DATA
+#  CANDLES + TRIANGLE LOGIC (v2.1 fixes preserved)
 # ======================================================
-
 def get_candles(symbol, timeframe, count=120):
-    """Fetch candles. Note: index 0 is OLDEST, index -1 is NEWEST (still forming)."""
     rates = mt5.copy_rates_from_pos(symbol, timeframe, 0, count)
     if rates is None or len(rates) == 0:
         return None
     df = pd.DataFrame(rates)
     df["time"] = pd.to_datetime(df["time"], unit="s")
     return df
-
-# ======================================================
-#  TRIANGLE DETECTION
-# ======================================================
 
 def find_swing_highs(df, window=5):
     highs = []
@@ -790,7 +434,6 @@ def find_swing_highs(df, window=5):
             highs.append((i, df["high"].iloc[i]))
     return highs
 
-
 def find_swing_lows(df, window=5):
     lows = []
     for i in range(window, len(df) - window):
@@ -798,17 +441,7 @@ def find_swing_lows(df, window=5):
             lows.append((i, df["low"].iloc[i]))
     return lows
 
-
 def detect_triangle(df_closed):
-    """
-    Detect a triangle pattern on CLOSED candles only.
-    df_closed should already exclude the current forming candle.
-
-    [v2.1 FIX] Tolerance is now relative to triangle HEIGHT (the proper
-    unit for slope-per-candle), not absolute price. The old version used
-    `tol = price * 0.0005` which made the comparisons numerically wrong
-    and almost never matched a pattern.
-    """
     if df_closed is None or len(df_closed) < 30:
         return None
     sh = find_swing_highs(df_closed)
@@ -819,62 +452,37 @@ def detect_triangle(df_closed):
     rh = sh[-3:]; rl = sl[-3:]
     hv = [h[1] for h in rh]; lv = [l[1] for l in rl]
 
-    # Slope per index across the swing points
     ht = float(np.polyfit(range(len(hv)), hv, 1)[0])
     lt = float(np.polyfit(range(len(lv)), lv, 1)[0])
 
-    resistance = float(hv[-1])
-    support    = float(lv[-1])
-    height     = resistance - support
-    avg        = float(df_closed["close"].iloc[-1])
+    resistance = float(hv[-1]); support = float(lv[-1])
+    height = resistance - support
+    avg    = float(df_closed["close"].iloc[-1])
 
     if height <= 0 or height < avg * 0.0015:
         return None
 
-    # Tolerance: a slope is "flat" if its move-per-index is small relative
-    # to the triangle's total height. 15% of height per index = effectively flat.
     tol = height * 0.15
-
     pattern = None
     if   abs(ht) < tol and lt > tol:                pattern = "ASCENDING"
     elif ht < -tol and abs(lt) < tol:               pattern = "DESCENDING"
     elif ht < -tol and lt > tol:                    pattern = "SYMMETRICAL"
-
-    if pattern is None:
-        return None
+    if pattern is None: return None
 
     return {"pattern": pattern, "resistance": resistance, "support": support,
             "height": height, "high_trend": ht, "low_trend": lt}
 
-# ======================================================
-#  BREAKOUT CHECK
-# ======================================================
-
 def check_breakout(df, triangle):
-    """
-    [v2.1 CRITICAL FIX]
-    Originally df.iloc[-1] (the CURRENT FORMING candle) was used for the
-    breakout check. That candle has not closed yet so its body, range and
-    close are all incomplete - this was the #1 reason the bot 'never
-    placed a trade'. We now use df.iloc[-2] (the last CLOSED candle) and
-    df.iloc[-3] (the one before it) for the cross-confirmation.
-    """
     if triangle is None or df is None or len(df) < 3:
         return None
-
-    last = df.iloc[-2]   # last CLOSED candle  (was -1 in v2.0)
-    prev = df.iloc[-3]   # candle before the last closed one (was -2 in v2.0)
-
-    close = float(last["close"])
-    open_ = float(last["open"])
+    last = df.iloc[-2]   # last CLOSED candle
+    prev = df.iloc[-3]
+    close = float(last["close"]); open_ = float(last["open"])
     body  = abs(close - open_)
     rng   = float(last["high"]) - float(last["low"])
-
     if rng <= 0 or (body / rng) < MIN_BODY_RATIO:
         return None
-
     R, S, H = triangle["resistance"], triangle["support"], triangle["height"]
-
     if close > R and float(prev["close"]) <= R:
         return {"direction": "BUY",  "entry": close, "sl": S, "tp": close + H, "height": H}
     if close < S and float(prev["close"]) >= S:
@@ -882,279 +490,167 @@ def check_breakout(df, triangle):
     return None
 
 # ======================================================
-#  LOT SIZE
+#  ORDER PLACEMENT (with rounding + stops_level + filling fallback)
 # ======================================================
-
 def calculate_lot(symbol, entry, sl, risk_percent):
     acc  = mt5.account_info()
     if acc is None: return 0.01
     info = mt5.symbol_info(symbol)
     if info is None: return 0.01
-
     risk_money = acc.balance * (risk_percent / 100)
     tick_value = info.trade_tick_value
     tick_size  = info.trade_tick_size or info.point
-    point      = info.point
-
-    if not tick_value or not tick_size or not point:
+    if not tick_value or not tick_size:
         return info.volume_min
-
     sl_distance = abs(entry - sl)
-    if sl_distance <= 0:
-        return info.volume_min
-
-    # Loss for 1.0 lot if SL hits = (sl_distance / tick_size) * tick_value
+    if sl_distance <= 0: return info.volume_min
     loss_per_lot = (sl_distance / tick_size) * tick_value
-    if loss_per_lot <= 0:
-        return info.volume_min
-
+    if loss_per_lot <= 0: return info.volume_min
     lot = risk_money / loss_per_lot
-
-    # Round to volume_step
     step = info.volume_step or 0.01
     lot = round(lot / step) * step
     lot = max(info.volume_min, min(lot, info.volume_max))
-    # Always round to 2 decimal places for clean display
     return round(lot, 2)
 
-# ======================================================
-#  PRICE ROUNDING + STOPS LEVEL HELPERS  (v2.1 NEW)
-# ======================================================
-
 def _round_price(symbol_info, price):
-    """Round price to broker's allowed digits."""
     return round(float(price), int(symbol_info.digits))
 
 def _enforce_stops_level(symbol_info, direction, current_price, sl, tp):
-    """
-    Brokers reject orders whose SL/TP are closer than SYMBOL_TRADE_STOPS_LEVEL
-    points to the current market price. Push them out to the broker minimum
-    if they are too tight.
-    """
     stops_level = int(getattr(symbol_info, "trade_stops_level", 0) or 0)
-    if stops_level <= 0:
-        return sl, tp
+    if stops_level <= 0: return sl, tp
     point = symbol_info.point
     min_dist = stops_level * point
-
     if direction == "BUY":
-        if (current_price - sl) < min_dist:
-            sl = current_price - min_dist
-        if (tp - current_price) < min_dist:
-            tp = current_price + min_dist
-    else:  # SELL
-        if (sl - current_price) < min_dist:
-            sl = current_price + min_dist
-        if (current_price - tp) < min_dist:
-            tp = current_price - min_dist
+        if (current_price - sl) < min_dist: sl = current_price - min_dist
+        if (tp - current_price) < min_dist: tp = current_price + min_dist
+    else:
+        if (sl - current_price) < min_dist: sl = current_price + min_dist
+        if (current_price - tp) < min_dist: tp = current_price - min_dist
     return sl, tp
-
-# ======================================================
-#  PLACE ORDER  (v2.1 - rounding + stops_level + filling fallback)
-# ======================================================
 
 def place_order(symbol, direction, entry, sl, tp, lot):
     info = mt5.symbol_info(symbol)
     tick = mt5.symbol_info_tick(symbol)
     if info is None or tick is None:
         return None, "no_info_or_tick"
-
-    # Use live ask/bid as the actual entry, not the candle close
     price = tick.ask if direction == "BUY" else tick.bid
-
-    # Enforce broker stops_level + round to digits
     sl, tp = _enforce_stops_level(info, direction, price, sl, tp)
     price  = _round_price(info, price)
     sl     = _round_price(info, sl)
     tp     = _round_price(info, tp)
-
     otype = mt5.ORDER_TYPE_BUY if direction == "BUY" else mt5.ORDER_TYPE_SELL
 
-    last_result = None
-    last_err = ""
+    last_result = None; last_err = ""
     for fmode in FILLING_MODES:
         req = {
-            "action"      : mt5.TRADE_ACTION_DEAL,
-            "symbol"      : symbol,
-            "volume"      : float(lot),
-            "type"        : otype,
-            "price"       : price,
-            "sl"          : sl,
-            "tp"          : tp,
-            "deviation"   : 20,
-            "magic"       : MAGIC,
-            "comment"     : "TriangleBot_v2.1",
-            "type_time"   : mt5.ORDER_TIME_GTC,
-            "type_filling": fmode,
+            "action": mt5.TRADE_ACTION_DEAL, "symbol": symbol,
+            "volume": float(lot), "type": otype, "price": price,
+            "sl": sl, "tp": tp, "deviation": 20, "magic": MAGIC,
+            "comment": "TriangleBot_v2.3",
+            "type_time": mt5.ORDER_TIME_GTC, "type_filling": fmode,
         }
         result = mt5.order_send(req)
         last_result = result
-
         if result is None:
-            last_err = f"order_send returned None (last_error={mt5.last_error()})"
+            last_err = f"order_send returned None ({mt5.last_error()})"
             continue
-
         if result.retcode == mt5.TRADE_RETCODE_DONE:
             return result, "ok"
-
-        # If filling mode is unsupported, try the next one
         if result.retcode in (
             mt5.TRADE_RETCODE_INVALID_FILL,
             mt5.TRADE_RETCODE_UNSUPPORTED_FILL_POLICY
             if hasattr(mt5, "TRADE_RETCODE_UNSUPPORTED_FILL_POLICY") else -1,
         ):
-            last_err = f"filling mode {fmode} unsupported, trying next..."
+            last_err = f"filling mode {fmode} unsupported"
             continue
-
-        # Any other retcode -> stop and report
         last_err = f"retcode={result.retcode} ({getattr(result, 'comment', '')})"
         break
-
     return last_result, last_err
 
-# ======================================================
-#  TRAILING SL  (v2.1 - magic filtered manually)
-# ======================================================
-
 def _our_positions():
-    """Return list of positions opened by THIS bot (filtered by magic)."""
     all_pos = mt5.positions_get()
-    if not all_pos:
-        return []
+    if not all_pos: return []
     return [p for p in all_pos if p.magic == MAGIC]
 
 def manage_trailing_sl(trail_rr):
     positions = _our_positions()
-    if not positions:
-        return
-
+    if not positions: return
     for pos in positions:
-        sym   = pos.symbol
-        info  = mt5.symbol_info(sym)
-        if info is None:
-            continue
+        sym = pos.symbol
+        info = mt5.symbol_info(sym)
+        if info is None: continue
         direc = "BUY" if pos.type == 0 else "SELL"
         entry = pos.price_open
         c_sl, c_tp = pos.sl, pos.tp
-        tick  = mt5.symbol_info_tick(sym)
+        tick = mt5.symbol_info_tick(sym)
         if tick is None: continue
-
         price = tick.bid if direc == "BUY" else tick.ask
-        risk  = abs(entry - c_sl)
+        risk = abs(entry - c_sl)
         if risk <= 0: continue
-
         pir = (price - entry) / risk if direc == "BUY" else (entry - price) / risk
         new_sl = c_sl
-
-        # Move to break-even (slightly in profit) once RR >= trail_rr
         if pir >= trail_rr:
             if direc == "BUY"  and c_sl < entry: new_sl = entry + risk * 0.1
             if direc == "SELL" and c_sl > entry: new_sl = entry - risk * 0.1
-
-        # Trail at 50% of original risk distance behind price
         if pir >= 1.5:
             td = risk * 0.5
             if direc == "BUY":  new_sl = max(new_sl, price - td)
             else:               new_sl = min(new_sl, price + td)
-
         if new_sl != c_sl:
             new_sl_r = _round_price(info, new_sl)
-            # Make sure new SL still respects stops_level
             new_sl_r, _ = _enforce_stops_level(info, direc, price, new_sl_r, c_tp)
             new_sl_r = _round_price(info, new_sl_r)
-            req = {
-                "action"  : mt5.TRADE_ACTION_SLTP,
-                "position": pos.ticket,
-                "symbol"  : sym,
-                "sl"      : new_sl_r,
-                "tp"      : _round_price(info, c_tp),
-            }
+            req = {"action": mt5.TRADE_ACTION_SLTP, "position": pos.ticket,
+                   "symbol": sym, "sl": new_sl_r, "tp": _round_price(info, c_tp)}
             res = mt5.order_send(req)
             if res and res.retcode == mt5.TRADE_RETCODE_DONE:
                 phase = "BREAKEVEN" if pir < 1.5 else "TRAILING"
-                print(clr(f"  {phase} SL -> {sym} | New SL: {new_sl_r} | RR: 1:{round(pir, 2)}",
-                          "yellow"))
-
-# ======================================================
-#  DUPLICATE CHECK  (v2.1 fix)
-# ======================================================
+                _push_log(f"[{phase}] {sym} new SL={new_sl_r} RR=1:{round(pir,2)}")
 
 def is_already_open(symbol):
-    """[v2.1 FIX] mt5.positions_get(symbol=X, magic=Y) does NOT actually
-    filter by magic - we now filter manually."""
     pos = mt5.positions_get(symbol=symbol)
-    if not pos:
-        return False
+    if not pos: return False
     return any(p.magic == MAGIC for p in pos)
 
 # ======================================================
-#  MAIN SCAN
+#  SCAN
 # ======================================================
-
 def _scan_one_pair(symbol, tf_name, tf_code, min_rr):
-    """
-    Worker: fetch + analyze ONE (symbol, timeframe) pair.
-    No order placement here.
-    """
     try:
-        if not mt5.symbol_select(symbol, True):
-            return None
+        if not mt5.symbol_select(symbol, True): return None
         df = get_candles(symbol, tf_code)
-        if df is None or len(df) < 30:
-            return None
-
-        # [v2.1 FIX] Detect pattern on CLOSED candles only
-        # (drop the still-forming last bar so the swing detector and
-        # trendline don't include a half-finished candle).
+        if df is None or len(df) < 30: return None
         df_closed = df.iloc[:-1].reset_index(drop=True)
         triangle = detect_triangle(df_closed)
-        if triangle is None:
-            return None
-
+        if triangle is None: return None
         breakout = check_breakout(df, triangle)
         if breakout is None:
-            # Approaching-breakout hint: how close is the LIVE price?
             R, S, H = triangle["resistance"], triangle["support"], triangle["height"]
             tick = mt5.symbol_info_tick(symbol)
             live = tick.last if (tick and tick.last) else float(df["close"].iloc[-1])
             prox = H * 0.10
             if abs(live - R) < prox or abs(live - S) < prox:
-                dist_R = abs(live - R)
-                dist_S = abs(live - S)
+                dist_R = abs(live - R); dist_S = abs(live - S)
                 closest = min(dist_R, dist_S)
                 distance_pct = (closest / live * 100) if live else 0
                 hint = "BUY breakout" if dist_R <= dist_S else "SELL breakout"
-                return {
-                    "type": "approaching",
-                    "symbol": symbol, "tf": tf_name,
-                    "pattern": triangle["pattern"],
-                    "R": R, "S": S, "close": live,
-                    "distance_pct": distance_pct, "hint": hint,
-                }
+                return {"type": "approaching", "symbol": symbol, "tf": tf_name,
+                        "pattern": triangle["pattern"], "R": R, "S": S, "close": live,
+                        "distance_pct": distance_pct, "hint": hint}
             return None
-
-        # Breakout detected -> evaluate RR
         entry, sl, tp = breakout["entry"], breakout["sl"], breakout["tp"]
-        if abs(entry - sl) == 0:
-            return None
+        if abs(entry - sl) == 0: return None
         rr = abs(tp - entry) / abs(entry - sl)
         if rr < min_rr:
-            return {
-                "type": "skip_rr", "symbol": symbol, "tf": tf_name, "rr": rr,
-            }
-        return {
-            "type": "signal",
-            "symbol": symbol, "tf": tf_name,
-            "triangle": triangle, "breakout": breakout, "rr": rr,
-        }
+            return {"type": "skip_rr", "symbol": symbol, "tf": tf_name, "rr": rr}
+        return {"type": "signal", "symbol": symbol, "tf": tf_name,
+                "triangle": triangle, "breakout": breakout, "rr": rr}
     except Exception as e:
         return {"type": "error", "symbol": symbol, "tf": tf_name, "error": str(e)}
 
 
 def scan_all_symbols(scan_num, min_rr, risk_percent, trail_rr):
-    print_scan_header(scan_num)
     t0 = time.time()
-
     signals = approaching = skipped = 0
     approaching_list = []
     signal_results = []
@@ -1168,95 +664,608 @@ def scan_all_symbols(scan_num, min_rr, risk_percent, trail_rr):
         futures = [ex.submit(_scan_one_pair, s, tn, tc, min_rr) for s, tn, tc in tasks]
         for fut in as_completed(futures):
             r = fut.result()
-            if r is None:
-                continue
+            if r is None: continue
             if r["type"] == "approaching":
                 approaching += 1
                 approaching_list.append(r)
-                pat_icon = {"ASCENDING":"/\\","DESCENDING":"\\/","SYMMETRICAL":"<>"}.get(
-                    r["pattern"], "*")
-                print(clr("  APPROACHING  ", "yellow") +
-                      clr(f"{r['symbol']:<10}", "white") +
-                      clr(f"[{r['tf']}] ", "gray") +
-                      clr(f"{pat_icon} {r['pattern']}", "magenta") +
-                      clr(f"  R:{round(r['R'], 5)}  S:{round(r['S'], 5)}", "gray"))
             elif r["type"] == "skip_rr":
                 skipped += 1
-                print(clr("  LOW RR       ", "red") +
-                      clr(f"{r['symbol']:<10}", "white") +
-                      clr(f"[{r['tf']}]", "gray") +
-                      clr(f"  RR={round(r['rr'], 2)} (need {min_rr})", "red"))
             elif r["type"] == "signal":
                 signal_results.append(r)
             elif r["type"] == "error":
-                print(clr(f"  [WARN] {r['symbol']} [{r['tf']}] error: {r['error']}",
-                          "yellow"))
+                _push_log(f"[WARN] {r['symbol']} [{r['tf']}] error: {r['error']}")
 
-    # Place orders SEQUENTIALLY
+    # Place orders sequentially
     for r in signal_results:
         symbol = r["symbol"]; tf_name = r["tf"]
         triangle = r["triangle"]; breakout = r["breakout"]; rr = r["rr"]
         entry, sl, tp = breakout["entry"], breakout["sl"], breakout["tp"]
         signals += 1
-
         lot = calculate_lot(symbol, entry, sl, risk_percent)
-        print_signal_box(symbol, tf_name, triangle, breakout, rr, lot)
+
+        _push_log(f"[SIGNAL] {symbol} {tf_name} {breakout['direction']} "
+                  f"{triangle['pattern']} RR=1:{round(rr,2)} lot={lot}")
 
         if is_already_open(symbol):
-            print(clr(f"  Position already open on {symbol} - skipping", "cyan"))
+            _push_log(f"[SKIP] {symbol} - position already open")
             continue
 
         result, status = place_order(symbol, breakout["direction"], entry, sl, tp, lot)
         if result is not None and result.retcode == mt5.TRADE_RETCODE_DONE:
-            print(clr(f"  [OK] ORDER PLACED  Ticket#{result.order}  Lot:{lot}", "green"))
-            log_trade(symbol, tf_name, breakout["direction"],
-                      entry, sl, tp, lot, rr,
+            _push_log(f"[ORDER OK] {symbol} ticket#{result.order} lot={lot}")
+            log_trade(symbol, tf_name, breakout["direction"], entry, sl, tp, lot, rr,
                       breakout["height"] * 10000, triangle["pattern"],
                       notes=f"Auto|{tf_name}|Scan#{scan_num}")
-            SESSION["trades_placed"] += 1
-            SESSION["last_trade_time"] = time.time()
-            SESSION["last_trade_pair"] = f"{symbol} ({tf_name})"
-            SESSION["recent_trades"].append({
-                "time"   : datetime.now().strftime("%H:%M:%S"),
-                "symbol" : symbol, "tf": tf_name,
-                "dir"    : breakout["direction"],
-                "pattern": triangle["pattern"],
-                "rr"     : rr, "lot": lot,
-            })
-            if len(SESSION["recent_trades"]) > 20:
-                SESSION["recent_trades"] = SESSION["recent_trades"][-20:]
+            with _STATE_LOCK:
+                SESSION["trades_placed"] += 1
+                SESSION["last_trade_time"] = time.time()
+                SESSION["last_trade_pair"] = f"{symbol} ({tf_name})"
+                SESSION["recent_trades"].append({
+                    "time": datetime.now().strftime("%H:%M:%S"),
+                    "symbol": symbol, "tf": tf_name,
+                    "dir": breakout["direction"], "pattern": triangle["pattern"],
+                    "rr": rr, "lot": lot,
+                })
+                if len(SESSION["recent_trades"]) > 20:
+                    SESSION["recent_trades"] = SESSION["recent_trades"][-20:]
         else:
-            rc      = result.retcode if result is not None else "None"
+            rc = result.retcode if result is not None else "None"
             comment = getattr(result, "comment", "") if result is not None else ""
-            print(clr(f"  [ERROR] ORDER FAILED  {symbol}  retcode={rc}  "
-                      f"comment='{comment}'  status='{status}'", "red"))
-            print(clr(f"          MT5 last_error: {mt5.last_error()}", "red"))
+            _push_log(f"[ORDER FAIL] {symbol} retcode={rc} comment='{comment}' "
+                      f"status='{status}' last_err={mt5.last_error()}")
 
     elapsed = time.time() - t0
-    SESSION["scans"] += 1
-    SESSION["last_scan_sec"] = elapsed
-    SESSION["total_scan_sec"] += elapsed
+    with _STATE_LOCK:
+        SESSION["scans"] += 1
+        SESSION["last_scan_sec"] = elapsed
+        SESSION["total_scan_sec"] += elapsed
+        SESSION["scan_num"] = scan_num
+        SESSION["approaching"] = approaching_list
+        # Build positions snapshot
+        pos_snap = []
+        for p in _our_positions():
+            entry_p = p.price_open; sl_p = p.sl; tp_p = p.tp
+            risk = abs(entry_p - sl_p) if sl_p else 0
+            move = (p.price_current - entry_p) if p.type == 0 else (entry_p - p.price_current)
+            rr_now = (move / risk) if risk > 0 else 0
+            pos_snap.append({
+                "symbol": p.symbol, "side": "BUY" if p.type == 0 else "SELL",
+                "entry": entry_p, "now": p.price_current, "sl": sl_p, "tp": tp_p,
+                "profit": p.profit, "rr": rr_now, "lot": p.volume,
+            })
+        SESSION["open_positions"] = pos_snap
+        # Refresh account info snapshot
+        SESSION["account_info"] = mt5.account_info()
 
-    print()
-    print(clr("  SCAN SUMMARY  ", "bold") +
-          clr(f"Signals:{signals}  ", "green") +
-          clr(f"Approaching:{approaching}  ", "yellow") +
-          clr(f"Skipped:{skipped}  ", "red") +
-          clr(f"({elapsed:.2f}s, {SCAN_WORKERS} parallel workers)", "cyan"))
+    _push_log(f"[SCAN #{scan_num}] signals={signals} approaching={approaching} "
+              f"skipped={skipped} ({elapsed:.2f}s)")
 
     manage_trailing_sl(trail_rr)
 
-    print_live_dashboard(approaching_list, scan_num, scan_seconds=elapsed)
+
+# ======================================================
+#  SCANNER WORKER (background thread)
+# ======================================================
+def scanner_worker(risk, min_rr, trail, interval):
+    print(clr("\n  Scanner thread starting - detecting MT5 terminal...", "cyan"))
+    _push_log("[STARTUP] Looking for running MT5 terminal...")
+    connected = wait_for_mt5_and_connect()
+    if not connected:
+        _push_log("[FATAL] Could not detect MT5 - open MT5 terminal & log in, then restart")
+        with _STATE_LOCK:
+            SESSION["connected"] = False
+        return
+
+    info = mt5.account_info()
+    with _STATE_LOCK:
+        SESSION["account_info"] = info
+        SESSION["connected"] = True
+
+    setup_journal()
+    _push_log(f"[OK] Auto-attached: account={info.login} balance=${info.balance:.2f} "
+              f"server={info.server}")
+
+    # Algo trading check
+    term = mt5.terminal_info()
+    if term is not None and not term.trade_allowed:
+        _push_log("[WARN] AlgoTrading is DISABLED in MT5! Trades will be REJECTED. "
+                  "Click 'Algo Trading' button in MT5 toolbar.")
+
+    scan_num = 0
+    try:
+        while not _STOP_EVENT.is_set():
+            scan_num += 1
+            try:
+                scan_all_symbols(scan_num, min_rr, risk, trail)
+            except Exception as e:
+                _push_log(f"[ERROR] scan crashed: {e}")
+            # Sleep with stop-event awareness
+            for _ in range(interval):
+                if _STOP_EVENT.is_set(): break
+                time.sleep(1)
+    finally:
+        try: mt5.shutdown()
+        except Exception: pass
+        _push_log("[SHUTDOWN] Scanner stopped")
+
+
+# ======================================================
+#  GUI DASHBOARD WINDOW (Tk - main thread)
+# ======================================================
+class DashboardGUI:
+    """
+    Live dashboard window with panels:
+      [Status bar]   account, balance, equity, free, connected status
+      [Strategy]     trading rules / filters
+      [Next Trade]   approaching breakouts (alerts)
+      [Stats]        win rate, trades today, P&L
+      [Positions]    live RR / SL / TP / P&L
+      [Journal]      last trades from CSV
+      [Activity]     rolling log
+    """
+
+    BG       = "#0f1117"
+    PANEL    = "#161a23"
+    PANEL_HI = "#1d2230"
+    BORDER   = "#2a2f3e"
+    FG       = "#e6e8ef"
+    DIM      = "#8b91a3"
+    GREEN    = "#22c55e"
+    RED      = "#ef4444"
+    YELLOW   = "#facc15"
+    BLUE     = "#3b82f6"
+    MAGENTA  = "#a855f7"
+    GOLD     = "#fbbf24"
+
+    def __init__(self, risk, min_rr, trail, interval):
+        self.cfg = dict(risk=risk, min_rr=min_rr, trail=trail, interval=interval)
+
+        import tkinter as tk
+        from tkinter import ttk, scrolledtext
+        self.tk = tk; self.ttk = ttk; self.ScrolledText = scrolledtext.ScrolledText
+
+        self.root = tk.Tk()
+        self.root.title("Triangle Bot v2.3  -  AUTO-DETECT FROM RUNNING MT5")
+        self.root.geometry("1280x780")
+        self.root.minsize(1100, 700)
+        self.root.configure(bg=self.BG)
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+
+        self._build_ui()
+
+        # Start the scanner in a background thread
+        self.worker = threading.Thread(
+            target=scanner_worker,
+            args=(risk, min_rr, trail, interval),
+            daemon=True,
+        )
+        self.worker.start()
+
+        # Begin periodic refresh
+        self.root.after(500, self._refresh)
+
+    # ---------- UI construction ----------
+    def _label(self, parent, text, fg=None, font=("Segoe UI", 10), bg=None, **kw):
+        return self.tk.Label(parent, text=text, fg=fg or self.FG,
+                             bg=bg or self.PANEL, font=font, **kw)
+
+    def _section(self, parent, title, color=None):
+        wrap = self.tk.Frame(parent, bg=self.BORDER, bd=0, highlightthickness=0)
+        inner = self.tk.Frame(wrap, bg=self.PANEL)
+        inner.pack(fill="both", expand=True, padx=1, pady=1)
+        header = self.tk.Frame(inner, bg=self.PANEL_HI)
+        header.pack(fill="x")
+        self._label(header, "  " + title, fg=color or self.GOLD,
+                    font=("Segoe UI", 10, "bold"),
+                    bg=self.PANEL_HI, anchor="w").pack(side="left", pady=4)
+        body = self.tk.Frame(inner, bg=self.PANEL)
+        body.pack(fill="both", expand=True, padx=10, pady=8)
+        return wrap, body
+
+    def _build_ui(self):
+        tk = self.tk
+
+        # ===== Top status bar =====
+        topbar = tk.Frame(self.root, bg=self.PANEL_HI, height=58)
+        topbar.pack(fill="x")
+        tk.Label(topbar, text=" TRIANGLE BREAKOUT AUTO TRADER  v2.3 ",
+                 bg=self.PANEL_HI, fg=self.GOLD,
+                 font=("Consolas", 14, "bold")).pack(side="left", padx=14)
+        self.lbl_conn = tk.Label(topbar, text=" connecting... ",
+                                 bg=self.PANEL_HI, fg=self.YELLOW,
+                                 font=("Segoe UI", 10, "bold"))
+        self.lbl_conn.pack(side="left", padx=10)
+        self.lbl_acc = tk.Label(topbar, text="", bg=self.PANEL_HI,
+                                fg=self.FG, font=("Consolas", 10))
+        self.lbl_acc.pack(side="left", padx=10)
+        self.lbl_clock = tk.Label(topbar, text="", bg=self.PANEL_HI,
+                                  fg=self.DIM, font=("Consolas", 10))
+        self.lbl_clock.pack(side="right", padx=14)
+
+        # ===== Main 3-column grid =====
+        main = tk.Frame(self.root, bg=self.BG)
+        main.pack(fill="both", expand=True, padx=10, pady=8)
+        main.columnconfigure(0, weight=1, uniform="col")
+        main.columnconfigure(1, weight=1, uniform="col")
+        main.columnconfigure(2, weight=1, uniform="col")
+        main.rowconfigure(0, weight=0)
+        main.rowconfigure(1, weight=1)
+        main.rowconfigure(2, weight=1)
+
+        # --- Row 0:  STRATEGY (col 0)  -  STATS (col 1)  -  ACCOUNT (col 2) ---
+        # Strategy
+        s_wrap, s_body = self._section(main, "STRATEGY LOGIC", color=self.BLUE)
+        s_wrap.grid(row=0, column=0, sticky="nsew", padx=4, pady=4)
+        rows = [
+            ("Pattern", "Triangle breakout (ASC /\\, DESC \\/, SYM <>)"),
+            ("Entry",   f"Closed candle outside R/S, body >= {int(MIN_BODY_RATIO*100)}% of range"),
+            ("SL",      "At opposite triangle line"),
+            ("TP",      "Entry +/- triangle height"),
+            ("Min RR",  f"1:{MIN_RR}"),
+            ("Risk",    f"{RISK_PERCENT}% of balance per trade"),
+            ("Trail",   f"BE at 1:{TRAIL_AT_RR}, then 50% trailing"),
+            ("Symbols", f"{len(SYMBOLS)} pairs across {', '.join(TIMEFRAMES.keys())}"),
+            ("Scan",    f"every {SCAN_INTERVAL}s, {SCAN_WORKERS} parallel workers"),
+        ]
+        for i, (k, v) in enumerate(rows):
+            tk.Label(s_body, text=k+":", fg=self.DIM, bg=self.PANEL,
+                     font=("Segoe UI", 9), anchor="w", width=8
+                     ).grid(row=i, column=0, sticky="w")
+            tk.Label(s_body, text=v, fg=self.FG, bg=self.PANEL,
+                     font=("Segoe UI", 9), anchor="w", justify="left",
+                     wraplength=320
+                     ).grid(row=i, column=1, sticky="w", padx=4)
+
+        # Stats
+        st_wrap, st_body = self._section(main, "WIN RATE & P&L", color=self.GREEN)
+        st_wrap.grid(row=0, column=1, sticky="nsew", padx=4, pady=4)
+        self.stats_labels = {}
+        rows = [
+            ("All-time trades",    "all_n",    self.FG),
+            ("Win rate",           "all_wr",   self.GREEN),
+            ("Wins / Losses",      "all_wl",   self.FG),
+            ("All-time P&L",       "all_pnl",  self.GREEN),
+            ("",                   "",         self.FG),
+            ("Today's trades",     "today_n",  self.FG),
+            ("Today's win rate",   "today_wr", self.GREEN),
+            ("Today's P&L",        "today_pnl",self.GREEN),
+            ("Unrealized P&L",     "unreal",   self.GREEN),
+        ]
+        for i, (k, key, color) in enumerate(rows):
+            if k == "":
+                tk.Frame(st_body, bg=self.PANEL, height=8).grid(row=i, column=0, columnspan=2)
+                continue
+            tk.Label(st_body, text=k+":", fg=self.DIM, bg=self.PANEL,
+                     font=("Segoe UI", 9), anchor="w", width=18
+                     ).grid(row=i, column=0, sticky="w", pady=1)
+            lbl = tk.Label(st_body, text="-", fg=color, bg=self.PANEL,
+                           font=("Consolas", 11, "bold"), anchor="w")
+            lbl.grid(row=i, column=1, sticky="w", padx=4)
+            self.stats_labels[key] = lbl
+
+        # Account
+        a_wrap, a_body = self._section(main, "ACCOUNT  /  SESSION", color=self.GOLD)
+        a_wrap.grid(row=0, column=2, sticky="nsew", padx=4, pady=4)
+        self.acc_labels = {}
+        rows = [
+            ("Login",     "login",   self.FG),
+            ("Server",    "server",  self.FG),
+            ("Balance",   "balance", self.FG),
+            ("Equity",    "equity",  self.FG),
+            ("Free margin","free",   self.FG),
+            ("Currency",  "currency",self.DIM),
+            ("",          "",        self.FG),
+            ("Uptime",    "uptime",  self.DIM),
+            ("Scans done","scans",   self.DIM),
+            ("Last scan", "last_scan",self.DIM),
+            ("Avg scan",  "avg_scan",self.DIM),
+        ]
+        for i, (k, key, color) in enumerate(rows):
+            if k == "":
+                tk.Frame(a_body, bg=self.PANEL, height=8).grid(row=i, column=0, columnspan=2)
+                continue
+            tk.Label(a_body, text=k+":", fg=self.DIM, bg=self.PANEL,
+                     font=("Segoe UI", 9), anchor="w", width=12
+                     ).grid(row=i, column=0, sticky="w", pady=1)
+            lbl = tk.Label(a_body, text="-", fg=color, bg=self.PANEL,
+                           font=("Consolas", 10), anchor="w")
+            lbl.grid(row=i, column=1, sticky="w", padx=4)
+            self.acc_labels[key] = lbl
+
+        # --- Row 1:  NEXT TRADE ALERTS (col 0)  -  OPEN POSITIONS (col 1-2) ---
+        n_wrap, n_body = self._section(main, "NEXT TRADE ALERTS  -  approaching breakouts",
+                                       color=self.YELLOW)
+        n_wrap.grid(row=1, column=0, sticky="nsew", padx=4, pady=4)
+        self.alerts_tree = self._make_tree(
+            n_body,
+            columns=("pair", "tf", "pattern", "R", "S", "dist", "hint"),
+            headings={"pair":"Pair", "tf":"TF", "pattern":"Pattern",
+                      "R":"R", "S":"S", "dist":"Dist%", "hint":"Hint"},
+            widths={"pair":75, "tf":40, "pattern":92, "R":78, "S":78, "dist":58, "hint":92},
+        )
+
+        p_wrap, p_body = self._section(main, "OPEN POSITIONS  -  live RR / SL / TP / P&L",
+                                       color=self.GREEN)
+        p_wrap.grid(row=1, column=1, columnspan=2, sticky="nsew", padx=4, pady=4)
+        self.pos_tree = self._make_tree(
+            p_body,
+            columns=("pair", "side", "lot", "entry", "now", "sl", "tp", "rr", "pnl"),
+            headings={"pair":"Pair","side":"Side","lot":"Lot","entry":"Entry",
+                      "now":"Price","sl":"SL","tp":"TP","rr":"RR","pnl":"P&L"},
+            widths={"pair":80,"side":50,"lot":50,"entry":85,"now":85,
+                    "sl":85,"tp":85,"rr":60,"pnl":80},
+        )
+
+        # --- Row 2:  TRADE JOURNAL (col 0-1)  -  ACTIVITY LOG (col 2) ---
+        j_wrap, j_body = self._section(main, "TRADE JOURNAL  -  last 20 entries",
+                                       color=self.MAGENTA)
+        j_wrap.grid(row=2, column=0, columnspan=2, sticky="nsew", padx=4, pady=4)
+        self.journal_tree = self._make_tree(
+            j_body,
+            columns=("date","time","pair","tf","dir","pattern","entry","sl","tp",
+                     "lot","rr","pnl","status"),
+            headings={"date":"Date","time":"Time","pair":"Pair","tf":"TF",
+                      "dir":"Dir","pattern":"Pattern","entry":"Entry","sl":"SL",
+                      "tp":"TP","lot":"Lot","rr":"RR","pnl":"P&L","status":"Status"},
+            widths={"date":80,"time":60,"pair":70,"tf":35,"dir":40,"pattern":85,
+                    "entry":75,"sl":75,"tp":75,"lot":45,"rr":45,"pnl":60,"status":60},
+        )
+
+        l_wrap, l_body = self._section(main, "ACTIVITY LOG", color=self.DIM)
+        l_wrap.grid(row=2, column=2, sticky="nsew", padx=4, pady=4)
+        self.log_text = self.ScrolledText(
+            l_body, bg="#0a0d14", fg=self.DIM, font=("Consolas", 9),
+            wrap="word", insertbackground=self.FG,
+            relief="flat", borderwidth=0, highlightthickness=0,
+        )
+        self.log_text.pack(fill="both", expand=True)
+        self.log_text.configure(state="disabled")
+
+        # Footer
+        footer = tk.Frame(self.root, bg=self.BG)
+        footer.pack(fill="x", padx=10, pady=(0, 6))
+        tk.Label(footer, text="Made by @codex_here  -  auto-detects running MT5 terminal  "
+                              "-  no credentials stored on disk",
+                 bg=self.BG, fg=self.DIM, font=("Segoe UI", 8)
+                 ).pack(side="left")
+
+    def _make_tree(self, parent, columns, headings, widths):
+        """Create a styled ttk.Treeview inside parent and return it."""
+        ttk = self.ttk
+        style = ttk.Style()
+        try:
+            style.theme_use("clam")
+        except Exception:
+            pass
+        style.configure("Triangle.Treeview",
+                        background=self.PANEL, foreground=self.FG,
+                        fieldbackground=self.PANEL, borderwidth=0,
+                        rowheight=22, font=("Consolas", 9))
+        style.configure("Triangle.Treeview.Heading",
+                        background=self.PANEL_HI, foreground=self.GOLD,
+                        font=("Segoe UI", 9, "bold"), borderwidth=0)
+        style.map("Triangle.Treeview",
+                  background=[("selected", self.PANEL_HI)],
+                  foreground=[("selected", self.GOLD)])
+
+        tree = ttk.Treeview(parent, columns=columns, show="headings",
+                            style="Triangle.Treeview", height=8)
+        for c in columns:
+            tree.heading(c, text=headings.get(c, c))
+            tree.column(c, width=widths.get(c, 80), anchor="center", stretch=True)
+        tree.pack(fill="both", expand=True, side="left")
+        # Scrollbar
+        vs = ttk.Scrollbar(parent, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=vs.set)
+        vs.pack(side="right", fill="y")
+
+        # Color tags
+        tree.tag_configure("buy",  foreground=self.GREEN)
+        tree.tag_configure("sell", foreground=self.RED)
+        tree.tag_configure("win",  foreground=self.GREEN)
+        tree.tag_configure("loss", foreground=self.RED)
+        tree.tag_configure("neutral", foreground=self.FG)
+        return tree
+
+    # ---------- Refresh ----------
+    def _refresh(self):
+        try:
+            self._refresh_once()
+        except Exception as e:
+            _push_log(f"[GUI] refresh error: {e}")
+        # Refresh again in 1s
+        if not _STOP_EVENT.is_set():
+            self.root.after(1000, self._refresh)
+
+    def _refresh_once(self):
+        # Clock
+        self.lbl_clock.config(text=datetime.now().strftime("%Y-%m-%d  %H:%M:%S"))
+
+        with _STATE_LOCK:
+            connected = SESSION["connected"]
+            acc       = SESSION["account_info"]
+            approach  = list(SESSION["approaching"])
+            positions = list(SESSION["open_positions"])
+            scans     = SESSION["scans"]
+            last_scan = SESSION["last_scan_sec"]
+            total_scan= SESSION["total_scan_sec"]
+            log_lines = list(SESSION["log_lines"])
+
+        # ===== Status bar =====
+        if connected:
+            self.lbl_conn.config(text="  CONNECTED   ", fg=self.GREEN)
+        else:
+            self.lbl_conn.config(text="  CONNECTING...", fg=self.YELLOW)
+
+        if acc is not None:
+            self.lbl_acc.config(
+                text=f"  Acct {acc.login}   |   Bal ${acc.balance:,.2f}   "
+                     f"|   Equity ${acc.equity:,.2f}   |   {acc.server}"
+            )
+            self.acc_labels["login"].config(text=str(acc.login))
+            self.acc_labels["server"].config(text=acc.server)
+            self.acc_labels["balance"].config(text=f"${acc.balance:,.2f}")
+            self.acc_labels["equity"].config(text=f"${acc.equity:,.2f}")
+            self.acc_labels["free"].config(text=f"${acc.margin_free:,.2f}")
+            self.acc_labels["currency"].config(text=acc.currency)
+
+        uptime = _fmt_uptime(time.time() - SESSION["start_time"])
+        avg = (total_scan / scans) if scans else 0.0
+        self.acc_labels["uptime"].config(text=uptime)
+        self.acc_labels["scans"].config(text=str(scans))
+        self.acc_labels["last_scan"].config(text=f"{last_scan:.2f}s")
+        self.acc_labels["avg_scan"].config(text=f"{avg:.2f}s")
+
+        # ===== Stats =====
+        n_today, w_today, l_today, pnl_today = _read_today_journal_stats()
+        n_all, w_all, l_all, _, pnl_all      = _read_all_journal_stats()
+        wr_all   = (w_all   / max(1, w_all + l_all))   * 100 if (w_all + l_all)   else 0
+        wr_today = (w_today / max(1, w_today + l_today))*100 if (w_today + l_today) else 0
+        unrealized = sum(p["profit"] for p in positions)
+
+        self.stats_labels["all_n"].config(text=str(n_all))
+        self.stats_labels["all_wr"].config(
+            text=f"{wr_all:.1f}%",
+            fg=self.GREEN if wr_all >= 50 else (self.YELLOW if wr_all >= 35 else self.RED))
+        self.stats_labels["all_wl"].config(text=f"{w_all} W  /  {l_all} L")
+        self.stats_labels["all_pnl"].config(
+            text=self._money(pnl_all),
+            fg=self.GREEN if pnl_all >= 0 else self.RED)
+
+        self.stats_labels["today_n"].config(text=str(n_today))
+        self.stats_labels["today_wr"].config(
+            text=f"{wr_today:.1f}%",
+            fg=self.GREEN if wr_today >= 50 else (self.YELLOW if wr_today >= 35 else self.RED))
+        self.stats_labels["today_pnl"].config(
+            text=self._money(pnl_today),
+            fg=self.GREEN if pnl_today >= 0 else self.RED)
+        self.stats_labels["unreal"].config(
+            text=self._money(unrealized),
+            fg=self.GREEN if unrealized >= 0 else self.RED)
+
+        # ===== Next trade alerts =====
+        self.alerts_tree.delete(*self.alerts_tree.get_children())
+        approach.sort(key=lambda a: a["distance_pct"])
+        for a in approach[:30]:
+            tag = "buy" if "BUY" in a["hint"] else "sell"
+            self.alerts_tree.insert("", "end", tags=(tag,), values=(
+                a["symbol"], a["tf"], a["pattern"],
+                f"{a['R']:.5f}", f"{a['S']:.5f}",
+                f"{a['distance_pct']:.2f}%", a["hint"],
+            ))
+
+        # ===== Open positions =====
+        self.pos_tree.delete(*self.pos_tree.get_children())
+        for p in positions:
+            tag = "win" if p["profit"] >= 0 else "loss"
+            self.pos_tree.insert("", "end", tags=(tag,), values=(
+                p["symbol"], p["side"], f"{p['lot']:.2f}",
+                f"{p['entry']:.5f}", f"{p['now']:.5f}",
+                f"{p['sl']:.5f}", f"{p['tp']:.5f}",
+                f"{p['rr']:+.2f}", self._money(p["profit"]),
+            ))
+
+        # ===== Journal =====
+        rows = _read_recent_journal_rows(20)
+        self.journal_tree.delete(*self.journal_tree.get_children())
+        for row in rows[::-1]:
+            try: pnl_v = float(row.get("Profit_Loss", 0) or 0)
+            except Exception: pnl_v = 0
+            tag = "win" if pnl_v > 0 else ("loss" if pnl_v < 0 else "neutral")
+            self.journal_tree.insert("", "end", tags=(tag,), values=(
+                row.get("Date",""), row.get("Time",""),
+                row.get("Symbol",""), row.get("Timeframe",""),
+                row.get("Direction",""), row.get("Pattern_Type",""),
+                row.get("Entry",""), row.get("SL",""), row.get("TP",""),
+                row.get("Lot",""), row.get("Est_RR",""),
+                self._money(pnl_v) if pnl_v else "-",
+                row.get("Status",""),
+            ))
+
+        # ===== Activity log =====
+        # Only repaint if changed (cheap diff)
+        new_text = "\n".join(log_lines[-200:])
+        cur_text = self.log_text.get("1.0", "end-1c")
+        if new_text != cur_text:
+            self.log_text.configure(state="normal")
+            self.log_text.delete("1.0", "end")
+            self.log_text.insert("1.0", new_text)
+            self.log_text.see("end")
+            self.log_text.configure(state="disabled")
+
+    @staticmethod
+    def _money(x):
+        try: x = float(x)
+        except Exception: return str(x)
+        sign = "+" if x >= 0 else "-"
+        return f"{sign}${abs(x):,.2f}"
+
+    def _on_close(self):
+        if not self._confirm_close():
+            return
+        _STOP_EVENT.set()
+        self.root.after(500, self.root.destroy)
+
+    def _confirm_close(self):
+        from tkinter import messagebox
+        return messagebox.askyesno(
+            "Stop Triangle Bot?",
+            "Stopping will disconnect MT5 and the bot will no longer manage your trades.\n\n"
+            "Open positions stay on your broker (they are NOT closed).\n\n"
+            "Are you sure you want to stop?")
+
+    def run(self):
+        self.root.mainloop()
+
+
+# ======================================================
+#  CONSOLE-ONLY MODE (legacy)
+# ======================================================
+def run_console_mode(risk, min_rr, trail, interval):
+    print(clr("\n  Detecting running MT5 terminal...", "cyan"))
+    connected = wait_for_mt5_and_connect()
+    if not connected:
+        print(clr("\n  [ERROR] Could not detect MT5!", "red"))
+        print(clr( "     Open MT5, log in, then re-run this script.", "yellow"))
+        time.sleep(15); return
+
+    info = mt5.account_info()
+    print(clr(f"\n  Account: {info.login}  Bal: ${info.balance:,.2f}  Server: {info.server}",
+              "green"))
+
+    term = mt5.terminal_info()
+    if term is not None and not term.trade_allowed:
+        print(clr("  [WARN] AlgoTrading is DISABLED in MT5 - enable it!", "red"))
+
+    setup_journal()
+    print(clr("\n  Bot running (console mode). Press Ctrl+C to stop.\n", "green"))
+
+    scan_num = 0
+    try:
+        while True:
+            scan_num += 1
+            scan_all_symbols(scan_num, min_rr, risk, trail)
+            for line in SESSION["log_lines"][-10:]:
+                print(clr("  " + line, "gray"))
+            time.sleep(interval)
+    except KeyboardInterrupt:
+        print(clr("\n  Stopping...", "yellow"))
+        try: mt5.shutdown()
+        except Exception: pass
+
 
 # ======================================================
 #  MAIN
 # ======================================================
-
 def main():
     print_banner()
+    cleanup_old_creds()
 
-    login, password, server, risk, min_rr, trail, interval = load_credentials()
+    use_console = "--console" in sys.argv
 
+    risk, min_rr, trail, interval = load_settings()
+
+    # Register Windows Startup once
     if WINDOWS:
         try:
             key = winreg.OpenKey(
@@ -1272,53 +1281,23 @@ def main():
         except Exception:
             pass
 
-    print(clr("\n  Waiting for MT5 (background auto-login)...", "cyan"))
-    print(clr(f"     Account : {login}  |  Server : {server}", "gray"))
-
-    connected = wait_for_mt5_and_connect(login, password, server,
-                                         max_retries=10, wait_sec=30)
-
-    if not connected:
-        print(clr("\n  [ERROR] Could not connect to MT5!", "red"))
-        print(clr( "     -> Open the MT5 terminal and run again", "yellow"))
-        time.sleep(15)
+    if use_console:
+        run_console_mode(risk, min_rr, trail, interval)
         return
 
-    info = mt5.account_info()
-    print_account_info(info, risk, min_rr, trail, interval)
-
-    # Confirm AlgoTrading is enabled (one of the silent reasons orders fail)
-    term = mt5.terminal_info()
-    if term is not None and not term.trade_allowed:
-        print(clr("  [WARN] 'AlgoTrading' is DISABLED in your MT5 terminal!", "red"))
-        print(clr("         Click the 'Algo Trading' button in MT5 toolbar to enable.", "yellow"))
-        print(clr("         Bot will keep scanning, but trades will be REJECTED until you enable it.\n",
-                  "yellow"))
-
-    setup_journal()
-
-    print(clr("  Bot is running! Press Ctrl+C to stop\n", "green"))
-
-    scan_num = 0
+    # Try GUI mode
     try:
-        while True:
-            scan_num += 1
-            scan_all_symbols(scan_num, min_rr, risk, trail)
-            tick = 1 if interval <= 10 else 5
-            for remaining in range(interval, 0, -tick):
-                print(clr(f"\r  Next scan in: {remaining}s ...    ", "dim"),
-                      end="", flush=True)
-                time.sleep(min(tick, remaining))
-            print()
+        import tkinter
+        _probe = tkinter.Tk(); _probe.withdraw(); _probe.destroy()
+    except Exception as e:
+        print(clr(f"\n  [WARN] tkinter unavailable ({e}) - falling back to console mode.", "yellow"))
+        run_console_mode(risk, min_rr, trail, interval)
+        return
 
-    except KeyboardInterrupt:
-        print()
-        print_separator("=", "cyan")
-        print(clr("  Shutting down... disconnecting MT5", "yellow"))
-        mt5.shutdown()
-        print(clr("  [OK] Closed cleanly. Goodbye!", "green"))
-        print(clr("  Made by @codex_here", "magenta"))
-        print_separator("=", "cyan")
+    print(clr("\n  Launching live dashboard window...", "cyan"))
+    print(clr("  (Make sure MT5 is open & logged in. Console mode: --console)\n", "dim"))
+    gui = DashboardGUI(risk, min_rr, trail, interval)
+    gui.run()
 
 
 if __name__ == "__main__":
@@ -1327,7 +1306,7 @@ if __name__ == "__main__":
     except SystemExit:
         raise
     except KeyboardInterrupt:
-        pass
+        _STOP_EVENT.set()
     except Exception as e:
         import traceback
         print()
@@ -1335,11 +1314,8 @@ if __name__ == "__main__":
         print(clr(" [CRASH] Uncaught error - script stopped", "red"))
         print(clr("="*60, "red"))
         print(clr(f"\n  {type(e).__name__}: {e}\n", "yellow"))
-        print(clr("Full traceback:", "dim"))
         traceback.print_exc()
         print(clr("\n  This window will close in 60 seconds...", "dim"))
-        try:
-            time.sleep(60)
-        except Exception:
-            pass
+        try: time.sleep(60)
+        except Exception: pass
         sys.exit(1)
