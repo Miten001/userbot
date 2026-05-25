@@ -12,7 +12,7 @@ export default function Hero({ games }: { games: Game[] }) {
       {/* Main hero card */}
       <Link
         href={`/game/${main.slug}`}
-        className="group relative col-span-2 overflow-hidden rounded-3xl border border-bg-line bg-bg-card shadow-card"
+        className="group relative col-span-2 overflow-hidden rounded-2xl border border-bg-line bg-bg-card shadow-card"
       >
         <div className="relative aspect-[16/9] md:aspect-[16/8]">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -21,16 +21,15 @@ export default function Hero({ games }: { games: Game[] }) {
             alt={main.title}
             className="h-full w-full object-cover transition duration-700 group-hover:scale-105"
           />
-          <div className="absolute inset-0 bg-gradient-to-tr from-bg/95 via-bg/50 to-transparent" />
-          <div className="absolute inset-0 bg-fun-gradient opacity-10 mix-blend-overlay" />
+          <div className="absolute inset-0 bg-gradient-to-tr from-bg/95 via-bg/40 to-transparent" />
 
           <div className="absolute bottom-0 left-0 right-0 p-6 md:p-10">
-            <div className="mb-3 flex items-center gap-2">
-              <span className="rounded-full bg-accent-pink px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-white">
+            <div className="mb-2 flex items-center gap-2">
+              <span className="rounded-full bg-accent-pink px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest text-white">
                 Featured
               </span>
               {typeof main.rating === "number" && (
-                <span className="flex items-center gap-1 rounded-full bg-bg/70 px-2.5 py-1 text-xs text-white">
+                <span className="flex items-center gap-1 rounded-full bg-bg/70 px-2.5 py-0.5 text-xs text-white">
                   <Star className="h-3 w-3 fill-amber-300 text-amber-300" />
                   {main.rating.toFixed(1)}
                 </span>
@@ -50,15 +49,15 @@ export default function Hero({ games }: { games: Game[] }) {
         </div>
       </Link>
 
-      {/* Side stack */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-1 md:grid-rows-2">
-        {side.slice(0, 2).map((g) => (
+      {/* Side stack — 2x2 grid of smaller cards */}
+      <div className="grid grid-cols-2 gap-3 md:grid-rows-2">
+        {side.map((g) => (
           <Link
             key={g.slug}
             href={`/game/${g.slug}`}
-            className="group relative overflow-hidden rounded-2xl border border-bg-line bg-bg-card"
+            className="group relative overflow-hidden rounded-xl border border-bg-line bg-bg-card transition hover:border-brand"
           >
-            <div className="relative aspect-[16/9] md:aspect-auto md:h-full">
+            <div className="relative aspect-square">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={g.thumbnail}
@@ -66,13 +65,10 @@ export default function Hero({ games }: { games: Game[] }) {
                 className="h-full w-full object-cover transition duration-500 group-hover:scale-110"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-bg/95 to-transparent" />
-              <div className="absolute bottom-0 left-0 right-0 p-3 md:p-4">
-                <h3 className="text-sm font-semibold text-white md:text-base">
+              <div className="absolute bottom-0 left-0 right-0 p-2.5">
+                <h3 className="line-clamp-1 text-sm font-semibold text-white">
                   {g.title}
                 </h3>
-                <p className="line-clamp-1 text-xs text-white/50">
-                  {g.tags.slice(0, 2).join(" · ")}
-                </p>
               </div>
             </div>
           </Link>
