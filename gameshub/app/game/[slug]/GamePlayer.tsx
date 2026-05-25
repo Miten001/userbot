@@ -9,8 +9,11 @@ export default function GamePlayer({ game }: { game: Game }) {
   const [reloadKey, setReloadKey] = useState(0);
   const wrapRef = useRef<HTMLDivElement>(null);
 
+  // Treat as placeholder ONLY if URL is obviously a stub
+  // (e.g. "ninja-clash-demo/", "REPLACE_ME"). Real archive.org and
+  // gamemonetize URLs are valid and should always render the iframe.
   const isPlaceholder =
-    game.embedUrl.includes("-demo/") || game.embedUrl.includes("REPLACE");
+    /-demo\/?$/i.test(game.embedUrl) || /REPLACE/i.test(game.embedUrl);
 
   const aspect =
     game.aspect === "4/3"

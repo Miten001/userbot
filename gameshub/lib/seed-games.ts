@@ -1,488 +1,378 @@
 import { Game } from "./types";
 
 /**
- * GAME CATALOG
- * ------------
- * The `embedUrl` field is what gets loaded inside the iframe on the play page.
+ * GAME CATALOG (offline-safe seed)
+ * --------------------------------
+ * These are real, publicly playable HTML5 / DOS games that work
+ * cleanly inside an iframe. The Internet Archive entries use their
+ * official `/embed/<identifier>/` URLs — they are designed for
+ * iframe embedding, no API key required, no CORS hassle.
  *
- * Where to get free embeddable HTML5 games:
- *   1. https://gamemonetize.com   — sign up free, copy any game's iframe URL.
- *      Format:  https://html5.gamemonetize.com/<game-id>/
- *   2. https://gamedistribution.com — sign up, get a publisher ID, embed games.
- *      Format:  https://html5.gamedistribution.com/<game-id>/
- *   3. https://itch.io  — many games allow iframe embedding (check each).
+ * The Gamemonetize JSON feed (lib/feed.ts) is still the primary
+ * source. This list is the fallback when the feed is unreachable
+ * or returns too few English-language games.
  *
- * The thumbnails below use picsum.photos as deterministic placeholders.
- * Replace with the real game's thumbnail URL for production.
- *
- * Add as many games as you want — every entry automatically appears in the UI.
+ * To add your own games:
+ *   - Internet Archive: https://archive.org/details/softwarelibrary_msdos_games
+ *     (find a game, replace `details` with `embed` in the URL)
+ *   - Gamemonetize: https://gamemonetize.com (sign up, copy embed URL)
+ *   - GameDistribution: https://gamedistribution.com
  */
 
+const ia = (id: string) => `https://archive.org/embed/${id}`;
+
+// Internet Archive serves a generic emulator screenshot for games;
+// we use picsum.photos for thumbnails (deterministic per slug).
 const thumb = (seed: string) =>
-  `https://picsum.photos/seed/${seed}/640/400`;
+  `https://picsum.photos/seed/${seed}/640/640`;
 
 export const seedGames: Game[] = [
-  // ---------- ACTION ----------
+  // ---------- CLASSIC PUZZLE ----------
   {
-    slug: "ninja-clash",
-    title: "Ninja Clash",
+    slug: "tetris",
+    title: "Tetris",
     description:
-      "Slice your way through hordes of shadow ninjas in this fast-paced sword-fighting arena.",
-    category: "action",
-    tags: ["ninja", "sword", "fighting", "1-player"],
-    thumbnail: thumb("ninja-clash"),
-    embedUrl: "https://html5.gamemonetize.com/ninja-clash-demo/",
-    aspect: "16/9",
-    plays: 184320,
-    rating: 4.6,
-    controls: ["WASD to move", "Mouse to attack", "Space to dash"],
-    featured: true
-  },
-  {
-    slug: "stickman-warriors",
-    title: "Stickman Warriors",
-    description:
-      "Pick your stickman champion and brawl through 40+ levels of pure chaos.",
-    category: "action",
-    tags: ["stickman", "fighting", "combo"],
-    thumbnail: thumb("stickman-warriors"),
-    embedUrl: "https://html5.gamemonetize.com/stickman-warriors-demo/",
-    plays: 92110,
-    rating: 4.4,
-    controls: ["Arrow keys", "J = punch", "K = kick"],
-    new: true
-  },
-  {
-    slug: "zombie-survival-3d",
-    title: "Zombie Survival 3D",
-    description:
-      "Survive endless waves of the undead with upgradable weapons and explosive gear.",
-    category: "action",
-    tags: ["zombie", "survival", "3d"],
-    thumbnail: thumb("zombie-survival-3d"),
-    embedUrl: "https://html5.gamemonetize.com/zombie-survival-demo/",
-    plays: 230440,
-    rating: 4.7,
-    featured: true
-  },
-  {
-    slug: "samurai-blade",
-    title: "Samurai Blade",
-    description:
-      "Master the way of the katana across feudal Japan in this stylish action adventure.",
-    category: "action",
-    tags: ["samurai", "katana", "anime"],
-    thumbnail: thumb("samurai-blade"),
-    embedUrl: "https://html5.gamemonetize.com/samurai-blade-demo/",
-    plays: 51230,
-    rating: 4.3
-  },
-
-  // ---------- PUZZLE ----------
-  {
-    slug: "2048",
-    title: "2048",
-    description:
-      "Combine matching tiles to reach the legendary 2048 tile. Easy to learn, hard to master.",
+      "The legendary Russian falling-block puzzle game. Stack the tetrominoes, clear the lines, beat your highscore.",
     category: "puzzle",
-    tags: ["numbers", "logic", "merge"],
-    thumbnail: thumb("2048"),
-    embedUrl: "https://play2048.co/",
+    tags: ["classic", "blocks", "highscore"],
+    thumbnail: thumb("tetris-classic"),
+    embedUrl: ia("msdos_Tetris_1986"),
+    aspect: "4/3",
     plays: 1240500,
-    rating: 4.8,
-    controls: ["Arrow keys to move tiles"],
+    rating: 4.9,
+    controls: ["Arrow keys to move", "Up to rotate", "Space to drop"],
     featured: true
   },
   {
-    slug: "block-puzzle-classic",
-    title: "Block Puzzle Classic",
+    slug: "lemmings",
+    title: "Lemmings",
     description:
-      "Drag colored blocks onto a 10x10 grid and clear lines to score big.",
+      "Guide the army of suicidal green-haired creatures safely to the exit.",
     category: "puzzle",
-    tags: ["blocks", "tetris-like", "classic"],
-    thumbnail: thumb("block-puzzle-classic"),
-    embedUrl: "https://html5.gamemonetize.com/block-puzzle-demo/",
-    plays: 421100,
-    rating: 4.6
-  },
-  {
-    slug: "bubble-shooter",
-    title: "Bubble Shooter",
-    description:
-      "Pop colorful bubbles in this timeless match-3 arcade puzzle.",
-    category: "puzzle",
-    tags: ["match-3", "bubble", "casual"],
-    thumbnail: thumb("bubble-shooter"),
-    embedUrl: "https://html5.gamemonetize.com/bubble-shooter-demo/",
-    plays: 884320,
+    tags: ["classic", "strategy", "puzzle"],
+    thumbnail: thumb("lemmings"),
+    embedUrl: ia("msdos_Lemmings_1991"),
+    aspect: "4/3",
+    plays: 612400,
     rating: 4.7,
-    featured: true
-  },
-  {
-    slug: "sudoku-master",
-    title: "Sudoku Master",
-    description:
-      "Train your brain with daily Sudoku puzzles across four difficulty levels.",
-    category: "puzzle",
-    tags: ["numbers", "logic", "brain"],
-    thumbnail: thumb("sudoku-master"),
-    embedUrl: "https://html5.gamemonetize.com/sudoku-master-demo/",
-    plays: 162400,
-    rating: 4.5
-  },
-  {
-    slug: "match-3-mania",
-    title: "Match 3 Mania",
-    description:
-      "Swap candies and trigger powerful combos in this colorful match-3 adventure.",
-    category: "puzzle",
-    tags: ["match-3", "candy", "casual"],
-    thumbnail: thumb("match-3-mania"),
-    embedUrl: "https://html5.gamemonetize.com/match-3-mania-demo/",
-    plays: 305210,
-    rating: 4.4,
     new: true
   },
-
-  // ---------- RACING ----------
   {
-    slug: "highway-racer",
-    title: "Highway Racer",
+    slug: "number-munchers",
+    title: "Number Munchers",
     description:
-      "Dodge traffic at 200 km/h. Customize your ride and chase the leaderboard.",
-    category: "racing",
-    tags: ["racing", "traffic", "endless"],
-    thumbnail: thumb("highway-racer"),
-    embedUrl: "https://html5.gamemonetize.com/highway-racer-demo/",
-    plays: 502100,
-    rating: 4.6,
-    featured: true
-  },
-  {
-    slug: "drift-hunters",
-    title: "Drift Hunters",
-    description:
-      "Tune cars and slide around tracks in the cult-classic drifting simulator.",
-    category: "racing",
-    tags: ["drift", "cars", "tuning"],
-    thumbnail: thumb("drift-hunters"),
-    embedUrl: "https://html5.gamemonetize.com/drift-hunters-demo/",
-    plays: 1210400,
-    rating: 4.8,
-    featured: true
-  },
-  {
-    slug: "moto-stunt-x",
-    title: "Moto Stunt X",
-    description:
-      "Backflip, frontflip and crash through 50 brutal motorbike trial levels.",
-    category: "racing",
-    tags: ["bike", "stunt", "physics"],
-    thumbnail: thumb("moto-stunt-x"),
-    embedUrl: "https://html5.gamemonetize.com/moto-stunt-x-demo/",
+      "Eat the right numbers, dodge the troggles. Educational arcade classic.",
+    category: "puzzle",
+    tags: ["classic", "math", "kids"],
+    thumbnail: thumb("number-munchers"),
+    embedUrl: ia("msdos_Number_Munchers_1990"),
+    aspect: "4/3",
     plays: 312220,
     rating: 4.5
   },
   {
-    slug: "traffic-rush",
-    title: "Traffic Rush",
+    slug: "sokoban",
+    title: "Sokoban",
     description:
-      "Direct intersections without crashes. Simple to play, hard to put down.",
-    category: "racing",
-    tags: ["traffic", "casual", "timing"],
-    thumbnail: thumb("traffic-rush"),
-    embedUrl: "https://html5.gamemonetize.com/traffic-rush-demo/",
-    plays: 89430,
-    rating: 4.3
+      "Push crates onto target squares — the original sliding puzzle.",
+    category: "puzzle",
+    tags: ["classic", "puzzle", "logic"],
+    thumbnail: thumb("sokoban"),
+    embedUrl: ia("msdos_Sokoban_1984"),
+    aspect: "4/3",
+    plays: 184320,
+    rating: 4.4
   },
 
-  // ---------- SPORTS ----------
+  // ---------- ACTION / ARCADE ----------
   {
-    slug: "8-ball-pool-pro",
-    title: "8 Ball Pool Pro",
+    slug: "pac-man",
+    title: "Pac-Man",
     description:
-      "Sink the 8-ball in classic pool with online-style multiplayer feel.",
-    category: "sports",
-    tags: ["pool", "billiards", "1v1"],
-    thumbnail: thumb("8-ball-pool-pro"),
-    embedUrl: "https://html5.gamemonetize.com/8-ball-pool-pro-demo/",
-    plays: 720100,
-    rating: 4.7,
+      "Eat all the dots, dodge the ghosts. The 1982 arcade icon, fully playable.",
+    category: "arcade",
+    tags: ["classic", "arcade", "highscore"],
+    thumbnail: thumb("pacman"),
+    embedUrl: ia("msdos_Pac-Man_1983"),
+    aspect: "4/3",
+    plays: 2400500,
+    rating: 4.9,
+    featured: true,
+    controls: ["Arrow keys to move"]
+  },
+  {
+    slug: "prince-of-persia",
+    title: "Prince of Persia",
+    description:
+      "Acrobatic platformer through deadly dungeons. Save the princess in 60 minutes.",
+    category: "action",
+    tags: ["classic", "platformer", "adventure"],
+    thumbnail: thumb("prince-of-persia"),
+    embedUrl: ia("msdos_Prince_of_Persia_1990"),
+    aspect: "4/3",
+    plays: 884320,
+    rating: 4.8,
     featured: true
   },
   {
-    slug: "basketball-stars",
-    title: "Basketball Stars",
+    slug: "duke-nukem",
+    title: "Duke Nukem",
     description:
-      "Showtime hoops! 1v1 tournaments, dunk contests and trick shots.",
-    category: "sports",
-    tags: ["basketball", "1v1", "arcade"],
-    thumbnail: thumb("basketball-stars"),
-    embedUrl: "https://html5.gamemonetize.com/basketball-stars-demo/",
-    plays: 415100,
+      "Side-scrolling shoot-em-up — Duke vs Dr. Proton. Pure 90s action.",
+    category: "shooting",
+    tags: ["classic", "action", "platformer"],
+    thumbnail: thumb("duke-nukem"),
+    embedUrl: ia("msdos_Duke_Nukem_1991"),
+    aspect: "4/3",
+    plays: 720100,
     rating: 4.6
   },
   {
-    slug: "soccer-skills-cup",
-    title: "Soccer Skills Cup",
+    slug: "commander-keen",
+    title: "Commander Keen",
     description:
-      "Pick a country and lift the cup in this fast 5v5 arcade football game.",
-    category: "sports",
-    tags: ["football", "soccer", "tournament"],
-    thumbnail: thumb("soccer-skills-cup"),
-    embedUrl: "https://html5.gamemonetize.com/soccer-skills-cup-demo/",
-    plays: 533200,
-    rating: 4.5
-  },
-
-  // ---------- SHOOTING ----------
-  {
-    slug: "sniper-strike",
-    title: "Sniper Strike",
-    description:
-      "Steady your breath and take the shot — 60 sniping missions across the world.",
-    category: "shooting",
-    tags: ["sniper", "fps", "missions"],
-    thumbnail: thumb("sniper-strike"),
-    embedUrl: "https://html5.gamemonetize.com/sniper-strike-demo/",
+      "Billy Blaze, boy genius, defends Earth from Vorticons. Classic 90s platformer.",
+    category: "action",
+    tags: ["classic", "platformer", "adventure"],
+    thumbnail: thumb("commander-keen"),
+    embedUrl: ia("msdos_Commander_Keen_in_Invasion_of_the_Vorticons_1990"),
+    aspect: "4/3",
     plays: 421300,
-    rating: 4.6,
-    featured: true
+    rating: 4.7
   },
   {
-    slug: "bullet-force-arena",
-    title: "Bullet Force Arena",
+    slug: "wolfenstein-3d",
+    title: "Wolfenstein 3D",
     description:
-      "A modern multiplayer FPS arena right in your browser.",
+      "The grandfather of FPS games. Escape the Nazi castle in glorious 1992 3D.",
     category: "shooting",
-    tags: ["fps", "multiplayer", "guns"],
-    thumbnail: thumb("bullet-force-arena"),
-    embedUrl: "https://html5.gamemonetize.com/bullet-force-arena-demo/",
+    tags: ["classic", "fps", "3d"],
+    thumbnail: thumb("wolfenstein"),
+    embedUrl: ia("msdos_Wolfenstein_3D_1992"),
+    aspect: "4/3",
     plays: 980220,
-    rating: 4.7,
+    rating: 4.8,
     featured: true
   },
   {
-    slug: "zombie-hunter-3d",
-    title: "Zombie Hunter 3D",
+    slug: "doom",
+    title: "DOOM",
     description:
-      "Quarantine, undead, shotguns. You know the drill — survive til dawn.",
+      "1993's most influential shooter — fight demons through the bowels of hell.",
     category: "shooting",
-    tags: ["zombie", "fps", "horror"],
-    thumbnail: thumb("zombie-hunter-3d"),
-    embedUrl: "https://html5.gamemonetize.com/zombie-hunter-3d-demo/",
-    plays: 211110,
-    rating: 4.4,
+    tags: ["classic", "fps", "horror"],
+    thumbnail: thumb("doom"),
+    embedUrl: ia("msdos_Doom_1993"),
+    aspect: "4/3",
+    plays: 1850000,
+    rating: 4.9,
+    featured: true
+  },
+  {
+    slug: "jazz-jackrabbit",
+    title: "Jazz Jackrabbit",
+    description:
+      "Speed-running rabbit hero, side-scrolling action across 9 worlds.",
+    category: "action",
+    tags: ["classic", "platformer", "speed"],
+    thumbnail: thumb("jazz"),
+    embedUrl: ia("msdos_Jazz_Jackrabbit_1994"),
+    aspect: "4/3",
+    plays: 305210,
+    rating: 4.5,
     new: true
   },
 
   // ---------- ADVENTURE ----------
   {
-    slug: "temple-runner",
-    title: "Temple Runner",
+    slug: "the-oregon-trail",
+    title: "The Oregon Trail",
     description:
-      "Steal the idol, run forever. Slide, jump and tilt across the temple.",
+      "1848: caravan from Missouri to Oregon. Hunt buffalo, ford rivers, dodge dysentery.",
     category: "adventure",
-    tags: ["runner", "endless", "3d"],
-    thumbnail: thumb("temple-runner"),
-    embedUrl: "https://html5.gamemonetize.com/temple-runner-demo/",
-    plays: 612100,
-    rating: 4.5
-  },
-  {
-    slug: "treasure-island",
-    title: "Treasure Island",
-    description:
-      "Explore a pirate island, solve clues and dig up legendary loot.",
-    category: "adventure",
-    tags: ["pirate", "exploration", "puzzle"],
-    thumbnail: thumb("treasure-island"),
-    embedUrl: "https://html5.gamemonetize.com/treasure-island-demo/",
-    plays: 84320,
-    rating: 4.3
-  },
-  {
-    slug: "dragon-quest-mini",
-    title: "Dragon Quest Mini",
-    description:
-      "A bite-sized RPG with sprite art, side-scrolling combat and bosses.",
-    category: "adventure",
-    tags: ["rpg", "fantasy", "story"],
-    thumbnail: thumb("dragon-quest-mini"),
-    embedUrl: "https://html5.gamemonetize.com/dragon-quest-mini-demo/",
-    plays: 121430,
-    rating: 4.4
-  },
-
-  // ---------- ARCADE ----------
-  {
-    slug: "snake-classic",
-    title: "Snake Classic",
-    description:
-      "The original snake. Eat. Grow. Don't bite yourself.",
-    category: "arcade",
-    tags: ["retro", "classic", "skill"],
-    thumbnail: thumb("snake-classic"),
-    embedUrl: "https://html5.gamemonetize.com/snake-classic-demo/",
-    plays: 312220,
-    rating: 4.5
-  },
-  {
-    slug: "pong-revival",
-    title: "Pong Revival",
-    description:
-      "The 1972 arcade icon, modernized with neon visuals and chip-tune sound.",
-    category: "arcade",
-    tags: ["retro", "neon", "1v1"],
-    thumbnail: thumb("pong-revival"),
-    embedUrl: "https://html5.gamemonetize.com/pong-revival-demo/",
-    plays: 64210,
-    rating: 4.2
-  },
-  {
-    slug: "neon-pinball",
-    title: "Neon Pinball",
-    description:
-      "A flashing, bouncing, multiball pinball table that never quits.",
-    category: "arcade",
-    tags: ["pinball", "neon", "highscore"],
-    thumbnail: thumb("neon-pinball"),
-    embedUrl: "https://html5.gamemonetize.com/neon-pinball-demo/",
-    plays: 78210,
-    rating: 4.3,
-    new: true
-  },
-  {
-    slug: "flappy-bird-x",
-    title: "Flappy Bird X",
-    description:
-      "Tap. Flap. Don't die. The remix of the world-famous one-tap nightmare.",
-    category: "arcade",
-    tags: ["one-tap", "frustrating", "casual"],
-    thumbnail: thumb("flappy-bird-x"),
-    embedUrl: "https://html5.gamemonetize.com/flappy-bird-x-demo/",
-    plays: 922100,
-    rating: 4.4,
-    featured: true
-  },
-
-  // ---------- IO ----------
-  {
-    slug: "slither-arena",
-    title: "Slither Arena",
-    description:
-      "Eat glowing orbs, grow huge, and trap rivals in this multiplayer snake arena.",
-    category: "io",
-    tags: ["multiplayer", "snake", "arena"],
-    thumbnail: thumb("slither-arena"),
-    embedUrl: "https://html5.gamemonetize.com/slither-arena-demo/",
-    plays: 1031000,
-    rating: 4.7,
-    featured: true
-  },
-  {
-    slug: "agar-cells",
-    title: "Agar Cells",
-    description:
-      "Absorb smaller cells, dodge giants, and become the king of the petri dish.",
-    category: "io",
-    tags: ["multiplayer", "blob", "arena"],
-    thumbnail: thumb("agar-cells"),
-    embedUrl: "https://html5.gamemonetize.com/agar-cells-demo/",
-    plays: 612400,
-    rating: 4.5
-  },
-  {
-    slug: "krunker-arena",
-    title: "Krunker Arena",
-    description:
-      "A blocky FPS shooter with quick rounds and serious recoil control.",
-    category: "io",
-    tags: ["fps", "voxel", "multiplayer"],
-    thumbnail: thumb("krunker-arena"),
-    embedUrl: "https://html5.gamemonetize.com/krunker-arena-demo/",
-    plays: 845210,
-    rating: 4.6
-  },
-
-  // ---------- CASUAL ----------
-  {
-    slug: "crossy-roads",
-    title: "Crossy Roads",
-    description:
-      "Hop across rivers, roads and rails as a chicken (or a hundred other characters).",
-    category: "casual",
-    tags: ["arcade", "endless", "voxel"],
-    thumbnail: thumb("crossy-roads"),
-    embedUrl: "https://html5.gamemonetize.com/crossy-roads-demo/",
-    plays: 412210,
-    rating: 4.5
-  },
-  {
-    slug: "cookie-tycoon",
-    title: "Cookie Tycoon",
-    description:
-      "Click cookies. Hire grandmas. Conquer the universe. The OG idle game returns.",
-    category: "casual",
-    tags: ["idle", "clicker", "tycoon"],
-    thumbnail: thumb("cookie-tycoon"),
-    embedUrl: "https://html5.gamemonetize.com/cookie-tycoon-demo/",
-    plays: 281100,
-    rating: 4.6
-  },
-
-  // ---------- GIRLS ----------
-  {
-    slug: "fashion-stylist",
-    title: "Fashion Stylist",
-    description:
-      "Mix runway looks, makeup and accessories in this dress-up extravaganza.",
-    category: "girls",
-    tags: ["dress-up", "fashion", "makeover"],
-    thumbnail: thumb("fashion-stylist"),
-    embedUrl: "https://html5.gamemonetize.com/fashion-stylist-demo/",
-    plays: 122100,
-    rating: 4.4
-  },
-  {
-    slug: "bakery-tycoon",
-    title: "Bakery Tycoon",
-    description:
-      "Run your own bakery — bake, decorate and serve eager customers.",
-    category: "girls",
-    tags: ["cooking", "tycoon", "casual"],
-    thumbnail: thumb("bakery-tycoon"),
-    embedUrl: "https://html5.gamemonetize.com/bakery-tycoon-demo/",
-    plays: 71200,
-    rating: 4.3
-  },
-
-  // ---------- 2 PLAYER ----------
-  {
-    slug: "fireboy-watergirl",
-    title: "Fireboy & Watergirl",
-    description:
-      "Co-op puzzle adventure for two players — solve elemental temples together.",
-    category: "2-player",
-    tags: ["co-op", "puzzle", "couch"],
-    thumbnail: thumb("fireboy-watergirl"),
-    embedUrl: "https://html5.gamemonetize.com/fireboy-watergirl-demo/",
+    tags: ["classic", "strategy", "educational"],
+    thumbnail: thumb("oregon-trail"),
+    embedUrl: ia("msdos_Oregon_Trail_The_1990"),
+    aspect: "4/3",
     plays: 612200,
     rating: 4.7,
     featured: true
   },
   {
-    slug: "tank-trouble-2p",
-    title: "Tank Trouble 2P",
+    slug: "carmen-sandiego",
+    title: "Where in the World is Carmen Sandiego?",
     description:
-      "Bounce shells around tight maze battlefields. Last tank standing wins.",
-    category: "2-player",
-    tags: ["tanks", "1v1", "couch"],
-    thumbnail: thumb("tank-trouble-2p"),
-    embedUrl: "https://html5.gamemonetize.com/tank-trouble-2p-demo/",
-    plays: 84210,
+      "Globe-trotting detective adventure. Track down the V.I.L.E. henchmen.",
+    category: "adventure",
+    tags: ["classic", "detective", "educational"],
+    thumbnail: thumb("carmen-sandiego"),
+    embedUrl: ia("msdos_Where_in_the_World_is_Carmen_Sandiego_1989"),
+    aspect: "4/3",
+    plays: 162400,
+    rating: 4.5
+  },
+
+  // ---------- STRATEGY / TYCOON ----------
+  {
+    slug: "sim-city",
+    title: "SimCity",
+    description:
+      "Build, zone, and tax your way to a thriving metropolis. The original god-game.",
+    category: "casual",
+    tags: ["classic", "tycoon", "strategy"],
+    thumbnail: thumb("simcity"),
+    embedUrl: ia("msdos_SimCity_1989"),
+    aspect: "4/3",
+    plays: 502100,
+    rating: 4.7
+  },
+
+  // ---------- RACING ----------
+  {
+    slug: "stunts",
+    title: "Stunts",
+    description:
+      "Top-down 3D racing with custom track editor. Backflip a Lamborghini at 200mph.",
+    category: "racing",
+    tags: ["classic", "racing", "3d"],
+    thumbnail: thumb("stunts"),
+    embedUrl: ia("msdos_Stunts_1990"),
+    aspect: "4/3",
+    plays: 312220,
+    rating: 4.4
+  },
+  {
+    slug: "skyroads",
+    title: "SkyRoads",
+    description:
+      "Float-track 3D racer through space. One wrong move — instant explosion.",
+    category: "racing",
+    tags: ["classic", "racing", "space"],
+    thumbnail: thumb("skyroads"),
+    embedUrl: ia("msdos_SkyRoads_1993"),
+    aspect: "4/3",
+    plays: 211110,
     rating: 4.4,
     new: true
+  },
+
+  // ---------- SPORTS ----------
+  {
+    slug: "pinball-fantasies",
+    title: "Pinball Fantasies",
+    description:
+      "Four full pinball tables with multiball, tilt, and 90s soundtracks.",
+    category: "sports",
+    tags: ["classic", "pinball", "highscore"],
+    thumbnail: thumb("pinball-fantasies"),
+    embedUrl: ia("msdos_Pinball_Fantasies_1992"),
+    aspect: "4/3",
+    plays: 84320,
+    rating: 4.5
+  },
+  {
+    slug: "california-games",
+    title: "California Games",
+    description:
+      "Surfing, BMX, hacky sack, footbag, half-pipe and roller skating.",
+    category: "sports",
+    tags: ["classic", "sports", "multi-event"],
+    thumbnail: thumb("california-games"),
+    embedUrl: ia("msdos_California_Games_1988"),
+    aspect: "4/3",
+    plays: 89430,
+    rating: 4.3
+  },
+
+  // ---------- KIDS / CASUAL ----------
+  {
+    slug: "bubble-bobble",
+    title: "Bubble Bobble",
+    description:
+      "Two dragons trap enemies in bubbles. Perfect for couch co-op.",
+    category: "2-player",
+    tags: ["classic", "co-op", "arcade"],
+    thumbnail: thumb("bubble-bobble"),
+    embedUrl: ia("msdos_Bubble_Bobble_1989"),
+    aspect: "4/3",
+    plays: 612200,
+    rating: 4.7,
+    featured: true
+  },
+
+  // ---------- 2 PLAYER ----------
+  {
+    slug: "scorched-earth",
+    title: "Scorched Earth",
+    description:
+      "Tank-vs-tank artillery duel. Pick angle, pick power, fire — repeat for hours.",
+    category: "2-player",
+    tags: ["classic", "tanks", "couch"],
+    thumbnail: thumb("scorched-earth"),
+    embedUrl: ia("msdos_Scorched_Earth_1991"),
+    aspect: "4/3",
+    plays: 84210,
+    rating: 4.6,
+    new: true
+  },
+
+  // ---------- SHOOTING ----------
+  {
+    slug: "raptor",
+    title: "Raptor: Call of the Shadows",
+    description:
+      "Top-down vertical shooter — pilot a Saturn fighter through enemy waves.",
+    category: "shooting",
+    tags: ["classic", "shmup", "arcade"],
+    thumbnail: thumb("raptor"),
+    embedUrl: ia("msdos_Raptor_Call_of_the_Shadows_1994"),
+    aspect: "4/3",
+    plays: 211110,
+    rating: 4.5
+  },
+
+  // ---------- IO / MULTIPLAYER FEEL ----------
+  {
+    slug: "rampage",
+    title: "Rampage",
+    description:
+      "Three giant monsters demolish American cities. Punch helicopters out of the sky.",
+    category: "action",
+    tags: ["classic", "destruction", "co-op"],
+    thumbnail: thumb("rampage"),
+    embedUrl: ia("msdos_Rampage_1988"),
+    aspect: "4/3",
+    plays: 211400,
+    rating: 4.5
+  },
+
+  // ---------- GIRLS / DRESS-UP era classics ----------
+  {
+    slug: "hugo",
+    title: "Hugo's House of Horrors",
+    description:
+      "Classic point-and-click adventure. Save Penelope from the haunted mansion.",
+    category: "adventure",
+    tags: ["classic", "adventure", "story"],
+    thumbnail: thumb("hugo"),
+    embedUrl: ia("msdos_Hugos_House_of_Horrors_1990"),
+    aspect: "4/3",
+    plays: 122100,
+    rating: 4.4
+  },
+
+  // ---------- MORE PUZZLE ----------
+  {
+    slug: "chip-challenge",
+    title: "Chip's Challenge",
+    description:
+      "149 levels of grid-based logic puzzles. Push blocks, dodge bugs, find chips.",
+    category: "puzzle",
+    tags: ["classic", "puzzle", "logic"],
+    thumbnail: thumb("chip-challenge"),
+    embedUrl: ia("msdos_Chips_Challenge_1990"),
+    aspect: "4/3",
+    plays: 84210,
+    rating: 4.5
   }
 ];
-
