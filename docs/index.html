@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="description" content="PlayHub — Free online retro & HTML5 games. Pac-Man, Tetris, DOOM, Prince of Persia and 30+ more classics. No download. No login." />
+<title>PlayHub — Free Online Games</title>
+
+<!-- Inter font -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
+
+<!-- Tailwind CDN -->
+<script src="https://cdn.tailwindcss.com"></script>
+
+<!-- AdSense placeholder — replace ca-pub-XXXX with your real client ID -->
+<!--
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX" crossorigin="anonymous"></script>
+-->
+
+<style>
+  :root { color-scheme: dark; }
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: #0b0d17;
+    color: #fff;
+    background-image:
+      radial-gradient(circle at 10% 0%, rgba(124,92,255,0.12), transparent 45%),
+      radial-gradient(circle at 90% 0%, rgba(34,211,238,0.08), transparent 45%);
+    background-attachment: fixed;
+  }
+  .font-display { font-family: 'Space Grotesk', system-ui, sans-serif; }
+  .brand-grad { background: linear-gradient(135deg,#9d8aff 0%,#7c5cff 50%,#5b3df0 100%); }
+  .glow { box-shadow: 0 0 0 1px rgba(124,92,255,0.4), 0 20px 60px -20px rgba(124,92,255,0.6); }
+  aside::-webkit-scrollbar { width: 6px; }
+  aside::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+  /* Hide scrollbar on category strip */
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  .game-card:hover .game-thumb { transform: scale(1.10); }
+  .fade-in { animation: fadeIn .25s ease-out; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: translateY(0) } }
+</style>
+</head>
+<body class="min-h-screen">
+
+<!-- ===== NAVBAR ===== -->
+<header class="sticky top-0 z-40 border-b border-white/10 bg-[#0b0d17]/80 backdrop-blur-xl">
+  <div class="mx-auto flex h-16 max-w-[1600px] items-center gap-4 px-4">
+    <a href="#" class="flex items-center gap-2" onclick="navigate('home');return false;">
+      <span class="grid h-9 w-9 place-items-center rounded-xl brand-grad glow">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="11" x2="10" y2="11"/><line x1="8" y1="9" x2="8" y2="13"/><line x1="15" y1="12" x2="15.01" y2="12"/><line x1="18" y1="10" x2="18.01" y2="10"/><path d="M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.545-.604-6.584-.685-7.258A4 4 0 0 0 17.32 5z"/></svg>
+      </span>
+      <span class="font-display text-xl font-bold tracking-tight">PlayHub</span>
+    </a>
+
+    <nav class="ml-2 hidden items-center gap-1 md:flex">
+      <button class="navpill" onclick="filterCategory(null)">🎮 All</button>
+      <button class="navpill" onclick="setFilter('new')">✨ New</button>
+      <button class="navpill" onclick="setFilter('featured')">🔥 Hot</button>
+    </nav>
+
+    <div class="ml-auto w-full max-w-md">
+      <div class="group relative flex items-center">
+        <svg class="absolute left-3 h-4 w-4 text-white/40" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input id="search" type="search" placeholder="Search 30+ games..." oninput="renderGrid()"
+          class="w-full rounded-full border border-white/10 bg-white/5 py-2.5 pl-10 pr-4 text-sm text-white placeholder-white/30 outline-none transition focus:border-violet-400" />
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ===== HOME VIEW ===== -->
+<div id="view-home" class="mx-auto flex max-w-[1600px]">
+
+  <!-- Sidebar -->
+  <aside class="hidden lg:block sticky top-16 h-[calc(100vh-4rem)] w-60 shrink-0 overflow-y-auto border-r border-white/10 bg-white/[0.02] px-3 py-5">
+    <div class="mb-5 space-y-0.5">
+      <button class="sidebarlink active" data-cat="all" onclick="filterCategory(null)">
+        <span class="text-base">🏠</span> Home
+      </button>
+      <button class="sidebarlink" onclick="setFilter('featured')"><span class="text-amber-300">🔥</span> Featured</button>
+      <button class="sidebarlink" onclick="setFilter('new')"><span class="text-lime-300">✨</span> New</button>
+      <button class="sidebarlink" onclick="setFilter('popular')"><span class="text-cyan-300">📈</span> Popular</button>
+    </div>
+
+    <div class="mb-5">
+      <h4 class="mb-2 px-3 text-[11px] font-semibold uppercase tracking-widest text-white/40">Categories</h4>
+      <div id="sidebar-cats" class="space-y-0.5"></div>
+    </div>
+
+    <div class="mt-8 rounded-xl border border-white/10 bg-white/[0.04] p-3">
+      <div class="flex items-center gap-2 text-xs font-semibold text-white/80">
+        <span class="text-violet-400">🎮</span> 30+ Free Games
+      </div>
+      <p class="mt-1 text-[11px] leading-relaxed text-white/50">No downloads. No login. Just press play.</p>
+    </div>
+  </aside>
+
+  <!-- Main content -->
+  <div class="min-w-0 flex-1 px-4 py-6 md:px-6">
+    <!-- Mobile categories -->
+    <div id="mobile-cats" class="mb-4 flex gap-2 overflow-x-auto pb-1 lg:hidden no-scrollbar"></div>
+
+    <!-- Top banner ad slot -->
+    <div class="mb-6 rounded-xl border border-dashed border-white/10 bg-white/[0.02] p-3 text-center text-xs uppercase tracking-widest text-white/30">
+      Top banner ad slot
+    </div>
+
+    <!-- Hero -->
+    <section id="hero" class="grid gap-3 md:grid-cols-3"></section>
+
+    <!-- Active filter title -->
+    <div id="active-filter-title" class="mt-10 hidden">
+      <h2 id="active-filter-text" class="font-display text-2xl font-bold"></h2>
+    </div>
+
+    <!-- Game grid -->
+    <section id="grid" class="mt-6 grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7"></section>
+
+    <!-- Empty state -->
+    <div id="empty" class="hidden mt-10 rounded-2xl border border-dashed border-white/10 p-10 text-center text-white/50">
+      No games match your search.
+    </div>
+
+    <!-- Footer ad -->
+    <div class="mt-12 rounded-xl border border-dashed border-white/10 bg-white/[0.02] p-3 text-center text-xs uppercase tracking-widest text-white/30">
+      Footer banner ad slot
+    </div>
+  </div>
+</div>
+
+<!-- ===== PLAY VIEW ===== -->
+<div id="view-play" class="hidden mx-auto max-w-[1400px] px-4 py-6">
+  <nav class="mb-4 flex items-center gap-1 text-sm text-white/50">
+    <a href="#" class="hover:text-white" onclick="navigate('home');return false;">Home</a>
+    <span>/</span>
+    <span id="play-cat" class="hover:text-white"></span>
+    <span>/</span>
+    <span id="play-title-bc" class="text-white"></span>
+  </nav>
+
+  <div class="grid gap-6 lg:grid-cols-[1fr_320px]">
+    <div>
+      <div id="player-wrap" class="relative w-full overflow-hidden rounded-2xl border border-white/10 bg-black aspect-video"></div>
+
+      <div class="mt-5">
+        <h1 id="play-title" class="font-display text-3xl font-bold"></h1>
+        <div class="mt-2 flex flex-wrap items-center gap-3 text-sm text-white/60">
+          <span id="play-meta" class="rounded-full bg-white/5 px-3 py-1 text-xs"></span>
+          <span id="play-rating" class="flex items-center gap-1.5"></span>
+          <span id="play-plays" class="flex items-center gap-1.5"></span>
+        </div>
+      </div>
+
+      <!-- In-content ad -->
+      <div class="mt-6 rounded-xl border border-dashed border-white/10 bg-white/[0.02] p-3 text-center text-xs uppercase tracking-widest text-white/30">
+        In-content ad slot
+      </div>
+
+      <section class="mt-6 rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+        <h2 class="mb-2 text-lg font-semibold">About this game</h2>
+        <p id="play-desc" class="text-sm leading-relaxed text-white/70"></p>
+        <div id="play-controls-wrap" class="mt-4 hidden">
+          <h3 class="text-sm font-semibold text-white/80">How to play</h3>
+          <ul id="play-controls" class="mt-2 grid grid-cols-1 gap-1 text-sm text-white/70 sm:grid-cols-2"></ul>
+        </div>
+      </section>
+    </div>
+
+    <aside class="space-y-6">
+      <div class="rounded-xl border border-dashed border-white/10 bg-white/[0.02] p-3 text-center text-xs uppercase tracking-widest text-white/30" style="min-height:260px;">
+        Sidebar ad slot
+      </div>
+      <div>
+        <h3 class="mb-3 font-display text-lg font-bold">Related</h3>
+        <div id="related" class="grid grid-cols-2 gap-3"></div>
+      </div>
+    </aside>
+  </div>
+
+  <section class="mt-12">
+    <h2 class="mb-3 font-display text-2xl font-bold">More to play</h2>
+    <div id="more" class="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7"></div>
+  </section>
+</div>
+
+<!-- ===== FOOTER ===== -->
+<footer class="mt-16 border-t border-white/10 bg-white/[0.02]">
+  <div class="mx-auto max-w-[1600px] px-4 py-8 text-center">
+    <p class="text-sm text-white/50">© 2026 PlayHub · 30+ free retro and HTML5 games · No downloads required.</p>
+  </div>
+</footer>
+
+<style>
+  .navpill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.375rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.875rem;
+    color: rgba(255,255,255,0.7);
+    transition: all .2s;
+  }
+  .navpill:hover { background: rgba(255,255,255,0.06); color: white; }
+  .sidebarlink {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: rgba(255,255,255,0.7);
+    text-align: left;
+    transition: all .2s;
+  }
+  .sidebarlink:hover { background: rgba(255,255,255,0.06); color: white; }
+  .sidebarlink.active { background: #7c5cff; color: white; box-shadow: 0 0 0 1px rgba(124,92,255,0.4), 0 20px 60px -20px rgba(124,92,255,0.6); }
+  .catpill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    flex-shrink: 0;
+    padding: 0.5rem 1rem;
+    border-radius: 9999px;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.04);
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: rgba(255,255,255,0.7);
+    white-space: nowrap;
+  }
+  .catpill.active { background: #7c5cff; border-color: #7c5cff; color: white; }
+</style>
+
+<script>
+// ---------- DATA ----------
+const CATEGORIES = [
+  { slug:'puzzle',    name:'Puzzle',    emoji:'🧩' },
+  { slug:'arcade',    name:'Arcade',    emoji:'🕹️' },
+  { slug:'action',    name:'Action',    emoji:'⚔️' },
+  { slug:'shooting',  name:'Shooting',  emoji:'🎯' },
+  { slug:'adventure', name:'Adventure', emoji:'🗺️' },
+  { slug:'racing',    name:'Racing',    emoji:'🏎️' },
+  { slug:'sports',    name:'Sports',    emoji:'⚽' },
+  { slug:'casual',    name:'Casual',    emoji:'🍩' },
+  { slug:'2-player',  name:'2 Player',  emoji:'👥' }
+];
+
+const ia = (id) => `https://archive.org/embed/${id}`;
+const thumb = (seed) => `https://picsum.photos/seed/${seed}/640/640`;
+
+const GAMES = [
+  // ---------- PUZZLE ----------
+  { slug:'tetris', title:'Tetris', desc:'The legendary Russian falling-block puzzle — stack the tetrominoes, clear the lines, beat your highscore.', cat:'puzzle', tags:['classic','blocks'], thumb:thumb('tetris'), embed:ia('msdos_Tetris_1986'), plays:1240500, rating:4.9, controls:['Arrow keys to move','Up to rotate','Space to drop'], featured:true },
+  { slug:'lemmings', title:'Lemmings', desc:'Guide the army of green-haired creatures safely to the exit.', cat:'puzzle', tags:['classic','strategy'], thumb:thumb('lemmings'), embed:ia('msdos_Lemmings_1991'), plays:612400, rating:4.7, new:true },
+  { slug:'number-munchers', title:'Number Munchers', desc:'Eat the right numbers, dodge the troggles. Educational arcade classic.', cat:'puzzle', tags:['classic','math'], thumb:thumb('munchers'), embed:ia('msdos_Number_Munchers_1990'), plays:312220, rating:4.5 },
+  { slug:'sokoban', title:'Sokoban', desc:'Push crates onto target squares — the original sliding puzzle.', cat:'puzzle', tags:['classic','logic'], thumb:thumb('sokoban'), embed:ia('msdos_Sokoban_1984'), plays:184320, rating:4.4 },
+  { slug:'chip-challenge', title:"Chip's Challenge", desc:'149 levels of grid-based logic puzzles. Push blocks, dodge bugs, find chips.', cat:'puzzle', tags:['classic','puzzle'], thumb:thumb('chip'), embed:ia('msdos_Chips_Challenge_1990'), plays:84210, rating:4.5 },
+
+  // ---------- ARCADE ----------
+  { slug:'pac-man', title:'Pac-Man', desc:'Eat all the dots, dodge the ghosts. The 1982 arcade icon.', cat:'arcade', tags:['classic','arcade'], thumb:thumb('pacman'), embed:ia('msdos_Pac-Man_1983'), plays:2400500, rating:4.9, controls:['Arrow keys to move'], featured:true },
+  { slug:'bubble-bobble', title:'Bubble Bobble', desc:'Two dragons trap enemies in bubbles. Perfect for couch co-op.', cat:'arcade', tags:['classic','co-op'], thumb:thumb('bubble'), embed:ia('msdos_Bubble_Bobble_1989'), plays:612200, rating:4.7, featured:true },
+  { slug:'rampage', title:'Rampage', desc:'Three giant monsters demolish American cities. Punch helicopters out of the sky.', cat:'arcade', tags:['classic','destruction'], thumb:thumb('rampage'), embed:ia('msdos_Rampage_1988'), plays:211400, rating:4.5 },
+
+  // ---------- ACTION ----------
+  { slug:'prince-of-persia', title:'Prince of Persia', desc:'Acrobatic platformer through deadly dungeons. Save the princess in 60 minutes.', cat:'action', tags:['classic','platformer'], thumb:thumb('prince'), embed:ia('msdos_Prince_of_Persia_1990'), plays:884320, rating:4.8, featured:true },
+  { slug:'commander-keen', title:'Commander Keen', desc:'Billy Blaze, boy genius, defends Earth from Vorticons. Classic 90s platformer.', cat:'action', tags:['classic','platformer'], thumb:thumb('keen'), embed:ia('msdos_Commander_Keen_in_Invasion_of_the_Vorticons_1990'), plays:421300, rating:4.7 },
+  { slug:'jazz-jackrabbit', title:'Jazz Jackrabbit', desc:'Speed-running rabbit hero, side-scrolling action across 9 worlds.', cat:'action', tags:['classic','speed'], thumb:thumb('jazz'), embed:ia('msdos_Jazz_Jackrabbit_1994'), plays:305210, rating:4.5, new:true },
+
+  // ---------- SHOOTING ----------
+  { slug:'doom', title:'DOOM', desc:"1993's most influential shooter — fight demons through the bowels of hell.", cat:'shooting', tags:['classic','fps','horror'], thumb:thumb('doom'), embed:ia('msdos_Doom_1993'), plays:1850000, rating:4.9, featured:true },
+  { slug:'wolfenstein-3d', title:'Wolfenstein 3D', desc:'The grandfather of FPS games. Escape the Nazi castle in glorious 1992 3D.', cat:'shooting', tags:['classic','fps','3d'], thumb:thumb('wolf'), embed:ia('msdos_Wolfenstein_3D_1992'), plays:980220, rating:4.8, featured:true },
+  { slug:'duke-nukem', title:'Duke Nukem', desc:'Side-scrolling shoot-em-up — Duke vs Dr. Proton. Pure 90s action.', cat:'shooting', tags:['classic','platformer'], thumb:thumb('duke'), embed:ia('msdos_Duke_Nukem_1991'), plays:720100, rating:4.6 },
+  { slug:'raptor', title:'Raptor: Call of the Shadows', desc:'Top-down vertical shooter — pilot a Saturn fighter through enemy waves.', cat:'shooting', tags:['classic','shmup'], thumb:thumb('raptor'), embed:ia('msdos_Raptor_Call_of_the_Shadows_1994'), plays:211110, rating:4.5 },
+
+  // ---------- ADVENTURE ----------
+  { slug:'oregon-trail', title:'The Oregon Trail', desc:'1848: caravan from Missouri to Oregon. Hunt buffalo, ford rivers, dodge dysentery.', cat:'adventure', tags:['classic','strategy'], thumb:thumb('oregon'), embed:ia('msdos_Oregon_Trail_The_1990'), plays:612200, rating:4.7, featured:true },
+  { slug:'carmen-sandiego', title:'Where in the World is Carmen Sandiego?', desc:'Globe-trotting detective adventure. Track down the V.I.L.E. henchmen.', cat:'adventure', tags:['classic','detective'], thumb:thumb('carmen'), embed:ia('msdos_Where_in_the_World_is_Carmen_Sandiego_1989'), plays:162400, rating:4.5 },
+  { slug:'hugo', title:"Hugo's House of Horrors", desc:'Classic point-and-click adventure. Save Penelope from the haunted mansion.', cat:'adventure', tags:['classic','story'], thumb:thumb('hugo'), embed:ia('msdos_Hugos_House_of_Horrors_1990'), plays:122100, rating:4.4 },
+
+  // ---------- RACING ----------
+  { slug:'stunts', title:'Stunts', desc:'Top-down 3D racing with custom track editor. Backflip a Lamborghini at 200mph.', cat:'racing', tags:['classic','3d'], thumb:thumb('stunts'), embed:ia('msdos_Stunts_1990'), plays:312220, rating:4.4 },
+  { slug:'skyroads', title:'SkyRoads', desc:'Float-track 3D racer through space. One wrong move — instant explosion.', cat:'racing', tags:['classic','space'], thumb:thumb('skyroads'), embed:ia('msdos_SkyRoads_1993'), plays:211110, rating:4.4, new:true },
+
+  // ---------- SPORTS ----------
+  { slug:'pinball-fantasies', title:'Pinball Fantasies', desc:'Four full pinball tables with multiball, tilt, and 90s soundtracks.', cat:'sports', tags:['classic','pinball'], thumb:thumb('pinball'), embed:ia('msdos_Pinball_Fantasies_1992'), plays:84320, rating:4.5 },
+  { slug:'california-games', title:'California Games', desc:'Surfing, BMX, hacky sack, footbag, half-pipe and roller skating.', cat:'sports', tags:['classic','sports'], thumb:thumb('california'), embed:ia('msdos_California_Games_1988'), plays:89430, rating:4.3 },
+
+  // ---------- CASUAL ----------
+  { slug:'sim-city', title:'SimCity', desc:'Build, zone, and tax your way to a thriving metropolis. The original god-game.', cat:'casual', tags:['classic','tycoon'], thumb:thumb('simcity'), embed:ia('msdos_SimCity_1989'), plays:502100, rating:4.7 },
+
+  // ---------- 2 PLAYER ----------
+  { slug:'scorched-earth', title:'Scorched Earth', desc:'Tank-vs-tank artillery duel. Pick angle, pick power, fire — repeat for hours.', cat:'2-player', tags:['classic','tanks'], thumb:thumb('scorched'), embed:ia('msdos_Scorched_Earth_1991'), plays:84210, rating:4.6, new:true }
+];
+
+// ---------- STATE ----------
+let activeCategory = null; // null = all
+let activeFilter = null;   // 'new' | 'featured' | 'popular' | null
+
+// ---------- HELPERS ----------
+const $ = (s) => document.querySelector(s);
+const fmt = (n) => n.toLocaleString();
+
+function getCategory(slug) { return CATEGORIES.find(c => c.slug === slug); }
+
+function visibleGames() {
+  const q = ($('#search')?.value || '').trim().toLowerCase();
+  let list = [...GAMES];
+  if (activeCategory) list = list.filter(g => g.cat === activeCategory);
+  if (activeFilter === 'new') list = list.filter(g => g.new);
+  if (activeFilter === 'featured') list = list.filter(g => g.featured);
+  if (activeFilter === 'popular') list = list.sort((a,b) => (b.plays||0)-(a.plays||0));
+  if (q) list = list.filter(g =>
+    g.title.toLowerCase().includes(q) ||
+    g.desc.toLowerCase().includes(q) ||
+    g.tags.some(t => t.toLowerCase().includes(q)));
+  return list;
+}
+
+// ---------- RENDER ----------
+function renderSidebar() {
+  const wrap = $('#sidebar-cats');
+  wrap.innerHTML = CATEGORIES.map(c => `
+    <button class="sidebarlink ${activeCategory===c.slug?'active':''}" data-cat="${c.slug}" onclick="filterCategory('${c.slug}')">
+      <span class="text-base">${c.emoji}</span> ${c.name}
+    </button>
+  `).join('');
+
+  const mob = $('#mobile-cats');
+  mob.innerHTML =
+    `<button class="catpill ${!activeCategory?'active':''}" onclick="filterCategory(null)">🎮 All</button>` +
+    CATEGORIES.map(c => `
+      <button class="catpill ${activeCategory===c.slug?'active':''}" onclick="filterCategory('${c.slug}')">
+        <span>${c.emoji}</span> ${c.name}
+      </button>
+    `).join('');
+}
+
+function gameCardHtml(g) {
+  return `
+    <a href="#play=${g.slug}" onclick="navigate('play','${g.slug}');return false;"
+       class="game-card group relative block overflow-hidden rounded-xl border border-white/10 bg-white/[0.04] transition hover:-translate-y-1 hover:border-violet-400 hover:shadow-[0_0_0_1px_rgba(124,92,255,0.4),0_20px_60px_-20px_rgba(124,92,255,0.6)]">
+      <div class="relative aspect-square overflow-hidden">
+        <img src="${g.thumb}" alt="${g.title}" loading="lazy" class="game-thumb h-full w-full object-cover transition duration-500" />
+        <div class="absolute inset-0 bg-gradient-to-t from-black/95 via-transparent to-transparent opacity-80"></div>
+        <div class="absolute left-2 top-2 flex gap-1">
+          ${g.new ? '<span class="rounded-md bg-lime-300/90 px-1.5 py-0.5 text-[10px] font-bold uppercase text-[#0b0d17]">New</span>' : ''}
+          ${g.featured ? '<span class="rounded-md bg-pink-500/90 px-1.5 py-0.5 text-[10px] font-bold uppercase">Hot</span>' : ''}
+        </div>
+        ${g.rating ? `<div class="absolute right-2 top-2 flex items-center gap-0.5 rounded-md bg-black/80 px-1.5 py-0.5 text-[10px] backdrop-blur"><svg width="10" height="10" viewBox="0 0 24 24" fill="#fcd34d" stroke="#fcd34d" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>${g.rating.toFixed(1)}</div>` : ''}
+        <div class="absolute inset-x-0 bottom-0 p-2.5">
+          <h3 class="line-clamp-1 text-sm font-semibold drop-shadow-lg">${g.title}</h3>
+        </div>
+      </div>
+    </a>`;
+}
+
+function renderHero() {
+  const featured = GAMES.filter(g => g.featured).slice(0, 5);
+  if (!featured.length) { $('#hero').innerHTML=''; return; }
+  const main = featured[0];
+  const side = featured.slice(1, 5);
+  $('#hero').innerHTML = `
+    <a href="#play=${main.slug}" onclick="navigate('play','${main.slug}');return false;"
+       class="group relative col-span-2 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04]">
+      <div class="relative aspect-[16/9] md:aspect-[16/8]">
+        <img src="${main.thumb}" alt="${main.title}" class="h-full w-full object-cover transition duration-700 group-hover:scale-105" />
+        <div class="absolute inset-0 bg-gradient-to-tr from-[#0b0d17]/95 via-[#0b0d17]/40 to-transparent"></div>
+        <div class="absolute bottom-0 left-0 right-0 p-6 md:p-10">
+          <div class="mb-2 flex items-center gap-2">
+            <span class="rounded-full bg-pink-500 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest">Featured</span>
+            ${main.rating?`<span class="flex items-center gap-1 rounded-full bg-black/70 px-2.5 py-0.5 text-xs">⭐ ${main.rating.toFixed(1)}</span>`:''}
+          </div>
+          <h1 class="font-display text-3xl font-bold md:text-5xl">${main.title}</h1>
+          <p class="mt-2 max-w-xl text-sm text-white/70 md:text-base">${main.desc}</p>
+          <span class="mt-4 inline-flex items-center gap-2 rounded-full brand-grad px-5 py-2 text-sm font-semibold text-white glow">
+            ▶ Play now
+          </span>
+        </div>
+      </div>
+    </a>
+    <div class="grid grid-cols-2 gap-3 md:grid-rows-2">
+      ${side.map(g => `
+        <a href="#play=${g.slug}" onclick="navigate('play','${g.slug}');return false;"
+           class="group relative overflow-hidden rounded-xl border border-white/10 bg-white/[0.04]">
+          <div class="relative aspect-square">
+            <img src="${g.thumb}" alt="${g.title}" class="h-full w-full object-cover transition duration-500 group-hover:scale-110" />
+            <div class="absolute inset-0 bg-gradient-to-t from-black/95 to-transparent"></div>
+            <div class="absolute bottom-0 left-0 right-0 p-2.5">
+              <h3 class="line-clamp-1 text-sm font-semibold">${g.title}</h3>
+            </div>
+          </div>
+        </a>`).join('')}
+    </div>`;
+}
+
+function renderGrid() {
+  const list = visibleGames();
+  $('#empty').classList.toggle('hidden', list.length > 0);
+  $('#grid').innerHTML = list.map(gameCardHtml).join('');
+
+  // Show filter title when filter or category active
+  const titleEl = $('#active-filter-title');
+  const txt = $('#active-filter-text');
+  if (activeCategory) {
+    const c = getCategory(activeCategory);
+    txt.textContent = `${c.emoji} ${c.name} Games`;
+    titleEl.classList.remove('hidden');
+    $('#hero').classList.add('hidden');
+  } else if (activeFilter) {
+    txt.textContent = activeFilter === 'new' ? '✨ New Games' : activeFilter === 'featured' ? '🔥 Featured Games' : '📈 Popular Games';
+    titleEl.classList.remove('hidden');
+    $('#hero').classList.add('hidden');
+  } else {
+    titleEl.classList.add('hidden');
+    $('#hero').classList.remove('hidden');
+  }
+}
+
+// ---------- ACTIONS ----------
+function filterCategory(slug) {
+  activeCategory = slug;
+  activeFilter = null;
+  renderSidebar();
+  renderGrid();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function setFilter(f) {
+  activeFilter = f;
+  activeCategory = null;
+  renderSidebar();
+  renderGrid();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ---------- ROUTING ----------
+function navigate(view, slug) {
+  if (view === 'home') {
+    location.hash = '';
+    showHome();
+  } else if (view === 'play' && slug) {
+    location.hash = `#play=${slug}`;
+    showPlay(slug);
+  }
+}
+
+function showHome() {
+  $('#view-home').classList.remove('hidden');
+  $('#view-play').classList.add('hidden');
+  document.title = 'PlayHub — Free Online Games';
+}
+
+function showPlay(slug) {
+  const g = GAMES.find(x => x.slug === slug);
+  if (!g) return navigate('home');
+  $('#view-home').classList.add('hidden');
+  $('#view-play').classList.remove('hidden');
+  document.title = `${g.title} · PlayHub`;
+
+  const c = getCategory(g.cat);
+  $('#play-cat').innerHTML = c ? `<a href="#" onclick="filterCategory('${c.slug}');navigate('home');return false;">${c.emoji} ${c.name}</a>` : '';
+  $('#play-title-bc').textContent = g.title;
+  $('#play-title').textContent = g.title;
+  $('#play-meta').innerHTML = c ? `${c.emoji} ${c.name}` : '';
+  $('#play-rating').innerHTML = g.rating ? `⭐ ${g.rating.toFixed(1)} / 5` : '';
+  $('#play-plays').innerHTML = g.plays ? `👤 ${fmt(g.plays)} plays` : '';
+  $('#play-desc').textContent = g.desc;
+
+  if (g.controls && g.controls.length) {
+    $('#play-controls-wrap').classList.remove('hidden');
+    $('#play-controls').innerHTML = g.controls.map(c =>
+      `<li class="flex items-center gap-2 rounded-lg bg-white/5 px-3 py-2"><span class="h-1.5 w-1.5 rounded-full bg-violet-400"></span>${c}</li>`
+    ).join('');
+  } else {
+    $('#play-controls-wrap').classList.add('hidden');
+  }
+
+  // Player iframe
+  $('#player-wrap').innerHTML = `
+    <button id="start-btn" class="absolute inset-0 z-10 grid place-items-center bg-black/60 backdrop-blur-sm transition hover:bg-black/40">
+      <img src="${g.thumb}" alt="${g.title}" class="absolute inset-0 h-full w-full object-cover opacity-50" />
+      <div class="relative z-10 flex flex-col items-center gap-3">
+        <span class="grid h-20 w-20 place-items-center rounded-full brand-grad glow">▶</span>
+        <span class="text-2xl font-bold">${g.title}</span>
+        <span class="text-sm text-white/70">Click to start playing</span>
+      </div>
+    </button>`;
+  document.getElementById('start-btn').onclick = () => {
+    $('#player-wrap').innerHTML = `
+      <iframe src="${g.embed}" title="${g.title}"
+        allow="autoplay; fullscreen; gamepad" allowfullscreen
+        class="h-full w-full border-0"></iframe>`;
+  };
+
+  // Related (same category)
+  const related = GAMES.filter(x => x.cat === g.cat && x.slug !== g.slug).slice(0, 6);
+  $('#related').innerHTML = related.map(r => `
+    <a href="#play=${r.slug}" onclick="navigate('play','${r.slug}');return false;"
+       class="group block overflow-hidden rounded-xl border border-white/10 bg-white/[0.04]">
+      <div class="relative aspect-[4/3] overflow-hidden">
+        <img src="${r.thumb}" alt="${r.title}" loading="lazy" class="h-full w-full object-cover transition group-hover:scale-110" />
+      </div>
+      <div class="p-2"><p class="line-clamp-1 text-xs font-medium">${r.title}</p></div>
+    </a>`).join('');
+
+  // More games (popular)
+  const more = [...GAMES].sort((a,b) => (b.plays||0)-(a.plays||0)).filter(x => x.slug !== g.slug).slice(0, 14);
+  $('#more').innerHTML = more.map(gameCardHtml).join('');
+
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function handleHashRoute() {
+  const m = location.hash.match(/#play=([\w-]+)/);
+  if (m) showPlay(m[1]);
+  else showHome();
+}
+
+// ---------- INIT ----------
+window.addEventListener('hashchange', handleHashRoute);
+document.addEventListener('DOMContentLoaded', () => {
+  renderSidebar();
+  renderHero();
+  renderGrid();
+  handleHashRoute();
+});
+</script>
+
+</body>
+</html>
