@@ -93,10 +93,18 @@ export async function getAllGames(): Promise<Game[]> {
     );
   }
 
-  // Fallback / merge: if feed gave us nothing, use seeds.
-  // If somehow seeds are also empty, return a single placeholder so the
-  // build never crashes on an empty array (e.g. generateStaticParams).
-  if (games.length === 0) games = seedGames;
+  // Fallback / merge:
+  //  - If feed gave us nothing, use seeds.
+  //  - If feed gave us very few games (e.g. most got filtered out as
+  //    non-English), pad with seeds so the homepage still feels full.
+  if (games.length === 0) {
+    games = [...seedGames];
+  } else if (games.length < 12) {
+    const have = new Set(games.map((g) => g.slug));
+    for (const s of seedGames) {
+      if (!have.has(s.slug)) games.push(s);
+    }
+  }
   if (games.length === 0) {
     games = [
       {
@@ -168,6 +176,10 @@ export async function searchGames(q: string): Promise<Game[]> {
 function mapFeedItem(item: FeedItem): Game | null {
   const title = (item.title || "").trim();
   if (!title) return null;
+
+  // Skip non-English/Latin titles (Russian, Chinese, Arabic, etc.)
+  // — keeps the catalog readable for English-speaking audiences.
+  if (!isLatinTitle(title)) return null;
 
   const id = (item.id || "").trim();
   const slug = slugify(title) || slugify(id);
@@ -272,6 +284,22 @@ function splitInstructions(s: string): string[] {
     .map((p) => p.trim())
     .filter((p) => p.length > 2 && p.length < 80)
     .slice(0, 4);
+}
+
+/**
+ * Returns true if the string is dominated by Latin characters
+ * (English, French, German, etc.) — i.e. no Cyrillic, CJK, Arabic.
+ */
+function isLatinTitle(s: string): boolean {
+  const trimmed = s.trim();
+  if (!trimmed) return false;
+  // Reject if any character belongs to common non-Latin scripts.
+  const nonLatin = /[\u0400-\u04FF\u0500-\u052F\u0600-\u06FF\u0900-\u097F\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uAC00-\uD7AF]/;
+  if (nonLatin.test(trimmed)) return false;
+  // Require at least 2 Latin letters so we don't accept titles that are
+  // just numbers or punctuation.
+  const latinLetters = trimmed.match(/[A-Za-z]/g)?.length ?? 0;
+  return latinLetters >= 2;
 }
 
 function slugify(s: string): string {
