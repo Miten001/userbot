@@ -74,6 +74,18 @@ Cost: **$0** (test mode). Production ke liye baad me upgrade.
    - **anon public** key (lambi key, `eyJ...` se shuru hoti hai)
    - **service_role** key (alag wali, **secret** rakho — kabhi share mat karo)
 
+#### 2d. Auth URLs set karo (login/signup ke liye)
+
+1. Left sidebar → **Authentication** → **URL Configuration**
+2. **Site URL** me apni site daalo: `https://your-site.vercel.app`
+3. **Redirect URLs** me add karo: `https://your-site.vercel.app/auth/callback`
+   (local dev ke liye `http://localhost:3000/auth/callback` bhi add kar sakte ho)
+4. **Save**
+
+> Note: By default Supabase email confirmation ON hota hai — signup ke baad user
+> ko email me link aata hai. Testing fast karni ho to **Authentication →
+> Providers → Email** me "Confirm email" temporarily OFF kar sakte ho.
+
 ---
 
 ### Step 3️⃣ — Stripe Setup (10 min)

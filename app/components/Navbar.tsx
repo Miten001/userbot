@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, ChevronRight, Crown } from "lucide-react";
+import { Menu, X, ChevronRight, Crown, LayoutDashboard, LogOut } from "lucide-react";
+import { dbBrowser } from "@/lib/db";
+import { SUPABASE_READY } from "@/app/components/AuthShell";
 
 const links = [
   { href: "#plans", label: "Funding" },
@@ -15,12 +18,33 @@ const links = [
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
+  const [authed, setAuthed] = useState(false);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 16);
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // Detect a logged-in session (live mode only).
+  useEffect(() => {
+    if (!SUPABASE_READY) return;
+    let active = true;
+    const supabase = dbBrowser();
+
+    supabase.auth.getUser().then(({ data }) => {
+      if (active) setAuthed(Boolean(data.user));
+    });
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthed(Boolean(session?.user));
+    });
+
+    return () => {
+      active = false;
+      sub.subscription.unsubscribe();
+    };
   }, []);
 
   return (
@@ -56,16 +80,34 @@ export default function Navbar() {
         </ul>
 
         <div className="hidden items-center gap-2 md:flex">
-          <a
-            href="#"
-            className="rounded-full px-4 py-2 text-sm text-slate-300 transition-colors hover:text-white"
-          >
-            Log in
-          </a>
-          <a
-            href="#plans"
-            className="btn-primary group !px-4 !py-2 !text-sm"
-          >
+          {authed ? (
+            <>
+              <Link
+                href="/dashboard"
+                className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm text-slate-300 transition-colors hover:text-white"
+              >
+                <LayoutDashboard className="h-3.5 w-3.5" />
+                Dashboard
+              </Link>
+              <form action="/auth/signout" method="post">
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300 transition-colors hover:border-rose2/40 hover:text-white"
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                  Log out
+                </button>
+              </form>
+            </>
+          ) : (
+            <Link
+              href="/login"
+              className="rounded-full px-4 py-2 text-sm text-slate-300 transition-colors hover:text-white"
+            >
+              Log in
+            </Link>
+          )}
+          <a href="#plans" className="btn-primary group !px-4 !py-2 !text-sm">
             <Crown className="h-3.5 w-3.5" />
             Get Funded
             <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
@@ -101,8 +143,49 @@ export default function Navbar() {
                   </a>
                 </li>
               ))}
+
+              {authed ? (
+                <>
+                  <li>
+                    <Link
+                      onClick={() => setOpen(false)}
+                      href="/dashboard"
+                      className="flex items-center gap-2 rounded-xl px-4 py-3 text-slate-200 transition-colors hover:bg-white/5 hover:text-gold"
+                    >
+                      <LayoutDashboard className="h-4 w-4" />
+                      Dashboard
+                    </Link>
+                  </li>
+                  <li>
+                    <form action="/auth/signout" method="post">
+                      <button
+                        type="submit"
+                        className="flex w-full items-center gap-2 rounded-xl px-4 py-3 text-left text-slate-200 transition-colors hover:bg-white/5 hover:text-rose2-400"
+                      >
+                        <LogOut className="h-4 w-4" />
+                        Log out
+                      </button>
+                    </form>
+                  </li>
+                </>
+              ) : (
+                <li>
+                  <Link
+                    onClick={() => setOpen(false)}
+                    href="/login"
+                    className="block rounded-xl px-4 py-3 text-slate-200 transition-colors hover:bg-white/5 hover:text-gold"
+                  >
+                    Log in
+                  </Link>
+                </li>
+              )}
+
               <li className="mt-2">
-                <a href="#plans" className="btn-primary w-full">
+                <a
+                  onClick={() => setOpen(false)}
+                  href="#plans"
+                  className="btn-primary w-full"
+                >
                   <Crown className="h-4 w-4" />
                   Get Funded <ChevronRight className="h-4 w-4" />
                 </a>

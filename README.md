@@ -38,9 +38,15 @@ A premium forex proprietary trading firm website + backend, built with Next.js 1
 
 | Path | Purpose |
 |---|---|
+| `app/login` + `app/signup` | Email/password auth UI (Supabase) — graceful demo-mode fallback |
+| `app/auth/callback/route.ts` | GET — exchanges the email-confirmation code for a session |
+| `app/auth/signout/route.ts` | POST — clears the session and redirects home |
+| `middleware.ts` | Refreshes the Supabase session cookie on every request |
 | `app/api/checkout/route.ts` | POST — creates Stripe Checkout session + pending challenge row |
 | `app/api/webhooks/stripe/route.ts` | Verifies signature → activates challenge → provisions MT5 account |
 | `app/api/account/route.ts` | GET — returns user's accounts (RLS-protected) |
+| `app/api/payouts/route.ts` | GET list + POST request — withdrawal requests (RLS-protected) |
+| `app/api/trades/route.ts` | GET — user's trades, optional `?account_id=` filter (RLS-protected) |
 | `lib/stripe.ts` | Stripe client + plan catalog (single source of truth for prices) |
 | `lib/db.ts` | Supabase clients (browser, server, admin) |
 | `lib/mt5.ts` | MT5 provider abstraction — Mock + MetaApi |
