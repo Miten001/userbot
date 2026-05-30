@@ -1,5 +1,6 @@
 -- ApexFunded — Supabase schema
--- Run this once in Supabase SQL Editor (https://app.supabase.com -> your project -> SQL).
+-- Idempotent: safe to run more than once (re-running won't throw "already exists").
+-- Run this in Supabase → SQL Editor (https://app.supabase.com -> your project -> SQL).
 -- Auth users come from Supabase's built-in `auth.users` table.
 
 -- ──────────────────────────────────────────────────────────────────────
@@ -15,8 +16,11 @@ create table if not exists public.profiles (
 
 alter table public.profiles enable row level security;
 
+drop policy if exists "profiles: owner can read" on public.profiles;
 create policy "profiles: owner can read"
   on public.profiles for select using (auth.uid() = id);
+
+drop policy if exists "profiles: owner can update" on public.profiles;
 create policy "profiles: owner can update"
   on public.profiles for update using (auth.uid() = id);
 
@@ -39,8 +43,13 @@ create trigger on_auth_user_created
 -- ──────────────────────────────────────────────────────────────────────
 -- Challenges: a purchase made by a user (one row per Stripe checkout)
 -- ──────────────────────────────────────────────────────────────────────
-create type challenge_step  as enum ('one','two','three');
-create type challenge_state as enum ('pending','active','passed','failed','funded','refunded');
+do $$ begin
+  create type challenge_step as enum ('one','two','three');
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create type challenge_state as enum ('pending','active','passed','failed','funded','refunded');
+exception when duplicate_object then null; end $$;
 
 create table if not exists public.challenges (
   id                    uuid primary key default gen_random_uuid(),
@@ -59,13 +68,16 @@ create index if not exists challenges_user_idx on public.challenges (user_id);
 create index if not exists challenges_state_idx on public.challenges (state);
 
 alter table public.challenges enable row level security;
+drop policy if exists "challenges: owner reads" on public.challenges;
 create policy "challenges: owner reads"
   on public.challenges for select using (auth.uid() = user_id);
 
 -- ──────────────────────────────────────────────────────────────────────
 -- Accounts: provisioned MT5 (or mock) account for a paid challenge
 -- ──────────────────────────────────────────────────────────────────────
-create type account_phase as enum ('evaluation','funded','breached','closed');
+do $$ begin
+  create type account_phase as enum ('evaluation','funded','breached','closed');
+exception when duplicate_object then null; end $$;
 
 create table if not exists public.accounts (
   id              uuid primary key default gen_random_uuid(),
@@ -91,6 +103,7 @@ create table if not exists public.accounts (
 create index if not exists accounts_user_idx on public.accounts (user_id);
 
 alter table public.accounts enable row level security;
+drop policy if exists "accounts: owner reads" on public.accounts;
 create policy "accounts: owner reads"
   on public.accounts for select using (auth.uid() = user_id);
 
@@ -115,6 +128,7 @@ create table if not exists public.trades (
 create index if not exists trades_account_idx on public.trades (account_id);
 
 alter table public.trades enable row level security;
+drop policy if exists "trades: owner reads" on public.trades;
 create policy "trades: owner reads"
   on public.trades for select using (
     exists (
@@ -126,7 +140,9 @@ create policy "trades: owner reads"
 -- ──────────────────────────────────────────────────────────────────────
 -- Payouts: withdrawal requests
 -- ──────────────────────────────────────────────────────────────────────
-create type payout_status as enum ('requested','approved','paid','rejected');
+do $$ begin
+  create type payout_status as enum ('requested','approved','paid','rejected');
+exception when duplicate_object then null; end $$;
 
 create table if not exists public.payouts (
   id           uuid primary key default gen_random_uuid(),
@@ -141,7 +157,9 @@ create table if not exists public.payouts (
 );
 
 alter table public.payouts enable row level security;
+drop policy if exists "payouts: owner reads" on public.payouts;
 create policy "payouts: owner reads"
   on public.payouts for select using (auth.uid() = user_id);
+drop policy if exists "payouts: owner inserts" on public.payouts;
 create policy "payouts: owner inserts"
   on public.payouts for insert with check (auth.uid() = user_id);
