@@ -1,0 +1,35 @@
+name: CI
+
+# Builds the Next.js app on every push and pull request so type errors and
+# lint issues are caught automatically on GitHub (where the npm registry is
+# reachable). Nothing to run locally — GitHub does it for you.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+        env:
+          # Build must succeed without real secrets — the app is designed to
+          # fall back to "demo mode" when these are absent.
+          NEXT_TELEMETRY_DISABLED: "1"
