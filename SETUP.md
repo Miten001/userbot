@@ -27,7 +27,7 @@ Cost: **$0** (test mode). Production ke liye baad me upgrade.
 2. Dashboard me **"Add New..."** → **"Project"**
 3. `Miten001/userbot` repo dhundo aur **"Import"** click karo
 4. **Configure** dialog me yeh karo:
-   - **Root Directory:** click "Edit" → select `propfirm-site` ⚠️ *important*
+   - **Root Directory:** **default hi rehne do** (repo root me hi app hai — kuch change mat karo) ✅
    - **Framework:** auto-detect ho jayega — Next.js
    - **Environment Variables:** abhi skip karo, baad me add karenge
 5. **Deploy** button click karo
@@ -61,7 +61,7 @@ Cost: **$0** (test mode). Production ke liye baad me upgrade.
 
 1. Project ready hone par left sidebar me **"SQL Editor"** click karo
 2. **"New query"** button
-3. GitHub se [`supabase/schema.sql`](https://github.com/Miten001/userbot/blob/master/propfirm-site/supabase/schema.sql) ka **complete content copy** karo
+3. GitHub se [`supabase/schema.sql`](https://github.com/Miten001/userbot/blob/master/supabase/schema.sql) ka **complete content copy** karo
 4. SQL editor me **paste** karo
 5. **"Run"** button (ya `Ctrl+Enter`)
 6. Aap dekhoge "Success. No rows returned" — sab tables ban gaye ✅
@@ -176,7 +176,7 @@ NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = pk_test_...
 
 | Problem | Solution |
 |---|---|
-| Vercel build fail | Root Directory `propfirm-site` set kiya hai? |
+| Vercel build fail | Root Directory **default** (repo root) rakha hai? `propfirm-site` mat select karo |
 | "Stripe error" alert | Env vars correct hain? Redeploy kiya? |
 | Webhook 400 error | `STRIPE_WEBHOOK_SECRET` dobara check karo |
 | Supabase RLS error | `service_role` key sahi se copy hua? |
