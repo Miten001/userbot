@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   Crown, ChevronRight, ShieldCheck, TrendingUp, Wallet,
   Banknote, Info, Settings, X, Send, Clock, Check,
+  ArrowUpRight, ArrowDownRight, BarChart3,
 } from "lucide-react";
 
 /* ───────────────────────── types ───────────────────────── */
@@ -43,6 +44,19 @@ type Payout = {
   paid_at: string | null;
 };
 
+type Trade = {
+  id: string;
+  account_id: string;
+  symbol: string;
+  side: string;
+  volume: number;
+  open_price: number | null;
+  close_price: number | null;
+  profit_usd: number | null;
+  opened_at: string | null;
+  closed_at: string | null;
+};
+
 const WITHDRAW_METHODS = [
   { value: "bank", label: "Bank transfer" },
   { value: "usdt-trc20", label: "USDT (TRC-20)" },
@@ -72,6 +86,13 @@ const DEMO_PAYOUTS: Payout[] = [
   { id: "demo-po1", account_id: "demo-2", amount_usd: 1_240, method: "usdt-trc20", destination: "TXk…9f3", status: "paid", requested_at: new Date(Date.now() - 6e8).toISOString(), paid_at: new Date(Date.now() - 5e8).toISOString() },
 ];
 
+const DEMO_TRADES: Trade[] = [
+  { id: "t1", account_id: "demo-2", symbol: "XAUUSD", side: "buy", volume: 1.2, open_price: 2318.4, close_price: 2331.7, profit_usd: 1_596, opened_at: new Date(Date.now() - 2e8).toISOString(), closed_at: new Date(Date.now() - 1.9e8).toISOString() },
+  { id: "t2", account_id: "demo-1", symbol: "EURUSD", side: "sell", volume: 0.8, open_price: 1.0921, close_price: 1.0894, profit_usd: 216, opened_at: new Date(Date.now() - 3e8).toISOString(), closed_at: new Date(Date.now() - 2.8e8).toISOString() },
+  { id: "t3", account_id: "demo-1", symbol: "GBPUSD", side: "buy", volume: 0.5, open_price: 1.2710, close_price: 1.2688, profit_usd: -110, opened_at: new Date(Date.now() - 4e8).toISOString(), closed_at: new Date(Date.now() - 3.9e8).toISOString() },
+  { id: "t4", account_id: "demo-2", symbol: "BTCUSD", side: "buy", volume: 0.3, open_price: 61_200, close_price: 62_540, profit_usd: 402, opened_at: new Date(Date.now() - 5e8).toISOString(), closed_at: new Date(Date.now() - 4.8e8).toISOString() },
+];
+
 /* ───────────────────────── page ───────────────────────── */
 
 export default function Dashboard() {
@@ -79,6 +100,7 @@ export default function Dashboard() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [email, setEmail] = useState<string | null>(null);
   const [payouts, setPayouts] = useState<Payout[]>([]);
+  const [trades, setTrades] = useState<Trade[]>([]);
   const [demo, setDemo] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -113,10 +135,14 @@ export default function Dashboard() {
         ]);
         if (pr.ok) { const pd = await pr.json(); setProfile(pd.profile); setEmail(pd.email); }
         if (po.ok) setPayouts((await po.json()).payouts ?? []);
+
+        const tr = await fetch("/api/trades", { cache: "no-store" });
+        if (tr.ok) setTrades((await tr.json()).trades ?? []);
       } catch {
         setAccounts(DEMO_ACCOUNTS);
         setProfile(DEMO_PROFILE);
         setPayouts(DEMO_PAYOUTS);
+        setTrades(DEMO_TRADES);
         setDemo(true);
       } finally {
         setLoading(false);
@@ -182,6 +208,11 @@ export default function Dashboard() {
         {/* Payout history */}
         {!loading && (accounts?.length ?? 0) > 0 && (
           <PayoutHistory payouts={payouts} />
+        )}
+
+        {/* Trades */}
+        {!loading && (accounts?.length ?? 0) > 0 && (
+          <TradesSection trades={trades} />
         )}
       </div>
 
@@ -337,8 +368,93 @@ function PayoutHistory({ payouts }: { payouts: Payout[] }) {
   );
 }
 
-/* ───────────────────────── modals ───────────────────────── */
+/* ───────────────────────── trades ───────────────────────── */
 
+function TradesSection({ trades }: { trades: Trade[] }) {
+  const closed = trades.filter((t) => t.profit_usd !== null);
+  const totalPnl = closed.reduce((s, t) => s + (t.profit_usd ?? 0), 0);
+  const wins = closed.filter((t) => (t.profit_usd ?? 0) > 0).length;
+  const winRate = closed.length ? Math.round((wins / closed.length) * 100) : 0;
+
+  return (
+    <section className="mt-8">
+      <div className="mb-3 flex items-center gap-2">
+        <BarChart3 className="h-4 w-4 text-gold" />
+        <h2 className="font-display text-xl font-bold text-white">Trade History</h2>
+        <span className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] text-slate-400">{trades.length}</span>
+      </div>
+
+      <div className="rounded-3xl border border-white/10 bg-bg-soft/50 p-4 backdrop-blur-xl sm:p-5">
+        {trades.length === 0 ? (
+          <div className="py-6 text-center text-sm text-slate-500">
+            No trades yet. They&apos;ll appear here automatically as your MT5 account syncs.
+          </div>
+        ) : (
+          <>
+            <div className="mb-4 grid grid-cols-3 gap-3">
+              <MiniStat label="Net P/L" value={`${totalPnl >= 0 ? "+" : ""}$${totalPnl.toLocaleString(undefined, { maximumFractionDigits: 0 })}`} tone={totalPnl >= 0 ? "good" : "bad"} />
+              <MiniStat label="Win rate" value={`${winRate}%`} />
+              <MiniStat label="Closed" value={closed.length} />
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-[11px] uppercase tracking-wider text-slate-500">
+                    <th className="px-3 py-2 font-semibold">Symbol</th>
+                    <th className="px-3 py-2 font-semibold">Side</th>
+                    <th className="px-3 py-2 font-semibold">Vol</th>
+                    <th className="px-3 py-2 font-semibold">Open</th>
+                    <th className="px-3 py-2 font-semibold">Close</th>
+                    <th className="px-3 py-2 font-semibold">P/L</th>
+                    <th className="px-3 py-2 font-semibold">Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {trades.map((t) => {
+                    const pnl = t.profit_usd ?? 0;
+                    const up = pnl >= 0;
+                    const buy = t.side?.toLowerCase() === "buy";
+                    return (
+                      <tr key={t.id} className="border-t border-white/5">
+                        <td className="px-3 py-3 font-display font-bold text-white">{t.symbol}</td>
+                        <td className="px-3 py-3">
+                          <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${buy ? "border-emerald2/30 bg-emerald2/10 text-emerald2-400" : "border-rose2/30 bg-rose2/10 text-rose2-400"}`}>
+                            {buy ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                            {t.side}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 text-slate-300">{t.volume}</td>
+                        <td className="px-3 py-3 font-mono text-xs text-slate-400">{t.open_price ?? "—"}</td>
+                        <td className="px-3 py-3 font-mono text-xs text-slate-400">{t.close_price ?? "—"}</td>
+                        <td className={`px-3 py-3 font-semibold tabular-nums ${up ? "text-emerald2-400" : "text-rose2-400"}`}>
+                          {t.profit_usd === null ? "—" : `${up ? "+" : ""}$${pnl.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+                        </td>
+                        <td className="px-3 py-3 text-[11px] text-slate-500">{t.opened_at ? fmtDate(t.opened_at) : "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function MiniStat({ label, value, tone = "neutral" }: { label: string; value: string | number; tone?: "good" | "bad" | "neutral" }) {
+  const color = tone === "good" ? "text-emerald2-400" : tone === "bad" ? "text-rose2-400" : "text-white";
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-3 text-center">
+      <div className="text-[10px] uppercase tracking-wider text-slate-500">{label}</div>
+      <div className={`mt-1 font-display text-lg font-bold tabular-nums ${color}`}>{value}</div>
+    </div>
+  );
+}
+
+/* ───────────────────────── modals ───────────────────────── */
 function SettingsModal({ profile, email, demo, onClose, onSaved, onError }: {
   profile: Profile | null; email: string | null; demo: boolean;
   onClose: () => void; onSaved: (p: Profile) => void; onError: (m: string) => void;
