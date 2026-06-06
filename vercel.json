@@ -3,6 +3,9 @@
   "buildCommand": "next build",
   "installCommand": "npm install",
   "outputDirectory": ".next",
+  "crons": [
+    { "path": "/api/sync", "schedule": "*/15 * * * *" }
+  ],
   "headers": [
     {
       "source": "/(.*)",

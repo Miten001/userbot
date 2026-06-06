@@ -30,10 +30,25 @@ export type ProvisionResult = {
   balance_usd: number;
 };
 
+/** A closed (or open) deal as reported by the MT5 provider. */
+export type ProviderTrade = {
+  ticket: string;
+  symbol: string;
+  side: "buy" | "sell";
+  volume: number;
+  open_price: number | null;
+  close_price: number | null;
+  profit_usd: number | null;
+  opened_at: string | null; // ISO
+  closed_at: string | null; // ISO
+};
+
 export interface MT5Provider {
   provision(input: ProvisionInput): Promise<ProvisionResult>;
   /** Returns balance/equity. Used by the risk engine to enforce drawdown. */
   fetchEquity(provider_id: string): Promise<{ balance_usd: number; equity_usd: number }>;
+  /** Returns recent deals for an account. Used by /api/sync to mirror trades. */
+  fetchTrades(provider_id: string): Promise<ProviderTrade[]>;
 }
 
 /* ──────────────────────────────────────────────────────────────
@@ -60,6 +75,33 @@ class MockProvider implements MT5Provider {
     const balance = seed;
     const equity = +(balance + drift).toFixed(2);
     return { balance_usd: balance, equity_usd: equity };
+  }
+
+  async fetchTrades(provider_id: string): Promise<ProviderTrade[]> {
+    // Mocked: one or two recent demo deals so the dashboard isn't empty.
+    const symbols = ["EURUSD", "XAUUSD", "GBPUSD", "BTCUSD"] as const;
+    const count = 1 + Math.floor(Math.random() * 2);
+    const out: ProviderTrade[] = [];
+    for (let i = 0; i < count; i++) {
+      const symbol = symbols[Math.floor(Math.random() * symbols.length)];
+      const side = Math.random() > 0.5 ? "buy" : "sell";
+      const open = +(1 + Math.random()).toFixed(5);
+      const close = +(open + (Math.random() - 0.5) * 0.01).toFixed(5);
+      const openedAt = new Date(Date.now() - Math.floor(Math.random() * 86_400_000));
+      out.push({
+        // Deterministic-ish ticket so re-syncs upsert instead of duplicating.
+        ticket: `${provider_id}-${openedAt.toISOString().slice(0, 13)}-${i}`,
+        symbol,
+        side,
+        volume: +(0.1 + Math.random()).toFixed(2),
+        open_price: open,
+        close_price: close,
+        profit_usd: +((close - open) * 10_000 * (side === "buy" ? 1 : -1)).toFixed(2),
+        opened_at: openedAt.toISOString(),
+        closed_at: new Date(openedAt.getTime() + 3_600_000).toISOString(),
+      });
+    }
+    return out;
   }
 }
 
@@ -134,6 +176,42 @@ class MetaApiProvider implements MT5Provider {
     if (!res.ok) throw new Error(`MetaApi equity fetch failed: ${res.status}`);
     const data = (await res.json()) as { balance: number; equity: number };
     return { balance_usd: data.balance, equity_usd: data.equity };
+  }
+
+  async fetchTrades(provider_id: string): Promise<ProviderTrade[]> {
+    // MetaApi exposes history-deals via the client REST API. This is a sketch
+    // covering the last 7 days; tune the time window + paging for production.
+    const from = new Date(Date.now() - 7 * 86_400_000).toISOString();
+    const to = new Date().toISOString();
+    const res = await fetch(
+      `https://mt-client-api-v1.${this.region}.agiliumtrade.ai/users/current/accounts/${provider_id}/history-deals/time/${from}/${to}`,
+      { headers: { "auth-token": this.token } },
+    );
+    if (!res.ok) throw new Error(`MetaApi trades fetch failed: ${res.status}`);
+
+    const deals = (await res.json()) as Array<{
+      id: string;
+      symbol?: string;
+      type?: string; // DEAL_TYPE_BUY / DEAL_TYPE_SELL
+      volume?: number;
+      price?: number;
+      profit?: number;
+      time?: string;
+    }>;
+
+    return deals
+      .filter((d) => d.symbol)
+      .map((d) => ({
+        ticket: d.id,
+        symbol: d.symbol as string,
+        side: d.type === "DEAL_TYPE_SELL" ? "sell" : "buy",
+        volume: d.volume ?? 0,
+        open_price: d.price ?? null,
+        close_price: d.price ?? null,
+        profit_usd: typeof d.profit === "number" ? d.profit : null,
+        opened_at: d.time ?? null,
+        closed_at: d.time ?? null,
+      }));
   }
 }
 

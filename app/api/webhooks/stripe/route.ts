@@ -82,6 +82,7 @@ export async function POST(req: Request) {
 
   // 3. Save the funded account row.
   const rules = stepRules(step);
+  const today = new Date().toISOString().slice(0, 10);
   await admin.from("accounts").insert({
     user_id: userId,
     challenge_id: challenge.id,
@@ -90,14 +91,18 @@ export async function POST(req: Request) {
     mt5_login: provisioned.login,
     mt5_password: provisioned.password,
     mt5_server: provisioned.server,
+    initial_balance_usd: provisioned.balance_usd,
     balance_usd: provisioned.balance_usd,
     equity_usd: provisioned.balance_usd,
     high_water_usd: provisioned.balance_usd,
+    day_start_equity_usd: provisioned.balance_usd,
+    day_anchor: today,
     daily_loss_pct: rules.daily_loss_pct,
     overall_loss_pct: rules.overall_loss_pct,
     profit_target_pct: rules.profit_target_pct,
     phase: "evaluation",
     step_index: 1,
+    total_steps: rules.steps,
   });
 
   return NextResponse.json({ received: true, accountSize, step });
