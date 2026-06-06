@@ -44,6 +44,10 @@ export function isCronConfigured(): boolean {
   return Boolean(process.env.CRON_SECRET);
 }
 
+export function isEmailConfigured(): boolean {
+  return Boolean(process.env.RESEND_API_KEY);
+}
+
 export function isLiveMode(): boolean {
   return (
     isStripeConfigured() &&
@@ -63,6 +67,7 @@ export function configStatus() {
     stripe_webhook: isWebhookConfigured(),
     metaapi: isMetaApiConfigured(),
     cron: isCronConfigured(),
+    email: isEmailConfigured(),
     site_url: process.env.NEXT_PUBLIC_SITE_URL || null,
   };
 }
