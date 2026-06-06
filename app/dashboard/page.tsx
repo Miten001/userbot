@@ -82,11 +82,20 @@ export default function Dashboard() {
               Trader <span className="gradient-text">Dashboard</span>
             </h1>
           </div>
-          <Link href="/#plans" className="btn-primary">
-            <Crown className="h-4 w-4" />
-            Buy Another Challenge
-            <ChevronRight className="h-4 w-4" />
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/admin"
+              className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs text-slate-300 hover:border-gold/40 hover:text-white"
+            >
+              <ShieldCheck className="h-3.5 w-3.5 text-gold" />
+              Admin
+            </Link>
+            <Link href="/#plans" className="btn-primary">
+              <Crown className="h-4 w-4" />
+              Buy Another Challenge
+              <ChevronRight className="h-4 w-4" />
+            </Link>
+          </div>
         </div>
 
         {demo && (
