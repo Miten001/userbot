@@ -3,11 +3,15 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Info, Eye, EyeOff, ShieldCheck, Zap, Banknote, TrendingUp } from "lucide-react";
+import { dbBrowser } from "@/lib/db";
 
 /** Whether the Supabase public keys are present in this build (client-safe). */
 export const SUPABASE_READY = Boolean(
   process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
 );
+
+/** Show the Google sign-in button only when explicitly enabled. */
+export const GOOGLE_READY = process.env.NEXT_PUBLIC_GOOGLE_AUTH === "true";
 
 export function AuthShell({
   title,
@@ -110,6 +114,48 @@ function Stat({ value, label }: { value: string; label: string }) {
     <div>
       <div className="font-display text-2xl font-bold gradient-text">{value}</div>
       <div className="text-[11px] uppercase tracking-wider text-slate-500">{label}</div>
+    </div>
+  );
+}
+
+export function GoogleButton({ next }: { next?: string }) {
+  const [loading, setLoading] = useState(false);
+  if (!GOOGLE_READY) return null;
+
+  async function signIn() {
+    setLoading(true);
+    try {
+      const base =
+        process.env.NEXT_PUBLIC_SITE_URL ||
+        (typeof window !== "undefined" ? window.location.origin : "");
+      const redirectTo =
+        `${base}/auth/callback` + (next ? `?next=${encodeURIComponent(next)}` : "");
+      const supabase = dbBrowser();
+      await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo } });
+    } catch {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="mb-5">
+      <button
+        type="button"
+        onClick={signIn}
+        disabled={loading}
+        className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-white/12 bg-white/[0.04] py-2.5 text-sm font-semibold text-white transition hover:bg-white/[0.08] disabled:opacity-60"
+      >
+        <svg className="h-4 w-4" viewBox="0 0 24 24" aria-hidden>
+          <path fill="#FFC107" d="M43.6 20.5h-1.9V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.3 6.1 29.4 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.3-.4-3.5z" />
+          <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 19 13 24 13c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.3 6.1 29.4 4 24 4 16.3 4 9.7 8.3 6.3 14.7z" />
+          <path fill="#4CAF50" d="M24 44c5.3 0 10.1-2 13.7-5.3l-6.3-5.2c-2 1.5-4.6 2.5-7.4 2.5-5.2 0-9.6-3.3-11.2-7.9l-6.5 5C9.6 39.6 16.2 44 24 44z" />
+          <path fill="#1976D2" d="M43.6 20.5H24v8h11.3c-.8 2.2-2.2 4.1-4 5.5l6.3 5.2c-.4.4 6.8-5 6.8-15.2 0-1.3-.1-2.3-.4-3.5z" />
+        </svg>
+        {loading ? "Redirecting…" : "Continue with Google"}
+      </button>
+      <div className="mt-5 flex items-center gap-3 text-[11px] uppercase tracking-wider text-slate-600">
+        <span className="h-px flex-1 bg-white/10" /> or <span className="h-px flex-1 bg-white/10" />
+      </div>
     </div>
   );
 }

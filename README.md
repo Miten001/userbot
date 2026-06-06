@@ -56,6 +56,7 @@ A premium forex proprietary trading firm website + backend, built with Next.js 1
 | `lib/db.ts` | Supabase clients (browser, server, admin) |
 | `lib/admin.ts` | `requireAdmin()` — gates admin routes via `ADMIN_USER_IDS` or `profiles.is_admin` |
 | `lib/risk.ts` | Pure evaluation engine — drawdown breach, profit-target pass, step progression, daily reset |
+| `lib/email.ts` | Resend transactional emails (account ready / funded / breached / payout) — no-op unless configured |
 | `lib/mt5.ts` | MT5 provider abstraction — Mock + MetaApi (provision / equity / trades) |
 | `supabase/schema.sql` | Full database schema with RLS policies (+ operational migration block) |
 

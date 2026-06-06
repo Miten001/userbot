@@ -4,6 +4,7 @@ import type Stripe from "stripe";
 import { stripe, stepRules, type Step } from "@/lib/stripe";
 import { dbAdmin } from "@/lib/db";
 import { getMT5Provider } from "@/lib/mt5";
+import { notifyAccountReady } from "@/lib/email";
 
 /**
  * POST /api/webhooks/stripe
@@ -104,6 +105,16 @@ export async function POST(req: Request) {
     step_index: 1,
     total_steps: rules.steps,
   });
+
+  // 4. Best-effort welcome email (no-op unless RESEND_API_KEY is set).
+  if (email) {
+    await notifyAccountReady(email, {
+      login: provisioned.login,
+      server: provisioned.server,
+      size: accountSize,
+      step,
+    });
+  }
 
   return NextResponse.json({ received: true, accountSize, step });
 }

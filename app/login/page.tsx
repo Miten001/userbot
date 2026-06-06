@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Crown, Loader2, Mail, Lock, ArrowRight, Sparkles, KeyRound, MailCheck } from "lucide-react";
 import { dbBrowser } from "@/lib/db";
-import { AuthShell, DemoNotice, Field, SUPABASE_READY } from "@/app/components/AuthShell";
+import { AuthShell, DemoNotice, Field, GoogleButton, SUPABASE_READY } from "@/app/components/AuthShell";
 
 export default function LoginPage() {
   return (
@@ -114,6 +114,8 @@ function LoginInner() {
       subtitle="Log in to view your funded accounts and request payouts."
     >
       {!SUPABASE_READY && <DemoNotice />}
+
+      <GoogleButton next={search.get("next") ?? undefined} />
 
       {/* Mode switch */}
       <div className="mb-5 grid grid-cols-2 gap-1 rounded-xl border border-white/10 bg-white/[0.03] p-1 text-sm">

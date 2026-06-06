@@ -7,7 +7,7 @@ import {
   Crown, Loader2, Mail, Lock, User, ArrowRight, MailCheck,
 } from "lucide-react";
 import { dbBrowser } from "@/lib/db";
-import { AuthShell, DemoNotice, Field, SUPABASE_READY } from "@/app/components/AuthShell";
+import { AuthShell, DemoNotice, Field, GoogleButton, SUPABASE_READY } from "@/app/components/AuthShell";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -87,6 +87,8 @@ export default function SignupPage() {
       subtitle="Sign up to buy a challenge and track your funded accounts."
     >
       {!SUPABASE_READY && <DemoNotice />}
+
+      <GoogleButton />
 
       <form onSubmit={onSubmit} className="space-y-4">
         <Field
