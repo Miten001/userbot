@@ -48,7 +48,7 @@ A premium forex proprietary trading firm website + backend, built with Next.js 1
 | `app/api/payouts/route.ts` | GET list + POST request — withdrawal requests (RLS-protected) |
 | `app/api/trades/route.ts` | GET — user's trades, optional `?account_id=` filter (RLS-protected) |
 | `app/api/profile/route.ts` | GET + PATCH — read / update the signed-in user's profile (RLS-protected) |
-| `app/api/sync/route.ts` | GET/POST — risk-engine heartbeat: refreshes equity, enforces drawdown, advances steps, funds accounts, mirrors trades. Auth via `CRON_SECRET` or admin session. Runs every 15 min via Vercel Cron |
+| `app/api/sync/route.ts` | GET/POST — risk-engine heartbeat: refreshes equity, enforces drawdown, advances steps, funds accounts, mirrors trades. Auth via `CRON_SECRET` or admin session. Runs **daily** via Vercel Cron (Hobby plan limit — see note below) |
 | `app/api/admin/route.ts` | GET — back-office overview (stats + recent challenges/accounts/payouts). Admin-only |
 | `app/api/admin/payouts/route.ts` | POST — approve / reject / mark-paid a withdrawal. Admin-only |
 | `app/api/admin/accounts/route.ts` | POST — manual account override (phase / equity / profit split). Admin-only |
@@ -58,6 +58,10 @@ A premium forex proprietary trading firm website + backend, built with Next.js 1
 | `lib/risk.ts` | Pure evaluation engine — drawdown breach, profit-target pass, step progression, daily reset |
 | `lib/mt5.ts` | MT5 provider abstraction — Mock + MetaApi (provision / equity / trades) |
 | `supabase/schema.sql` | Full database schema with RLS policies (+ operational migration block) |
+
+> **⏰ Cron frequency & Vercel plans.** The free **Hobby** plan only allows **once-per-day** cron jobs, so `vercel.json` is set to `0 0 * * *` (daily midnight UTC). For more frequent drawdown enforcement you have two options:
+> - **Pro plan:** change the schedule in `vercel.json` to e.g. `*/15 * * * *` (every 15 min).
+> - **Free alternative:** use an external scheduler (e.g. [cron-job.org](https://cron-job.org), [EasyCron](https://www.easycron.com)) to `GET https://your-site.vercel.app/api/sync` as often as you like, sending header `Authorization: Bearer <CRON_SECRET>`.
 
 ---
 
