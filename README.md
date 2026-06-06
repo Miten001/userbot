@@ -47,10 +47,17 @@ A premium forex proprietary trading firm website + backend, built with Next.js 1
 | `app/api/account/route.ts` | GET — returns user's accounts (RLS-protected) |
 | `app/api/payouts/route.ts` | GET list + POST request — withdrawal requests (RLS-protected) |
 | `app/api/trades/route.ts` | GET — user's trades, optional `?account_id=` filter (RLS-protected) |
-| `lib/stripe.ts` | Stripe client + plan catalog (single source of truth for prices) |
+| `app/api/profile/route.ts` | GET + PATCH — read / update the signed-in user's profile (RLS-protected) |
+| `app/api/sync/route.ts` | GET/POST — risk-engine heartbeat: refreshes equity, enforces drawdown, advances steps, funds accounts, mirrors trades. Auth via `CRON_SECRET` or admin session. Runs every 15 min via Vercel Cron |
+| `app/api/admin/route.ts` | GET — back-office overview (stats + recent challenges/accounts/payouts). Admin-only |
+| `app/api/admin/payouts/route.ts` | POST — approve / reject / mark-paid a withdrawal. Admin-only |
+| `app/api/admin/accounts/route.ts` | POST — manual account override (phase / equity / profit split). Admin-only |
+| `lib/stripe.ts` | Stripe client + plan catalog (single source of truth for prices) + per-step risk rules |
 | `lib/db.ts` | Supabase clients (browser, server, admin) |
-| `lib/mt5.ts` | MT5 provider abstraction — Mock + MetaApi |
-| `supabase/schema.sql` | Full database schema with RLS policies |
+| `lib/admin.ts` | `requireAdmin()` — gates admin routes via `ADMIN_USER_IDS` or `profiles.is_admin` |
+| `lib/risk.ts` | Pure evaluation engine — drawdown breach, profit-target pass, step progression, daily reset |
+| `lib/mt5.ts` | MT5 provider abstraction — Mock + MetaApi (provision / equity / trades) |
+| `supabase/schema.sql` | Full database schema with RLS policies (+ operational migration block) |
 
 ---
 

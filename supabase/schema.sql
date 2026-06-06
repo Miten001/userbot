@@ -145,3 +145,108 @@ create policy "payouts: owner reads"
   on public.payouts for select using (auth.uid() = user_id);
 create policy "payouts: owner inserts"
   on public.payouts for insert with check (auth.uid() = user_id);
+
+
+-- ══════════════════════════════════════════════════════════════════════
+-- OPERATIONAL LAYER  (risk engine + admin + sync)
+--
+-- Everything below is idempotent — safe to re-run on an existing database.
+-- It adds the columns/policies needed by:
+--   • /api/sync          (equity refresh + drawdown enforcement)
+--   • /api/admin/*        (back-office management)
+--   • /api/profile        (profile read/update)
+-- ══════════════════════════════════════════════════════════════════════
+
+-- ── accounts: extra columns the risk engine needs ─────────────────────
+alter table public.accounts
+  add column if not exists initial_balance_usd  numeric(14,2);
+alter table public.accounts
+  add column if not exists day_start_equity_usd numeric(14,2);
+alter table public.accounts
+  add column if not exists day_anchor           date;
+alter table public.accounts
+  add column if not exists profit_split_pct     numeric(5,2) not null default 80;
+alter table public.accounts
+  add column if not exists total_steps          smallint     not null default 1;
+alter table public.accounts
+  add column if not exists funded_at            timestamptz;
+alter table public.accounts
+  add column if not exists breached_at          timestamptz;
+alter table public.accounts
+  add column if not exists breach_reason        text;
+alter table public.accounts
+  add column if not exists last_synced_at       timestamptz;
+
+-- Backfill initial_balance_usd for rows created before this migration.
+update public.accounts
+  set initial_balance_usd = balance_usd
+  where initial_balance_usd is null;
+
+-- Keep accounts.updated_at fresh automatically.
+create or replace function public.touch_updated_at()
+returns trigger language plpgsql as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+drop trigger if exists accounts_touch_updated_at on public.accounts;
+create trigger accounts_touch_updated_at
+  before update on public.accounts
+  for each row execute procedure public.touch_updated_at();
+
+-- ── profiles: let the owner insert their own row (for PATCH upsert) ────
+do $$ begin
+  create policy "profiles: owner inserts"
+    on public.profiles for insert with check (auth.uid() = id);
+exception when duplicate_object then null; end $$;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- Admin access
+--
+-- Admins are identified by the `is_admin` flag on their profile. The admin
+-- APIs use the service-role key (which bypasses RLS), but we also expose a
+-- helper + read policies so an admin's own session can query everything if
+-- you prefer client-side admin tooling.
+-- ══════════════════════════════════════════════════════════════════════
+alter table public.profiles
+  add column if not exists is_admin boolean not null default false;
+
+create or replace function public.is_admin()
+returns boolean language sql stable security definer as $$
+  select coalesce(
+    (select p.is_admin from public.profiles p where p.id = auth.uid()),
+    false
+  );
+$$;
+
+-- Admin read policies (additive — owners still see their own rows).
+do $$ begin
+  create policy "challenges: admin reads" on public.challenges
+    for select using (public.is_admin());
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create policy "accounts: admin reads" on public.accounts
+    for select using (public.is_admin());
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create policy "trades: admin reads" on public.trades
+    for select using (public.is_admin());
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create policy "payouts: admin reads" on public.payouts
+    for select using (public.is_admin());
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create policy "payouts: admin updates" on public.payouts
+    for update using (public.is_admin());
+exception when duplicate_object then null; end $$;
+
+-- To make yourself an admin, run (replace the email):
+--   update public.profiles set is_admin = true
+--   where id = (select id from auth.users where email = 'you@example.com');

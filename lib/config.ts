@@ -40,6 +40,10 @@ export function isMetaApiConfigured(): boolean {
   return Boolean(process.env.METAAPI_TOKEN);
 }
 
+export function isCronConfigured(): boolean {
+  return Boolean(process.env.CRON_SECRET);
+}
+
 export function isLiveMode(): boolean {
   return (
     isStripeConfigured() &&
@@ -58,6 +62,7 @@ export function configStatus() {
     supabase_admin: isSupabaseAdminConfigured(),
     stripe_webhook: isWebhookConfigured(),
     metaapi: isMetaApiConfigured(),
+    cron: isCronConfigured(),
     site_url: process.env.NEXT_PUBLIC_SITE_URL || null,
   };
 }

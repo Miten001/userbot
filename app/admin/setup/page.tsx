@@ -11,6 +11,7 @@ type Status = {
   supabase_admin: boolean;
   stripe_webhook: boolean;
   metaapi: boolean;
+  cron: boolean;
   site_url: string | null;
 };
 
@@ -129,6 +130,12 @@ export default function SetupPage() {
                 desc="Optional — without this, mock MT5 accounts are provisioned"
                 ctaLabel="MetaApi pricing"
                 ctaHref="https://metaapi.cloud/docs/client/getting-started/getting-token"
+                optional
+              />
+              <Item
+                ok={status.cron}
+                title="Risk-engine sync secret set"
+                desc="CRON_SECRET — secures /api/sync (equity refresh + drawdown enforcement, runs every 15 min)"
                 optional
               />
             </div>
