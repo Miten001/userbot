@@ -12,6 +12,7 @@ type Status = {
   stripe_webhook: boolean;
   metaapi: boolean;
   cron: boolean;
+  email: boolean;
   site_url: string | null;
 };
 
@@ -136,6 +137,14 @@ export default function SetupPage() {
                 ok={status.cron}
                 title="Risk-engine sync secret set"
                 desc="CRON_SECRET — secures /api/sync (equity refresh + drawdown enforcement, runs every 15 min)"
+                optional
+              />
+              <Item
+                ok={status.email}
+                title="Email notifications configured"
+                desc="RESEND_API_KEY — sends account-ready, funded, breached & payout emails"
+                ctaLabel="Resend"
+                ctaHref="https://resend.com"
                 optional
               />
             </div>

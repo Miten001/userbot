@@ -5,6 +5,7 @@ import { getMT5Provider } from "@/lib/mt5";
 import { evaluateAccount, type EvalAccount } from "@/lib/risk";
 import { requireAdmin } from "@/lib/admin";
 import { isSupabaseAdminConfigured } from "@/lib/config";
+import { notifyFunded, notifyBreached } from "@/lib/email";
 
 /**
  * /api/sync  (GET for Vercel Cron, POST for manual/admin runs)
@@ -45,7 +46,7 @@ async function runSync() {
   const { data: accounts, error } = await db
     .from("accounts")
     .select(
-      "id, challenge_id, provider_id, initial_balance_usd, balance_usd, equity_usd, high_water_usd, day_start_equity_usd, day_anchor, daily_loss_pct, overall_loss_pct, profit_target_pct, phase, step_index, total_steps",
+      "id, user_id, challenge_id, provider_id, initial_balance_usd, balance_usd, equity_usd, high_water_usd, day_start_equity_usd, day_anchor, daily_loss_pct, overall_loss_pct, profit_target_pct, phase, step_index, total_steps",
     )
     .in("phase", ["evaluation", "funded"]);
 
@@ -109,6 +110,17 @@ async function runSync() {
         if (e.type === "step_passed") stepPassed++;
       }
 
+      // Best-effort lifecycle emails (no-op unless RESEND_API_KEY is set).
+      const hitFunded = events.some((e) => e.type === "funded");
+      const hitBreach = events.some((e) => e.type === "breached");
+      if ((hitFunded || hitBreach) && a.user_id) {
+        const email = await userEmail(db, a.user_id);
+        if (email) {
+          if (hitFunded) await notifyFunded(email, { size: Number(a.initial_balance_usd ?? a.balance_usd) });
+          else await notifyBreached(email, { reason: patch.breach_reason ?? "Risk limit reached." });
+        }
+      }
+
       results.push({ account_id: a.id, equity_usd, events: events.map((e) => e.type), phase: patch.phase ?? a.phase });
     } catch (err) {
       results.push({ account_id: a.id, error: err instanceof Error ? err.message : "sync failed" });
@@ -125,6 +137,16 @@ async function runSync() {
     trades_synced: tradesSynced,
     results,
   });
+}
+
+/** Look up a user's email via the service-role admin API (best-effort). */
+async function userEmail(db: ReturnType<typeof dbAdmin>, userId: string): Promise<string | null> {
+  try {
+    const { data } = await db.auth.admin.getUserById(userId);
+    return data.user?.email ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /** CRON_SECRET (Vercel Cron / external scheduler) OR an admin session. */

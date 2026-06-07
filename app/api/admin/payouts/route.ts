@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin";
 import { dbAdmin } from "@/lib/db";
+import { notifyPayout } from "@/lib/email";
 
 /**
  * POST /api/admin/payouts
@@ -72,6 +73,18 @@ export async function POST(req: Request) {
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  // Best-effort status email to the trader (no-op unless RESEND_API_KEY is set).
+  if (data?.user_id) {
+    try {
+      const { data: u } = await db.auth.admin.getUserById(data.user_id);
+      if (u.user?.email) {
+        await notifyPayout(u.user.email, { amount: Number(data.amount_usd), status });
+      }
+    } catch {
+      // ignore email failures
+    }
   }
 
   return NextResponse.json({ payout: data });

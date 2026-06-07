@@ -21,11 +21,11 @@ A premium forex proprietary trading firm website + backend, built with Next.js 1
 ## Frontend Sections
 
 1. **Navbar** — sticky pill, scroll-aware glass blur
-2. **Hero** — copy + animated live forex pairs grid (EUR/USD, GBP/USD, USD/JPY, XAU/USD, BTC/USD, AUD/USD)
+2. **Hero** — copy + animated live forex pairs grid
 3. **Stats** + partners marquee
 4. **Funding Plans** — 7 account sizes ($2.5K → $200K) × 3 challenge types (1/2/3-step)
 5. **How It Works** — 3 steps with raised icon plates
-6. **Features** — bento grid (split meter, payout chips, country flags)
+6. **Features** — bento grid
 7. **Trading Rules** — Allowed vs Not Allowed
 8. **Testimonials** — 6 trader stories with payout pills
 9. **FAQ** — animated accordion
@@ -48,53 +48,33 @@ A premium forex proprietary trading firm website + backend, built with Next.js 1
 | `app/api/payouts/route.ts` | GET list + POST request — withdrawal requests (RLS-protected) |
 | `app/api/trades/route.ts` | GET — user's trades, optional `?account_id=` filter (RLS-protected) |
 | `app/api/profile/route.ts` | GET + PATCH — read / update the signed-in user's profile (RLS-protected) |
-| `app/api/sync/route.ts` | GET/POST — risk-engine heartbeat: refreshes equity, enforces drawdown, advances steps, funds accounts, mirrors trades. Auth via `CRON_SECRET` or admin session. Runs **daily** via Vercel Cron (Hobby plan limit — see note below) |
+| `app/api/sync/route.ts` | GET/POST — risk-engine heartbeat: equity refresh, drawdown enforcement, step progression, trade mirror. Auth via `CRON_SECRET` or admin session. Runs daily via Vercel Cron |
 | `app/api/admin/route.ts` | GET — back-office overview (stats + recent challenges/accounts/payouts). Admin-only |
 | `app/api/admin/payouts/route.ts` | POST — approve / reject / mark-paid a withdrawal. Admin-only |
 | `app/api/admin/accounts/route.ts` | POST — manual account override (phase / equity / profit split). Admin-only |
-| `lib/stripe.ts` | Stripe client + plan catalog (single source of truth for prices) + per-step risk rules |
+| `lib/stripe.ts` | Stripe client + plan catalog + per-step risk rules |
 | `lib/db.ts` | Supabase clients (browser, server, admin) |
 | `lib/admin.ts` | `requireAdmin()` — gates admin routes via `ADMIN_USER_IDS` or `profiles.is_admin` |
 | `lib/risk.ts` | Pure evaluation engine — drawdown breach, profit-target pass, step progression, daily reset |
+| `lib/email.ts` | Resend transactional emails (account ready / funded / breached / payout) — no-op unless configured |
 | `lib/mt5.ts` | MT5 provider abstraction — Mock + MetaApi (provision / equity / trades) |
 | `supabase/schema.sql` | Full database schema with RLS policies (+ operational migration block) |
 
-> **⏰ Cron frequency & Vercel plans.** The free **Hobby** plan only allows **once-per-day** cron jobs, so `vercel.json` is set to `0 0 * * *` (daily midnight UTC). For more frequent drawdown enforcement you have two options:
-> - **Pro plan:** change the schedule in `vercel.json` to e.g. `*/15 * * * *` (every 15 min).
-> - **Free alternative:** use an external scheduler (e.g. [cron-job.org](https://cron-job.org), [EasyCron](https://www.easycron.com)) to `GET https://your-site.vercel.app/api/sync` as often as you like, sending header `Authorization: Bearer <CRON_SECRET>`.
+> **⏰ Cron frequency & Vercel plans.** The free **Hobby** plan only allows once-per-day cron jobs, so `vercel.json` uses `0 0 * * *` (daily). For more frequent runs: upgrade to Pro and set `*/15 * * * *`, or use an external scheduler (e.g. cron-job.org) hitting `/api/sync` with header `Authorization: Bearer <CRON_SECRET>`.
 
 ---
 
 ## Quick Start
 
-### Local development
-
 ```bash
 git clone https://github.com/Miten001/userbot.git
 cd userbot
-cp .env.example .env.local   # fill in your keys
+cp .env.example .env.local
 npm install
 npm run dev
 ```
 
-Open <http://localhost:3000>.
-
-### Deploy
-
-See [**`SETUP.md`**](./SETUP.md) for the full step-by-step guide
-(Vercel + Supabase + Stripe + MetaApi).
-
----
-
-## Customization
-
-| Cheez | File |
-|---|---|
-| Brand colors | `tailwind.config.ts` |
-| Plans pricing | `app/components/Plans.tsx` + `lib/stripe.ts` (keep them in sync) |
-| Testimonials | `app/components/Testimonials.tsx` |
-| FAQ | `app/components/FAQ.tsx` |
-| Forex pairs | `app/components/PairsShowcase.tsx` |
+See [**`SETUP.md`**](./SETUP.md) for the full deploy guide.
 
 ---
 
