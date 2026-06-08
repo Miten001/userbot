@@ -1,0 +1,26 @@
+{
+  "id": "FEAT-002",
+  "type": "feat",
+  "description": "Landing page enhancements: Partners/logos section, video demo section, live stats ticker, dark/light mode toggle, and notification bell system in dashboard",
+  "status": "completed",
+  "steps": [
+    "Create app/components/Partners.tsx - A logo grid/marquee section showing broker/platform partner logos (MetaTrader 5, cTrader, TradingView, etc.) with hover effects. Use simple styled text/icons since we cannot load external images. Place it between Stats and Plans sections. Note: Stats.tsx already has a simple marquee at the bottom - this should be a more prominent dedicated section with styled logo placeholders.",
+    "Create app/components/VideoDemo.tsx - A section with a fake video player UI (play button overlay on a gradient/glass card) that represents a platform demo video. Include a title like 'See the platform in action' and description. Place between Partners and Plans.",
+    "Create app/components/LiveTicker.tsx - A horizontal scrolling ticker bar at the very top of the page (above navbar) showing simulated live trading data: pair names with prices and percentage changes (e.g., XAUUSD +1.2%, EURUSD -0.3%). Use the animate-marquee animation. Style with a slim dark bar with emerald/rose colors for up/down.",
+    "Implement dark/light mode toggle: (a) Update app/layout.tsx to wrap the app in a ThemeProvider using React context that reads/writes 'theme' to localStorage. (b) Create app/components/ThemeProvider.tsx with context and toggle hook. (c) Add a 'dark' class to the html element and update tailwind.config.ts with darkMode: 'class'. (d) Add CSS variables for light mode in globals.css under a :root (light) style. (e) Add ThemeToggle button component (Sun/Moon icons) to the Navbar.",
+    "Create app/components/NotificationBell.tsx - A bell icon component with a red badge showing unread count. Clicking opens a dropdown with notification items (account funded, payout processed, trade closed, etc.) using demo data. Include a 'Mark all as read' button.",
+    "Add the NotificationBell to the DashboardLayout top bar (mobile) and Sidebar top area (desktop).",
+    "Update app/page.tsx to include the new landing page components in the correct order: LiveTicker, Navbar, Hero, Stats, Partners, VideoDemo, Plans, HowItWorks, Features, Rules, Testimonials, FAQ, CTA, Footer."
+  ],
+  "acceptance_criteria": [
+    "Landing page shows a live ticker bar at the top with scrolling price data",
+    "Partners section displays styled platform logos between Stats and Plans",
+    "Video demo section shows a polished video placeholder with play button",
+    "Dark/light mode toggle is visible in the navbar and switches theme correctly",
+    "Dashboard shows a notification bell icon that opens a dropdown with items",
+    "Build passes (npx next build)"
+  ],
+  "verification": ["npx next build"],
+  "blocked_reason": null,
+  "findings": "Build passes cleanly. All 7 components created and integrated. ThemeProvider wraps app in layout.tsx with 'dark' class default on html element. darkMode: 'class' added to tailwind.config.ts. Light mode CSS overrides added to globals.css under html:not(.dark) selectors."
+}

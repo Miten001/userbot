@@ -1,0 +1,29 @@
+{
+  "project_type": "Next.js 14 App Router prop trading platform (ApexFunded)",
+  "language": "TypeScript/React",
+  "build_system": "npm with Next.js CLI",
+  "test_framework": "vitest (no tests currently exist beyond lib/risk.test.ts)",
+  "build_command": "npx next build",
+  "test_command": "npx vitest run",
+  "verification_instructions": "Run `npx next build` to ensure zero build errors. All pages must compile as static or dynamic without errors.",
+  "snapshot_or_generated_files": null,
+  "setup_instructions": "npm install, then npx next build",
+  "environment_constraints": "Node 22 available. No .env file present but .env.example exists. Build works without env vars (demo mode). No Docker needed.",
+  "contribution_requirements": "Keep the dark luxury theme (bg-deep #02030a, gold, royal purple, emerald, rose accents). Use framer-motion for animations. Use lucide-react icons. Follow 'use client' directive pattern for client components. Use @/ path alias.",
+  "key_patterns": "Components in app/components/. Dashboard uses DashboardLayout wrapper with Sidebar. Client components use 'use client' directive. Glass morphism via .glass/.glass-strong classes. Custom color tokens: bg-deep, bg-soft, bg-card, gold, royal, emerald2, rose2. Gradients: gradient-text, lux-text, royal-text, btn-primary, btn-secondary. Layout animations with framer-motion. All pages are single-file with inline sub-components.",
+  "relevant_files": [
+    "app/page.tsx",
+    "app/layout.tsx",
+    "app/globals.css",
+    "app/dashboard/page.tsx",
+    "app/components/DashboardLayout.tsx",
+    "app/components/Sidebar.tsx",
+    "app/components/Navbar.tsx",
+    "app/components/Hero.tsx",
+    "app/components/Stats.tsx",
+    "app/components/Footer.tsx",
+    "app/components/AuthShell.tsx",
+    "tailwind.config.ts"
+  ],
+  "directory_structure": "app/ - Next.js app router pages and components. app/components/ - shared UI. app/api/ - API routes. app/dashboard/ - user dashboard. app/admin/ - admin panel. lib/ - server utilities (db, plans, risk, mt5). tailwind.config.ts - theme config with custom colors/animations."
+}

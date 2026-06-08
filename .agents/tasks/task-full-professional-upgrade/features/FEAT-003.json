@@ -1,0 +1,28 @@
+{
+  "id": "FEAT-003",
+  "type": "feat",
+  "description": "Loading states (skeleton screens, page transitions), responsive improvements (tablet breakpoints), and Charts/Analytics (equity curve, profit/loss graphs in dashboard)",
+  "status": "completed",
+  "steps": [
+    "Create app/components/PageTransition.tsx - A framer-motion wrapper that animates page content on mount with a fade-in + subtle slide-up. Use AnimatePresence pattern.",
+    "Create app/components/SkeletonCard.tsx - Reusable skeleton loading components: SkeletonCard (rounded-3xl with pulse animation), SkeletonTable (table rows shimmer), SkeletonStats (stat card placeholders). Use the existing animate-pulse tailwind class plus custom shimmer gradient.",
+    "Update all dashboard sub-pages (accounts, trades, payouts, settings, overview) to show skeleton screens while data is loading. Wrap page content in PageTransition for smooth entry.",
+    "Create app/components/EquityCurve.tsx - An SVG-based equity curve chart component that takes an array of data points and renders a smooth line chart with gradient fill underneath. Include axis labels, hover tooltip showing value, and responsive sizing. Use the gold/emerald gradient for the line.",
+    "Create app/components/PnLChart.tsx - A bar chart component showing daily profit/loss. Green bars for profit, red for loss. Include axis labels and totals.",
+    "Add EquityCurve and PnLChart to the dashboard trades page and/or the overview page. Use demo data to populate them (generate 30 days of simulated equity data).",
+    "Responsive improvements: (a) Add tablet-specific breakpoints (md:) to all dashboard pages for 2-column layouts on iPad. (b) Ensure the sidebar collapses properly at tablet width. (c) Add responsive padding and font-size adjustments to landing page sections for tablet (768px-1024px). (d) Test that all cards, grids, and tables look good at tablet width by using appropriate grid-cols-1 md:grid-cols-2 lg:grid-cols-3 patterns.",
+    "Add smooth page transitions between dashboard pages using framer-motion layout animations in the dashboard layout."
+  ],
+  "acceptance_criteria": [
+    "Dashboard pages show skeleton screens during loading state",
+    "Page transitions are smooth with fade/slide animations",
+    "Equity curve chart renders with gradient fill and responsive sizing",
+    "P/L bar chart shows daily profit/loss with color coding",
+    "Dashboard looks good at tablet widths (768px-1024px) with proper grid layouts",
+    "Landing page sections are properly responsive at tablet breakpoints",
+    "Build passes (npx next build)"
+  ],
+  "verification": ["npx next build"],
+  "blocked_reason": null,
+  "findings": "Build passes cleanly. Added collapsed prop to Sidebar for tablet breakpoint. Used seeded random for demo chart data (will generate different data on each render but this is acceptable for demo mode). The shimmer animation keyframe uses translateX(-100% to 100%) for the sliding effect."
+}

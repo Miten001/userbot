@@ -1,0 +1,28 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Separate dashboard pages (Accounts, Trades, Payouts, Settings) with proper routing instead of hash links, plus a dedicated Profile/Settings page with avatar upload and personal info",
+  "status": "completed",
+  "steps": [
+    "Create app/dashboard/layout.tsx that wraps all dashboard sub-pages in the DashboardLayout component (sidebar + mobile nav). The layout fetches profile/auth data and passes it down via context or props.",
+    "Create app/dashboard/accounts/page.tsx - Extract the accounts grid and AccountCard component from the current dashboard page. Show all user accounts with full details.",
+    "Create app/dashboard/trades/page.tsx - Extract TradesSection into its own page with the trade history table, mini stats (Net P/L, Win rate, Closed), and add basic equity curve chart using SVG path.",
+    "Create app/dashboard/payouts/page.tsx - Extract PayoutHistory into its own page with withdrawal history and the withdraw modal.",
+    "Create app/dashboard/settings/page.tsx - Full dedicated settings page with sections: Personal Info (avatar upload with preview, full name, country, phone), Account (email display, password change placeholder), Preferences (notification toggles), and Danger Zone (delete account placeholder).",
+    "Update app/dashboard/page.tsx to become an overview/home page with summary cards (total balance, total P/L, active accounts count, recent trades), quick links to other sections.",
+    "Update app/components/Sidebar.tsx - Change navigation links from hash (#accounts, #trades, #payouts) to proper routes (/dashboard/accounts, /dashboard/trades, /dashboard/payouts, /dashboard/settings). Add active state detection using usePathname().",
+    "Update app/components/DashboardLayout.tsx - Remove onSettingsClick prop since settings is now a page. Ensure the layout works with the new routing structure."
+  ],
+  "acceptance_criteria": [
+    "Navigating to /dashboard shows an overview page with summary stats",
+    "Navigating to /dashboard/accounts shows the accounts list",
+    "Navigating to /dashboard/trades shows the trades table with equity curve",
+    "Navigating to /dashboard/payouts shows withdrawal history",
+    "Navigating to /dashboard/settings shows a full settings page with avatar upload area",
+    "Sidebar highlights the correct active page",
+    "Build passes with no errors (npx next build)"
+  ],
+  "verification": ["npx next build"],
+  "blocked_reason": null,
+  "findings": "Build passes cleanly. Only warning is ESLint no-img-element for avatar preview (acceptable since it uses data URL from FileReader). All 5 new routes compile as static pages. Dashboard layout wraps all sub-pages. Admin page already compatible with updated DashboardLayout (did not use onSettingsClick)."
+}
