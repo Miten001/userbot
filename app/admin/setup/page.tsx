@@ -6,10 +6,10 @@ import { CheckCircle2, XCircle, Crown, ExternalLink, RefreshCw } from "lucide-re
 
 type Status = {
   mode: "live" | "demo";
-  stripe: boolean;
   supabase_anon: boolean;
   supabase_admin: boolean;
-  stripe_webhook: boolean;
+  razorpay: boolean;
+  crypto: boolean;
   metaapi: boolean;
   cron: boolean;
   email: boolean;
@@ -49,7 +49,7 @@ export default function SetupPage() {
               Setup <span className="gradient-text">Status</span>
             </h1>
             <p className="mt-2 text-sm text-slate-400">
-              Configure Stripe + Supabase to switch from demo to live mode.
+              Configure a payment gateway + Supabase to switch from demo to live mode.
             </p>
           </div>
 
@@ -100,11 +100,18 @@ export default function SetupPage() {
             {/* Checklist */}
             <div className="space-y-3">
               <Item
-                ok={status.stripe}
-                title="Stripe configured"
-                desc="STRIPE_SECRET_KEY + NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY set"
-                ctaLabel="Get Stripe keys"
-                ctaHref="https://dashboard.stripe.com/test/apikeys"
+                ok={status.razorpay}
+                title="UPI / Razorpay configured"
+                desc="RAZORPAY_KEY_ID + RAZORPAY_KEY_SECRET (+ RAZORPAY_WEBHOOK_SECRET for the webhook)"
+                ctaLabel="Get Razorpay keys"
+                ctaHref="https://dashboard.razorpay.com/app/keys"
+              />
+              <Item
+                ok={status.crypto}
+                title="Crypto / NOWPayments configured"
+                desc="NOWPAYMENTS_API_KEY (+ NOWPAYMENTS_IPN_SECRET for the webhook)"
+                ctaLabel="Get NOWPayments key"
+                ctaHref="https://nowpayments.io"
               />
               <Item
                 ok={status.supabase_anon}
@@ -117,13 +124,6 @@ export default function SetupPage() {
                 ok={status.supabase_admin}
                 title="Supabase (admin) configured"
                 desc="SUPABASE_SERVICE_ROLE_KEY set (needed for webhook to write rows)"
-              />
-              <Item
-                ok={status.stripe_webhook}
-                title="Stripe webhook secret set"
-                desc="STRIPE_WEBHOOK_SECRET — required for the checkout webhook"
-                ctaLabel="Add webhook"
-                ctaHref="https://dashboard.stripe.com/test/webhooks"
               />
               <Item
                 ok={status.metaapi}
