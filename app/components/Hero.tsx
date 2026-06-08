@@ -15,10 +15,10 @@ export default function Hero() {
     <section className="relative isolate overflow-hidden pt-32 sm:pt-36">
       {/* Grid + glow blobs */}
       <div className="absolute inset-0 -z-10 grid-bg" />
-      <div className="glow-blob left-[-10%] top-20 h-[380px] w-[380px] bg-gold-radial opacity-25" />
-      <div className="glow-blob right-[-15%] top-32 h-[400px] w-[400px] bg-royal-radial opacity-25" />
-      <div className="glow-blob left-1/3 bottom-[-15%] h-[320px] w-[320px] bg-emerald-radial opacity-25" />
-      <div className="glow-blob right-1/4 top-1/2 h-[220px] w-[220px] bg-rose-radial opacity-25" />
+      <div className="glow-blob left-[-10%] top-20 h-[380px] w-[380px] bg-gold-radial" />
+      <div className="glow-blob right-[-15%] top-32 h-[400px] w-[400px] bg-royal-radial" />
+      <div className="glow-blob left-1/3 bottom-[-15%] h-[320px] w-[320px] bg-emerald-radial" />
+      <div className="glow-blob right-1/4 top-1/2 h-[220px] w-[220px] bg-rose-radial" />
 
       <div className="mx-auto grid w-full max-w-7xl grid-cols-1 items-center gap-10 px-6 pb-20 sm:px-10 lg:grid-cols-2 lg:gap-6">
         {/* Left: copy */}

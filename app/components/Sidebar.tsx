@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   LayoutDashboard, Wallet, BarChart3, Banknote,
-  Settings, ShieldCheck, Home,
+  Settings, ShieldCheck, Home, User,
 } from "lucide-react";
 
 type NavItem = {
@@ -16,17 +16,16 @@ type NavItem = {
 
 const mainLinks: NavItem[] = [
   { icon: LayoutDashboard, label: "Overview", href: "/dashboard" },
-  { icon: Wallet, label: "Accounts", href: "/dashboard" },
-  { icon: BarChart3, label: "Trades", href: "/dashboard" },
-  { icon: Banknote, label: "Payouts", href: "/dashboard" },
-  { icon: Settings, label: "Settings", href: "/dashboard" },
+  { icon: Wallet, label: "Accounts", href: "/dashboard#accounts" },
+  { icon: BarChart3, label: "Trades", href: "/dashboard#trades" },
+  { icon: Banknote, label: "Payouts", href: "/dashboard#payouts" },
 ];
 
 const adminLinks: NavItem[] = [
   { icon: ShieldCheck, label: "Admin Console", href: "/admin" },
 ];
 
-export default function Sidebar({ isAdmin, onSettingsClick }: { isAdmin?: boolean; onSettingsClick?: () => void }) {
+export default function Sidebar({ isAdmin, onSettingsClick, profileName }: { isAdmin?: boolean; onSettingsClick?: () => void; profileName?: string }) {
   const pathname = usePathname();
 
   function isActive(item: NavItem) {
@@ -52,22 +51,7 @@ export default function Sidebar({ isAdmin, onSettingsClick }: { isAdmin?: boolea
         </div>
         <ul className="space-y-1">
           {mainLinks.map((item) => {
-            const active = isActive(item) && item.label === "Overview" && pathname === "/dashboard";
-            const isSettingsItem = item.label === "Settings";
-
-            if (isSettingsItem) {
-              return (
-                <li key={item.label}>
-                  <button
-                    onClick={onSettingsClick}
-                    className="relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-slate-200"
-                  >
-                    <item.icon className="h-4 w-4" />
-                    <span>{item.label}</span>
-                  </button>
-                </li>
-              );
-            }
+            const active = isActive(item);
 
             return (
               <li key={item.label}>
@@ -92,6 +76,17 @@ export default function Sidebar({ isAdmin, onSettingsClick }: { isAdmin?: boolea
               </li>
             );
           })}
+          {onSettingsClick && (
+            <li>
+              <button
+                onClick={onSettingsClick}
+                className="relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-slate-200"
+              >
+                <Settings className="h-4 w-4" />
+                <span>Settings</span>
+              </button>
+            </li>
+          )}
         </ul>
 
         {/* Admin section */}
@@ -133,6 +128,12 @@ export default function Sidebar({ isAdmin, onSettingsClick }: { isAdmin?: boolea
 
       {/* Bottom home link */}
       <div className="border-t border-white/[0.06] px-3 py-4">
+        {profileName && (
+          <div className="mb-2 flex items-center gap-2 px-3 py-1.5 text-sm text-slate-300">
+            <User className="h-4 w-4 text-gold" />
+            <span className="truncate">{profileName}</span>
+          </div>
+        )}
         <Link
           href="/"
           className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-slate-200"

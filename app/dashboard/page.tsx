@@ -194,7 +194,7 @@ export default function Dashboard() {
         {loading ? (
           <SkeletonGrid />
         ) : accounts && accounts.length > 0 ? (
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div id="accounts" className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {accounts.map((a) => (
               <AccountCard key={a.id} account={a} onWithdraw={() => setWithdrawFor(a)} />
             ))}
@@ -335,7 +335,7 @@ function AccountCard({ account: a, onWithdraw }: { account: Account; onWithdraw:
 
 function PayoutHistory({ payouts }: { payouts: Payout[] }) {
   return (
-    <section className="mt-8">
+    <section id="payouts" className="mt-8">
       <div className="mb-3 flex items-center gap-2">
         <Banknote className="h-4 w-4 text-gold" />
         <h2 className="font-display text-xl font-bold text-white">Withdrawals</h2>
@@ -376,7 +376,7 @@ function TradesSection({ trades }: { trades: Trade[] }) {
   const winRate = closed.length ? Math.round((wins / closed.length) * 100) : 0;
 
   return (
-    <section className="mt-8">
+    <section id="trades" className="mt-8">
       <div className="mb-3 flex items-center gap-2">
         <BarChart3 className="h-4 w-4 text-gold" />
         <h2 className="font-display text-xl font-bold text-white">Trade History</h2>

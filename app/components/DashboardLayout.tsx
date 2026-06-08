@@ -22,7 +22,7 @@ export default function DashboardLayout({
     <div className="flex min-h-screen">
       {/* Desktop sidebar */}
       <div className="hidden lg:fixed lg:inset-y-0 lg:z-40 lg:flex lg:w-64">
-        <Sidebar isAdmin={isAdmin} onSettingsClick={onSettingsClick} />
+        <Sidebar isAdmin={isAdmin} onSettingsClick={onSettingsClick} profileName={profileName} />
       </div>
 
       {/* Mobile top bar */}
@@ -61,10 +61,10 @@ export default function DashboardLayout({
               transition={{ type: "spring", bounce: 0.15, duration: 0.4 }}
               className="fixed inset-y-0 left-0 z-50 w-64 lg:hidden"
             >
-              <Sidebar isAdmin={isAdmin} onSettingsClick={() => { onSettingsClick?.(); setMobileOpen(false); }} />
+              <Sidebar isAdmin={isAdmin} onSettingsClick={() => { onSettingsClick?.(); setMobileOpen(false); }} profileName={profileName} />
               <button
                 onClick={() => setMobileOpen(false)}
-                className="absolute right-3 top-5 grid h-8 w-8 place-items-center rounded-full border border-white/10 bg-white/5 text-slate-400 hover:text-white"
+                className="absolute right-2 top-[72px] grid h-8 w-8 place-items-center rounded-full border border-white/10 bg-white/5 text-slate-400 hover:text-white"
                 aria-label="Close menu"
               >
                 <X className="h-4 w-4" />
