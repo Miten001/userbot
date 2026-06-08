@@ -6,6 +6,7 @@ import {
   ShieldCheck, RefreshCw, Crown, DollarSign, Users, Trophy,
   AlertTriangle, Banknote, Check, X, Zap, Lock, ChevronRight,
 } from "lucide-react";
+import DashboardLayout from "@/app/components/DashboardLayout";
 
 /* ───────────────────────── types ───────────────────────── */
 
@@ -131,34 +132,34 @@ export default function AdminDashboard() {
   if (state === "forbidden") return <Forbidden />;
 
   return (
-    <main className="relative min-h-screen overflow-hidden pb-24 pt-12">
-      <div className="glow-blob -left-24 top-12 h-[420px] w-[420px] bg-gold-radial" />
-      <div className="glow-blob -right-24 top-1/3 h-[420px] w-[420px] bg-royal-radial" />
+    <DashboardLayout isAdmin={true}>
+      <div className="relative min-h-screen overflow-hidden pb-24">
+        <div className="glow-blob -left-24 top-12 h-[420px] w-[420px] bg-gold-radial" />
+        <div className="glow-blob -right-24 top-1/3 h-[420px] w-[420px] bg-royal-radial" />
 
-      <div className="relative mx-auto w-full max-w-6xl px-6 sm:px-10">
-        {/* Header */}
-        <div className="mb-8 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
-          <div>
-            <Link href="/" className="text-xs text-slate-400 hover:text-gold">← Back to site</Link>
-            <h1 className="h-display mt-2 flex items-center gap-3 text-4xl sm:text-5xl">
-              <ShieldCheck className="h-9 w-9 text-gold" />
-              Admin <span className="gradient-text">Console</span>
-            </h1>
+        <div className="relative mx-auto w-full max-w-6xl">
+          {/* Header */}
+          <div className="mb-8 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
+            <div>
+              <h1 className="h-display mt-2 flex items-center gap-3 text-4xl sm:text-5xl">
+                <ShieldCheck className="h-9 w-9 text-gold" />
+                Admin <span className="gradient-text">Console</span>
+              </h1>
+            </div>
+            <div className="flex items-center gap-2">
+              <Link href="/admin/setup" className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs text-slate-300 hover:border-gold/40 hover:text-white">
+                Setup status
+              </Link>
+              <button onClick={runSync} disabled={busy === "sync"} className="btn-primary disabled:opacity-60">
+                <Zap className={`h-4 w-4 ${busy === "sync" ? "animate-pulse" : ""}`} />
+                Run Sync
+              </button>
+              <button onClick={load} className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs text-slate-300 hover:border-gold/40 hover:text-white">
+                <RefreshCw className={`h-3.5 w-3.5 ${state === "loading" ? "animate-spin" : ""}`} />
+                Refresh
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Link href="/admin/setup" className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs text-slate-300 hover:border-gold/40 hover:text-white">
-              Setup status
-            </Link>
-            <button onClick={runSync} disabled={busy === "sync"} className="btn-primary disabled:opacity-60">
-              <Zap className={`h-4 w-4 ${busy === "sync" ? "animate-pulse" : ""}`} />
-              Run Sync
-            </button>
-            <button onClick={load} className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs text-slate-300 hover:border-gold/40 hover:text-white">
-              <RefreshCw className={`h-3.5 w-3.5 ${state === "loading" ? "animate-spin" : ""}`} />
-              Refresh
-            </button>
-          </div>
-        </div>
 
         {state === "demo" && (
           <div className="mb-6 flex items-start gap-3 rounded-2xl border border-gold/30 bg-gold/[0.06] p-4 text-sm text-slate-300">
@@ -282,7 +283,8 @@ export default function AdminDashboard() {
           {toast.msg}
         </div>
       )}
-    </main>
+      </div>
+    </DashboardLayout>
   );
 }
 

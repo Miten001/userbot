@@ -1,0 +1,28 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Add a professional sidebar navigation to the Dashboard and Admin pages. Create a shared DashboardLayout component with a collapsible sidebar that provides navigation between Dashboard sections (Overview, Accounts, Trades, Payouts, Settings) and Admin sections (Console, Accounts, Payouts, Setup). The sidebar should use the existing luxury dark theme with glass morphism, gold accents, and smooth animations.",
+  "status": "in_progress",
+  "steps": [
+    "Create app/components/Sidebar.tsx - A responsive sidebar component with: logo at top, navigation links with lucide-react icons (LayoutDashboard for Overview, Wallet for Accounts, BarChart3 for Trades, Banknote for Payouts, Settings for Settings), active state highlighting with gold accent, collapse/expand toggle for mobile, glass morphism background matching the site theme (bg-bg-soft/90 border-r border-white/10 backdrop-blur-2xl), user profile section at bottom, and smooth framer-motion transitions. Include admin-only links (ShieldCheck for Admin Console) that show conditionally.",
+    "Create app/components/DashboardLayout.tsx - A layout wrapper that combines the Sidebar with a main content area. It should have: sidebar on the left (w-64 on desktop, hidden on mobile with hamburger toggle), main content area with proper padding, a top bar on mobile showing logo + hamburger button, and responsive breakpoints (sidebar visible on lg+, overlay on mobile).",
+    "Update app/dashboard/page.tsx - Wrap the existing dashboard content with the new DashboardLayout component. Remove the 'Back to site' link since the sidebar now handles navigation. Keep all existing functionality (accounts, trades, payouts, modals) intact. The main content area should no longer have the full-width max-w-6xl container since the layout handles that.",
+    "Update app/admin/page.tsx - Wrap the existing admin content with the DashboardLayout component (passing an isAdmin prop). Remove the 'Back to site' link. Keep all existing admin functionality intact.",
+    "Add sidebar-related utility styles to app/globals.css if needed (e.g., sidebar transition classes, overlay backdrop for mobile sidebar)."
+  ],
+  "acceptance_criteria": [
+    "Dashboard page renders with a sidebar on the left containing navigation links",
+    "Admin page renders with a sidebar showing admin-specific navigation links",
+    "Sidebar is collapsible/hideable on mobile screens with a hamburger toggle",
+    "Sidebar uses the existing luxury dark theme - glass morphism, gold accents, proper dark backgrounds",
+    "Active navigation item is visually highlighted",
+    "The build passes without TypeScript errors (npx next build)",
+    "All existing dashboard and admin functionality remains intact"
+  ],
+  "verification": [
+    "Run: cd /projects/sandbox/userbot && npx next build",
+    "Run: cd /projects/sandbox/userbot && npx next lint"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}
