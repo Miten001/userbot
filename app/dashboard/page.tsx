@@ -187,7 +187,7 @@ export default function Dashboard() {
             <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-gold" />
             <div>
               <strong className="text-gold">Demo Mode active.</strong>{" "}
-              You&apos;re seeing simulated data. Add Stripe + Supabase env vars in Vercel to switch to live mode.{" "}
+              You&apos;re seeing simulated data. Add Razorpay/NOWPayments + Supabase env vars in Vercel to switch to live mode.{" "}
               <Link href="/admin/setup" className="font-semibold text-gold underline">Setup status →</Link>
             </div>
           </div>
