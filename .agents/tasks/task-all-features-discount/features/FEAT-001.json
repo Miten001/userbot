@@ -2,7 +2,7 @@
   "id": "FEAT-001",
   "type": "feat",
   "description": "Add Leaderboard, Certificates, Referral Program, and Competition/Tournaments pages - all as new dashboard pages with demo data following the existing dark luxury design pattern.",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Create app/dashboard/leaderboard/page.tsx - Top traders ranking page showing profit %, win rate, total profit, account size. Use demo data array of 15-20 traders with realistic names/stats. Include a podium-style top 3 with gold/silver/bronze accents, then a table for the rest. Use motion animations, glow-blob backgrounds, gradient-text headings.",
     "Create app/dashboard/certificates/page.tsx - Page showing user's earned certificates (challenge pass certificates). Each certificate is a card showing challenge type, account size, date passed, with a 'Download Certificate' button. Use demo data for 2-3 certificates. Include a visually rich certificate preview card with gold border and the ApexFunded logo.",
@@ -21,5 +21,5 @@
     "Run npm run build and confirm it succeeds without errors"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "All 4 pages created and Sidebar updated. Build succeeds with no TypeScript errors. All tests pass. Swords icon from lucide-react used for Competitions."
 }
