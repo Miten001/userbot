@@ -217,4 +217,4 @@ Pehli baar setup karne me **40 min** lagenge — kuch confusion ho to bilkul nor
 1. Screenshot bhejo
 2. Mai exact line fix bata dunga
 
-Agar Stripe ya Supabase ka koi specific step pe atak gaye — **bata do step number**, mai detailed walkthrough deta hu.
+Agar Razorpay/NOWPayments ya Supabase ka koi specific step pe atak gaye — **bata do step number**, mai detailed walkthrough deta hu.

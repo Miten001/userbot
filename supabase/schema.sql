@@ -37,7 +37,7 @@ create trigger on_auth_user_created
   for each row execute procedure public.handle_new_user();
 
 -- ──────────────────────────────────────────────────────────────────────
--- Challenges: a purchase made by a user (one row per Stripe checkout)
+-- Challenges: a purchase made by a user (one row per checkout)
 -- ──────────────────────────────────────────────────────────────────────
 create type challenge_step  as enum ('one','two','three');
 create type challenge_state as enum ('pending','active','passed','failed','funded','refunded');
