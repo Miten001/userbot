@@ -7,6 +7,7 @@ import {
   LayoutDashboard, Wallet, BarChart3, Banknote,
   Settings, ShieldCheck, Home, User,
   Trophy, Award, Users, Swords,
+  Gift, Layers, PieChart, BadgeCheck, Activity,
 } from "lucide-react";
 import NotificationBell from "./NotificationBell";
 
@@ -32,6 +33,14 @@ const adminLinks: NavItem[] = [
   { icon: ShieldCheck, label: "Admin Console", href: "/admin" },
 ];
 
+const toolsLinks: NavItem[] = [
+  { icon: Gift, label: "Free Trial", href: "/dashboard/free-trial" },
+  { icon: Layers, label: "Scaling", href: "/dashboard/scaling" },
+  { icon: PieChart, label: "Stats", href: "/dashboard/stats" },
+  { icon: BadgeCheck, label: "Payout Proof", href: "/dashboard/payout-proof" },
+  { icon: Activity, label: "Live Tracking", href: "/dashboard/live-tracking" },
+];
+
 export default function Sidebar({ isAdmin, profileName, collapsed }: { isAdmin?: boolean; profileName?: string; collapsed?: boolean }) {
   const pathname = usePathname();
 
@@ -45,6 +54,24 @@ export default function Sidebar({ isAdmin, profileName, collapsed }: { isAdmin?:
     return (
       <nav className="flex flex-1 flex-col items-center gap-1 py-2">
         {mainLinks.map((item) => {
+          const active = isActive(item);
+          return (
+            <Link
+              key={item.label}
+              href={item.href}
+              title={item.label}
+              className={`grid h-10 w-10 place-items-center rounded-xl transition-colors ${
+                active
+                  ? "bg-gold/10 text-gold"
+                  : "text-slate-400 hover:bg-white/[0.04] hover:text-slate-200"
+              }`}
+            >
+              <item.icon className="h-5 w-5" />
+            </Link>
+          );
+        })}
+        <div className="my-2 h-px w-6 bg-white/10" />
+        {toolsLinks.map((item) => {
           const active = isActive(item);
           return (
             <Link
@@ -131,6 +158,39 @@ export default function Sidebar({ isAdmin, profileName, collapsed }: { isAdmin?:
                   {active && (
                     <motion.div
                       layoutId="sidebar-active"
+                      className="absolute inset-0 rounded-xl bg-gold/10"
+                      transition={{ type: "spring", bounce: 0.2, duration: 0.5 }}
+                    />
+                  )}
+                  <item.icon className={`relative h-4 w-4 ${active ? "text-gold" : ""}`} />
+                  <span className="relative">{item.label}</span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+
+        {/* Tools section */}
+        <div className="mb-2 mt-6 px-3 text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+          Tools
+        </div>
+        <ul className="space-y-1">
+          {toolsLinks.map((item) => {
+            const active = isActive(item);
+
+            return (
+              <li key={item.label}>
+                <Link
+                  href={item.href}
+                  className={`relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors ${
+                    active
+                      ? "border-l-2 border-gold bg-gold/10 text-gold"
+                      : "text-slate-400 hover:bg-white/[0.04] hover:text-slate-200"
+                  }`}
+                >
+                  {active && (
+                    <motion.div
+                      layoutId="sidebar-active-tools"
                       className="absolute inset-0 rounded-xl bg-gold/10"
                       transition={{ type: "spring", bounce: 0.2, duration: 0.5 }}
                     />

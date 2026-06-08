@@ -1,0 +1,26 @@
+{
+  "id": "FEAT-002",
+  "type": "feat",
+  "description": "Add Free Trial, Scaling Plan, Trading Stats Dashboard, Payout Proof, and Live Account Tracking pages - all as new pages with demo data matching the existing design system.",
+  "status": "in_progress",
+  "steps": [
+    "Create app/dashboard/free-trial/page.tsx - Free trial / demo challenge page. Explain the concept (try a challenge without payment), show a CTA button to start a free $10K demo challenge, show trial rules (same rules as real but no payout), and a demo trial progress card showing current status. Use the same card/glass styling as other dashboard pages.",
+    "Create app/dashboard/scaling/page.tsx - Scaling plan page showing how funded traders can grow their account size with consistent profits. Show scaling tiers (e.g. $50K -> $100K -> $200K -> $400K), requirements for each tier (consecutive profitable months, min profit %), current user progress toward next tier, and benefits of scaling. Use a visual progress/timeline design with gold accents.",
+    "Create app/dashboard/stats/page.tsx - Advanced trading stats dashboard. Show win rate donut/percentage, average profit per trade, best performing pair, worst pair, average holding time, max drawdown, profit factor, Sharpe ratio. Use demo data. Include small chart visualizations (can reuse EquityCurve/PnLChart patterns). Show a drawdown graph.",
+    "Create app/dashboard/payout-proof/page.tsx - Public showcase of successful payouts. Show a grid of payout proof cards (trader name partially masked, amount, date, method, a 'verified' badge). Use demo data with 8-10 payout proofs. Include total paid out stat at the top. This is a social proof page.",
+    "Create app/dashboard/live-tracking/page.tsx - Real-time P&L tracker page. Show current open positions (symbol, side, volume, unrealized P&L), account equity in real-time (simulated with demo data that updates), daily P&L bar, and a live equity line chart. Use useState with setInterval to simulate real-time updates every 2-3 seconds on the equity value.",
+    "Update app/components/Sidebar.tsx - Add navigation items: Free Trial (Gift icon), Scaling Plan (TrendingUp icon or Layers icon), Stats (PieChart icon), Payout Proof (BadgeCheck icon), Live Tracking (Activity icon). Add these to a new 'Tools' section in the sidebar below the main menu items."
+  ],
+  "acceptance_criteria": [
+    "All five new pages render without errors",
+    "Sidebar shows new navigation items organized in a 'Tools' section",
+    "Live tracking page simulates real-time P&L updates",
+    "Pages follow existing dark luxury design pattern",
+    "npm run build succeeds with no TypeScript errors"
+  ],
+  "verification": [
+    "Run npm run build and confirm it succeeds without errors"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}
