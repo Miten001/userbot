@@ -16,22 +16,23 @@ type NavItem = {
 
 const mainLinks: NavItem[] = [
   { icon: LayoutDashboard, label: "Overview", href: "/dashboard" },
-  { icon: Wallet, label: "Accounts", href: "/dashboard#accounts" },
-  { icon: BarChart3, label: "Trades", href: "/dashboard#trades" },
-  { icon: Banknote, label: "Payouts", href: "/dashboard#payouts" },
+  { icon: Wallet, label: "Accounts", href: "/dashboard/accounts" },
+  { icon: BarChart3, label: "Trades", href: "/dashboard/trades" },
+  { icon: Banknote, label: "Payouts", href: "/dashboard/payouts" },
+  { icon: Settings, label: "Settings", href: "/dashboard/settings" },
 ];
 
 const adminLinks: NavItem[] = [
   { icon: ShieldCheck, label: "Admin Console", href: "/admin" },
 ];
 
-export default function Sidebar({ isAdmin, onSettingsClick, profileName }: { isAdmin?: boolean; onSettingsClick?: () => void; profileName?: string }) {
+export default function Sidebar({ isAdmin, profileName }: { isAdmin?: boolean; profileName?: string }) {
   const pathname = usePathname();
 
   function isActive(item: NavItem) {
     if (item.href === "/admin") return pathname === "/admin";
     if (item.href === "/dashboard") return pathname === "/dashboard";
-    return false;
+    return pathname.startsWith(item.href);
   }
 
   return (
@@ -76,17 +77,6 @@ export default function Sidebar({ isAdmin, onSettingsClick, profileName }: { isA
               </li>
             );
           })}
-          {onSettingsClick && (
-            <li>
-              <button
-                onClick={onSettingsClick}
-                className="relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-slate-200"
-              >
-                <Settings className="h-4 w-4" />
-                <span>Settings</span>
-              </button>
-            </li>
-          )}
         </ul>
 
         {/* Admin section */}

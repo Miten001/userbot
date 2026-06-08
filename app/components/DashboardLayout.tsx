@@ -9,12 +9,10 @@ export default function DashboardLayout({
   children,
   isAdmin,
   profileName,
-  onSettingsClick,
 }: {
   children: React.ReactNode;
   isAdmin?: boolean;
   profileName?: string;
-  onSettingsClick?: () => void;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -22,7 +20,7 @@ export default function DashboardLayout({
     <div className="flex min-h-screen">
       {/* Desktop sidebar */}
       <div className="hidden lg:fixed lg:inset-y-0 lg:z-40 lg:flex lg:w-64">
-        <Sidebar isAdmin={isAdmin} onSettingsClick={onSettingsClick} profileName={profileName} />
+        <Sidebar isAdmin={isAdmin} profileName={profileName} />
       </div>
 
       {/* Mobile top bar */}
@@ -61,7 +59,7 @@ export default function DashboardLayout({
               transition={{ type: "spring", bounce: 0.15, duration: 0.4 }}
               className="fixed inset-y-0 left-0 z-50 w-64 lg:hidden"
             >
-              <Sidebar isAdmin={isAdmin} onSettingsClick={() => { onSettingsClick?.(); setMobileOpen(false); }} profileName={profileName} />
+              <Sidebar isAdmin={isAdmin} profileName={profileName} />
               <button
                 onClick={() => setMobileOpen(false)}
                 className="absolute right-2 top-[72px] grid h-8 w-8 place-items-center rounded-full border border-white/10 bg-white/5 text-slate-400 hover:text-white"
