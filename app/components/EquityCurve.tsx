@@ -1,5 +1,7 @@
 "use client";
 
+import { useId } from "react";
+
 interface DataPoint {
   date: string;
   value: number;
@@ -18,6 +20,8 @@ export default function EquityCurve({
   className = "",
   title,
 }: EquityCurveProps) {
+  const id = useId();
+
   if (data.length < 2) return null;
 
   const values = data.map((d) => d.value);
@@ -63,8 +67,8 @@ export default function EquityCurve({
   const areaPath = `${linePath} L ${points[points.length - 1].x},${padTop + chartHeight} L ${points[0].x},${padTop + chartHeight} Z`;
 
   const isUp = data[data.length - 1].value >= data[0].value;
-  const gradId = `eq-fill-${Math.random().toString(36).slice(2, 8)}`;
-  const lineGradId = `eq-line-${Math.random().toString(36).slice(2, 8)}`;
+  const gradId = `eq-fill-${id}`;
+  const lineGradId = `eq-line-${id}`;
 
   return (
     <div className={`rounded-3xl border border-white/10 bg-bg-soft/50 p-5 backdrop-blur-xl ${className}`}>

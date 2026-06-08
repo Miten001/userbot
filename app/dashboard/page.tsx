@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Crown, ChevronRight, ShieldCheck, TrendingUp, Wallet,
@@ -58,6 +58,7 @@ export default function DashboardOverview() {
   const recentTrades = trades.slice(0, 4);
   const recentPayouts = payouts.slice(0, 3);
   const fundedAccounts = accounts?.filter((a) => a.phase === "funded") ?? [];
+  const equityData = useMemo(() => generateEquityData(), []);
 
   return (
     <div className="relative min-h-screen overflow-hidden pb-24">
@@ -115,7 +116,7 @@ export default function DashboardOverview() {
 
             {/* Equity Curve - mini version */}
             <div className="mb-8">
-              <EquityCurve data={generateEquityData()} height={160} title="Equity Performance (30d)" />
+              <EquityCurve data={equityData} height={160} title="Equity Performance (30d)" />
             </div>
 
             {/* Quick Actions */}
@@ -246,11 +247,14 @@ function PayoutBadge({ status }: { status: string }) {
 function generateEquityData() {
   const data: { date: string; value: number }[] = [];
   let equity = 50000;
+  let seed = 42;
   const now = new Date();
   for (let i = 29; i >= 0; i--) {
     const d = new Date(now);
     d.setDate(d.getDate() - i);
-    const change = (Math.random() - 0.4) * 1000;
+    seed = (seed * 16807 + 0) % 2147483647;
+    const random = (seed & 0x7fffffff) / 0x7fffffff;
+    const change = (random - 0.4) * 1000;
     equity += change;
     data.push({
       date: d.toISOString().split("T")[0],

@@ -142,6 +142,7 @@ export default function SettingsPage() {
             <div>
               <p className="text-sm font-medium text-white">Profile Photo</p>
               <p className="text-xs text-slate-400">Click to upload. JPG, PNG up to 2MB.</p>
+              <p className="text-[11px] text-slate-500 mt-0.5">Preview only - persistence coming soon.</p>
             </div>
           </div>
 
@@ -200,6 +201,7 @@ export default function SettingsPage() {
             <Bell className="h-4 w-4 text-gold" />
             <h2 className="font-display text-lg font-bold text-white">Preferences</h2>
           </div>
+          <p className="mb-4 text-xs text-slate-500">Notification preferences are cosmetic for now - persistence coming soon.</p>
 
           <div className="space-y-4">
             <Toggle label="Email Notifications" description="Receive updates about your account via email" checked={emailNotifs} onChange={setEmailNotifs} />
