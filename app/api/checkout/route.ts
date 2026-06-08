@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { lookupPrice, stepLabel, type Step } from "@/lib/plans";
+import { validateCoupon } from "@/lib/coupons";
 import { dbServer, dbAdmin } from "@/lib/db";
 import { isSupabaseAdminConfigured } from "@/lib/config";
 import { isRazorpayConfigured, createPaymentLink } from "@/lib/razorpay";
@@ -25,23 +26,33 @@ import { isCryptoConfigured, createInvoice } from "@/lib/crypto-pay";
 export type CheckoutMethod = "upi" | "crypto";
 
 export async function POST(req: Request) {
-  let body: { step?: Step; account_size_usd?: number; method?: CheckoutMethod };
+  let body: { step?: Step; account_size_usd?: number; method?: CheckoutMethod; coupon_code?: string };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { step, account_size_usd } = body;
+  const { step, account_size_usd, coupon_code } = body;
   const method: CheckoutMethod = body.method === "crypto" ? "crypto" : "upi";
 
   if (!step || !account_size_usd) {
     return NextResponse.json({ error: "Missing step or account_size_usd" }, { status: 400 });
   }
 
-  const price = lookupPrice(account_size_usd, step);
-  if (price == null) {
+  const catalogPrice = lookupPrice(account_size_usd, step);
+  if (catalogPrice == null) {
     return NextResponse.json({ error: "Unknown plan" }, { status: 400 });
+  }
+
+  // Validate coupon if provided
+  let price = catalogPrice;
+  if (coupon_code) {
+    const couponResult = validateCoupon(coupon_code, catalogPrice);
+    if (!couponResult.valid) {
+      return NextResponse.json({ error: "Invalid coupon code" }, { status: 400 });
+    }
+    price = couponResult.finalPrice;
   }
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || new URL(req.url).origin;
@@ -57,6 +68,7 @@ export async function POST(req: Request) {
     url.searchParams.set("size", String(account_size_usd));
     url.searchParams.set("price", String(price));
     url.searchParams.set("method", method);
+    if (coupon_code) url.searchParams.set("coupon", coupon_code);
     return NextResponse.json({
       url: url.toString(),
       mode: "demo",
@@ -85,6 +97,7 @@ export async function POST(req: Request) {
       price_usd: price,
       gateway: method === "crypto" ? "nowpayments" : "razorpay",
       state: "pending",
+      ...(coupon_code ? { coupon_code } : {}),
     })
     .select("id")
     .single();

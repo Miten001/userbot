@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Wallet, BarChart3, Banknote,
   Settings, ShieldCheck, Home, User,
   Trophy, Award, Users, Swords,
-  Gift, Layers, PieChart, BadgeCheck, Activity,
+  Gift, Layers, PieChart, BadgeCheck, Activity, ShoppingBag,
 } from "lucide-react";
 import NotificationBell from "./NotificationBell";
 
@@ -39,6 +39,7 @@ const toolsLinks: NavItem[] = [
   { icon: PieChart, label: "Stats", href: "/dashboard/stats" },
   { icon: BadgeCheck, label: "Payout Proof", href: "/dashboard/payout-proof" },
   { icon: Activity, label: "Live Tracking", href: "/dashboard/live-tracking" },
+  { icon: ShoppingBag, label: "Add-ons", href: "/dashboard/addons" },
 ];
 
 export default function Sidebar({ isAdmin, profileName, collapsed }: { isAdmin?: boolean; profileName?: string; collapsed?: boolean }) {

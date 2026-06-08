@@ -12,13 +12,13 @@ function parseSize(s: string) {
   return parseInt(s.replace(/[^0-9]/g, ""), 10);
 }
 
-async function startCheckout(step: Step, size: string, method: Method): Promise<void> {
+async function startCheckout(step: Step, size: string, method: Method, couponCode?: string): Promise<void> {
   const account_size_usd = parseSize(size);
   try {
     const res = await fetch("/api/checkout", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ step, account_size_usd, method }),
+      body: JSON.stringify({ step, account_size_usd, method, ...(couponCode ? { coupon_code: couponCode } : {}) }),
     });
 
     if (res.status === 401) {
@@ -249,12 +249,41 @@ function PlanCard({ plan, onStart }: { plan: Plan; onStart: () => void }) {
 
 function MethodModal({ data, onClose }: { data: { step: Step; plan: Plan }; onClose: () => void }) {
   const [loading, setLoading] = useState<Method | null>(null);
+  const [couponCode, setCouponCode] = useState("");
+  const [couponLoading, setCouponLoading] = useState(false);
+  const [couponResult, setCouponResult] = useState<{
+    valid: boolean;
+    discount: number;
+    finalPrice: number;
+    message: string;
+  } | null>(null);
+
+  const planPrice = parseSize(data.plan.price);
+
+  async function applyCoupon() {
+    if (!couponCode.trim() || couponLoading) return;
+    setCouponLoading(true);
+    try {
+      const res = await fetch("/api/coupon/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: couponCode.trim(), price_usd: planPrice }),
+      });
+      const result = await res.json();
+      setCouponResult(result);
+    } catch {
+      setCouponResult({ valid: false, discount: 0, finalPrice: planPrice, message: "Failed to validate coupon" });
+    } finally {
+      setCouponLoading(false);
+    }
+  }
 
   async function pick(method: Method) {
     if (loading) return;
     setLoading(method);
     try {
-      await startCheckout(data.step, data.plan.size, method);
+      const validCoupon = couponResult?.valid ? couponCode.trim() : undefined;
+      await startCheckout(data.step, data.plan.size, method, validCoupon);
     } finally {
       setLoading(null);
     }
@@ -280,9 +309,43 @@ function MethodModal({ data, onClose }: { data: { step: Step; plan: Plan }; onCl
 
         <div className="text-xs uppercase tracking-wider text-slate-400">Checkout</div>
         <div className="mt-1 font-display text-2xl font-bold">
-          {data.plan.size} <span className="text-slate-500">·</span> <span className="gradient-text">{data.plan.price}</span>
+          {data.plan.size} <span className="text-slate-500">&middot;</span>{" "}
+          {couponResult?.valid ? (
+            <>
+              <span className="text-slate-500 line-through">{data.plan.price}</span>{" "}
+              <span className="text-emerald2-400">${couponResult.finalPrice}</span>
+            </>
+          ) : (
+            <span className="gradient-text">{data.plan.price}</span>
+          )}
         </div>
         <p className="mt-1 text-sm text-slate-400">Choose how you&apos;d like to pay:</p>
+
+        {/* Coupon code input */}
+        <div className="mt-4">
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={couponCode}
+              onChange={(e) => setCouponCode(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && applyCoupon()}
+              placeholder="Coupon code"
+              className="flex-1 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm text-white placeholder-slate-500 outline-none transition focus:border-gold/40"
+            />
+            <button
+              onClick={applyCoupon}
+              disabled={couponLoading || !couponCode.trim()}
+              className="rounded-xl border border-white/10 bg-white/[0.06] px-4 py-2.5 text-sm font-semibold text-white transition hover:border-gold/40 hover:bg-white/10 disabled:opacity-50"
+            >
+              {couponLoading ? "..." : "Apply"}
+            </button>
+          </div>
+          {couponResult && (
+            <p className={`mt-2 text-xs ${couponResult.valid ? "text-emerald2-400" : "text-rose2-400"}`}>
+              {couponResult.message}
+            </p>
+          )}
+        </div>
 
         <div className="mt-5 space-y-3">
           <button
@@ -314,7 +377,7 @@ function MethodModal({ data, onClose }: { data: { step: Step; plan: Plan }; onCl
           </button>
         </div>
 
-        <p className="mt-4 text-center text-[11px] text-slate-500">Secure hosted checkout · one-time evaluation fee</p>
+        <p className="mt-4 text-center text-[11px] text-slate-500">Secure hosted checkout &middot; one-time evaluation fee</p>
       </motion.div>
     </motion.div>
   );

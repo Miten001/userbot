@@ -269,3 +269,8 @@ alter table public.challenges
 do $$ begin
   alter table public.challenges alter column stripe_session_id drop not null;
 exception when others then null; end $$;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- COUPON CODE SUPPORT
+-- ══════════════════════════════════════════════════════════════════════
+alter table public.challenges add column if not exists coupon_code text;
