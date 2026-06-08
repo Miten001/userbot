@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import {
   LayoutDashboard, Wallet, BarChart3, Banknote,
   Settings, ShieldCheck, Home, User,
+  Trophy, Award, Users, Swords,
 } from "lucide-react";
 import NotificationBell from "./NotificationBell";
 
@@ -20,6 +21,10 @@ const mainLinks: NavItem[] = [
   { icon: Wallet, label: "Accounts", href: "/dashboard/accounts" },
   { icon: BarChart3, label: "Trades", href: "/dashboard/trades" },
   { icon: Banknote, label: "Payouts", href: "/dashboard/payouts" },
+  { icon: Trophy, label: "Leaderboard", href: "/dashboard/leaderboard" },
+  { icon: Award, label: "Certificates", href: "/dashboard/certificates" },
+  { icon: Users, label: "Referral", href: "/dashboard/referral" },
+  { icon: Swords, label: "Competitions", href: "/dashboard/competitions" },
   { icon: Settings, label: "Settings", href: "/dashboard/settings" },
 ];
 

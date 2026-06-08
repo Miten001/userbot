@@ -1,0 +1,25 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Add Leaderboard, Certificates, Referral Program, and Competition/Tournaments pages - all as new dashboard pages with demo data following the existing dark luxury design pattern.",
+  "status": "in_progress",
+  "steps": [
+    "Create app/dashboard/leaderboard/page.tsx - Top traders ranking page showing profit %, win rate, total profit, account size. Use demo data array of 15-20 traders with realistic names/stats. Include a podium-style top 3 with gold/silver/bronze accents, then a table for the rest. Use motion animations, glow-blob backgrounds, gradient-text headings.",
+    "Create app/dashboard/certificates/page.tsx - Page showing user's earned certificates (challenge pass certificates). Each certificate is a card showing challenge type, account size, date passed, with a 'Download Certificate' button. Use demo data for 2-3 certificates. Include a visually rich certificate preview card with gold border and the ApexFunded logo.",
+    "Create app/dashboard/referral/page.tsx - Referral/Affiliate program page. Show referral link (copyable), referral stats (total referrals, earned commission, pending commission), referral history table with referred user name, date, status, commission. Use demo data. Include a 'How it works' section with 3 steps.",
+    "Create app/dashboard/competitions/page.tsx - Monthly trading competitions page. Show active competitions (card with prize pool, participants, time remaining, entry fee), past competitions (results table), and user's competition history. Use demo data for 2-3 competitions.",
+    "Update app/components/Sidebar.tsx - Add new navigation items to mainLinks array: Leaderboard (Trophy icon), Certificates (Award icon), Referral (Users icon), Competitions (Swords icon). Place them after Payouts and before Settings."
+  ],
+  "acceptance_criteria": [
+    "All four new pages render without errors",
+    "Sidebar shows new navigation items with correct icons and links",
+    "Pages follow existing dark luxury design pattern (bg-deep, glow-blobs, gradient-text, glass cards)",
+    "Each page has demo data that looks realistic",
+    "npm run build succeeds with no TypeScript errors"
+  ],
+  "verification": [
+    "Run npm run build and confirm it succeeds without errors"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}
