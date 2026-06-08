@@ -2,38 +2,28 @@
  * Backend configuration helpers.
  *
  * The site is designed to run in two modes:
- *   • DEMO mode  — no Stripe / Supabase keys set. Checkout simulates a
+ *   • DEMO mode  — no payment / Supabase keys set. Checkout simulates a
  *                  successful purchase and the dashboard shows a fake account.
  *                  Perfect for showing the site to clients before going live.
- *   • LIVE mode  — all keys set. Real Stripe checkout, real DB, real MT5.
+ *   • LIVE mode  — keys set. Real UPI/crypto checkout, real DB, real MT5.
+ *
+ * Payments use Razorpay (UPI/cards, India) and NOWPayments (crypto).
  *
  * We never throw at module-load time — env vars are read lazily so the build
  * doesn't fail when keys aren't configured yet.
  */
 
-export function isStripeConfigured(): boolean {
-  return Boolean(
-    process.env.STRIPE_SECRET_KEY &&
-      process.env.STRIPE_SECRET_KEY.startsWith("sk_") &&
-      process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY,
-  );
-}
+import { isRazorpayConfigured } from "@/lib/razorpay";
+import { isCryptoConfigured } from "@/lib/crypto-pay";
 
 export function isSupabaseConfigured(): boolean {
   return Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL &&
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
   );
 }
 
 export function isSupabaseAdminConfigured(): boolean {
-  return Boolean(
-    isSupabaseConfigured() && process.env.SUPABASE_SERVICE_ROLE_KEY,
-  );
-}
-
-export function isWebhookConfigured(): boolean {
-  return Boolean(process.env.STRIPE_WEBHOOK_SECRET);
+  return Boolean(isSupabaseConfigured() && process.env.SUPABASE_SERVICE_ROLE_KEY);
 }
 
 export function isMetaApiConfigured(): boolean {
@@ -48,23 +38,23 @@ export function isEmailConfigured(): boolean {
   return Boolean(process.env.RESEND_API_KEY);
 }
 
+/** Any payment gateway available? */
+export function isPaymentConfigured(): boolean {
+  return isRazorpayConfigured() || isCryptoConfigured();
+}
+
 export function isLiveMode(): boolean {
-  return (
-    isStripeConfigured() &&
-    isSupabaseConfigured() &&
-    isSupabaseAdminConfigured() &&
-    isWebhookConfigured()
-  );
+  return isSupabaseAdminConfigured() && isPaymentConfigured();
 }
 
 /** Returns a per-feature status object — used by the /api/health route. */
 export function configStatus() {
   return {
     mode: isLiveMode() ? "live" : "demo",
-    stripe: isStripeConfigured(),
     supabase_anon: isSupabaseConfigured(),
     supabase_admin: isSupabaseAdminConfigured(),
-    stripe_webhook: isWebhookConfigured(),
+    razorpay: isRazorpayConfigured(),
+    crypto: isCryptoConfigured(),
     metaapi: isMetaApiConfigured(),
     cron: isCronConfigured(),
     email: isEmailConfigured(),

@@ -12,7 +12,8 @@ Cost: **$0** (test mode). Production ke liye baad me upgrade.
 | 1 | **GitHub** | ✅ Already hai | Code repo |
 | 2 | **Vercel** | ✅ Free | Site hosting + backend |
 | 3 | **Supabase** | ✅ Free | Database (users, payments) |
-| 4 | **Stripe** | ✅ Free (test mode) | Payment gateway |
+| 4 | **Razorpay** | ✅ Free (test mode) | UPI / cards payment |
+| 4b | **NOWPayments** | ✅ Free | Crypto payment |
 | 5 | **MetaApi** (optional) | 💸 $39/mo | Real MT5 accounts |
 
 ---
@@ -88,18 +89,21 @@ Cost: **$0** (test mode). Production ke liye baad me upgrade.
 
 ---
 
-### Step 3️⃣ — Stripe Setup (10 min)
+### Step 3️⃣ — Payment Gateways (10 min)
 
-**Kya hoga:** Payment gateway ready hoga. Test mode me **fake card numbers** se test kar sakte ho.
+**Kya hoga:** UPI (Razorpay) aur Crypto (NOWPayments) — kam se kam ek setup karo.
 
-1. [stripe.com](https://stripe.com) jao → "Start now" / Sign up
-2. Email + password se account banao
-3. Country/business info skip kar sakte ho — direct dashboard pe jao
-4. ⚠️ **Top-right toggle "Test mode" ON rakhna** (orange dikhega)
-5. Left sidebar → **Developers** → **API keys**
-6. Yeh 2 keys copy karo:
-   - **Publishable key** (`pk_test_...`)
-   - **Secret key** (`sk_test_...` — "Reveal" click karo)
+#### 3a. Razorpay (UPI / cards)
+1. [razorpay.com](https://razorpay.com) → Sign up
+2. ⚠️ Top-left **"Test Mode" ON** rakhna
+3. **Settings → API Keys → Generate Test Key**
+4. Copy karo: **Key Id** (`rzp_test_...`) aur **Key Secret**
+
+#### 3b. NOWPayments (crypto)
+1. [nowpayments.io](https://nowpayments.io) → Sign up
+2. Apna **crypto wallet address** add karo (jahan payout aayega, e.g. USDT TRC-20)
+3. **Store Settings → API Keys** → API key copy karo
+4. **Store Settings → IPN** → "IPN secret key" generate karke copy karo
 
 ---
 
@@ -115,11 +119,12 @@ NEXT_PUBLIC_SITE_URL = https://your-site.vercel.app
 NEXT_PUBLIC_SUPABASE_URL = https://xxxx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY = eyJ...(anon public key)
 SUPABASE_SERVICE_ROLE_KEY = eyJ...(service_role key)
-STRIPE_SECRET_KEY = sk_test_...
-NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = pk_test_...
+RAZORPAY_KEY_ID = rzp_test_...
+RAZORPAY_KEY_SECRET = ...(key secret)
+NOWPAYMENTS_API_KEY = ...(nowpayments api key)
 ```
 
-(`STRIPE_WEBHOOK_SECRET` aur `METAAPI_TOKEN` baad me add karenge)
+(`RAZORPAY_WEBHOOK_SECRET`, `NOWPAYMENTS_IPN_SECRET` aur `METAAPI_TOKEN` Step 5 me add karenge)
 
 3. **Save** karo har ek ke baad
 4. Top right **Deployments** tab → latest deployment ke 3 dots → **"Redeploy"** click karo
@@ -127,46 +132,38 @@ NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = pk_test_...
 
 ---
 
-### Step 5️⃣ — Stripe Webhook Setup (5 min)
+### Step 5️⃣ — Webhooks Setup (5 min)
 
-**Kya hoga:** Payment ke baad Stripe automatically aapke backend ko inform karega taaki MT5 account ban jaye.
+**Kya hoga:** Payment ke baad gateway automatically aapke backend ko inform karega taaki MT5 account ban jaye.
 
-1. Stripe dashboard → **Developers** → **Webhooks**
-2. **"Add endpoint"** click karo
-3. Form fill karo:
-   - **Endpoint URL:** `https://your-site.vercel.app/api/webhooks/stripe`
-   - **Description:** `ApexFunded checkout completed`
-   - **Events to send:** **"+ Select events"** click karo → `checkout.session.completed` dhundke select karo
-4. **"Add endpoint"** click karo
-5. Endpoint create hone ke baad **"Signing secret"** dikhega (`whsec_...`) — copy karo
-6. Vercel pe wapas jao → Settings → Environment Variables → add karo:
-   ```
-   STRIPE_WEBHOOK_SECRET = whsec_...
-   ```
-7. Phir **Redeploy** karo (Step 4 ka step 4 dohrao)
+#### Razorpay webhook
+1. Razorpay → **Settings → Webhooks → Add New Webhook**
+2. **URL:** `https://your-site.vercel.app/api/webhooks/razorpay`
+3. **Secret:** koi strong text likho → **wahi text** Vercel env `RAZORPAY_WEBHOOK_SECRET` me daalo
+4. **Active Events:** `payment_link.paid` select karo → Create
+
+#### NOWPayments IPN
+1. NOWPayments → **Store Settings → IPN**
+2. **Callback URL:** `https://your-site.vercel.app/api/webhooks/nowpayments`
+3. IPN secret Vercel env `NOWPAYMENTS_IPN_SECRET` me daalo
+
+Phir Vercel pe **Redeploy** karo (Step 4 ka step 4 dohrao).
 
 ---
 
 ### Step 6️⃣ — Test Karo! 🎉 (5 min)
 
 1. Vercel URL kholo: `https://your-site.vercel.app`
-2. **Plans** section pe scroll karo
-3. Koi bhi **"Start Now"** click karo (e.g. $2,500 Starter)
-4. Email maangega — koi bhi test email daalo (`test@example.com`)
-5. Stripe Checkout page khulegi — yeh **fake card** use karo:
-   ```
-   Card number:  4242 4242 4242 4242
-   Expiry:       12/34 (koi bhi future date)
-   CVC:          123
-   ZIP:          12345
-   Name:         Test User
-   ```
-6. **"Pay"** click karo
-7. Payment success → redirect ho jayega
-8. **Verify:**
-   - Stripe dashboard → **Payments** → aapka test payment dikhega ✅
-   - Supabase → **Table Editor** → `challenges` table → naya row dikhega ✅
-   - `accounts` table me MT5 account number dikhega (mock) ✅
+2. **Sign up / Log in** karo (challenge ke liye login zaroori hai)
+3. **Plans** section → koi **"Start Now"** click karo
+4. Popup me **UPI** ya **Crypto** choose karo
+5. Hosted payment page khulegi:
+   - **UPI (Razorpay test):** test UPI ID `success@razorpay` use karo
+   - **Crypto (NOWPayments):** invoice page khulega
+6. Payment success → dashboard pe redirect
+7. **Verify:**
+   - Supabase → **Table Editor** → `challenges` me row `active` dikhega ✅
+   - `accounts` table me MT5 account number dikhega ✅
 
 **Sab kaam kar raha hai? 🎉 Backend live hai!**
 
@@ -177,8 +174,8 @@ NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = pk_test_...
 | Problem | Solution |
 |---|---|
 | Vercel build fail | Root Directory **default** (repo root) rakha hai? `propfirm-site` mat select karo |
-| "Stripe error" alert | Env vars correct hain? Redeploy kiya? |
-| Webhook 400 error | `STRIPE_WEBHOOK_SECRET` dobara check karo |
+| "Payment error" alert | Razorpay/NOWPayments keys correct hain? Redeploy kiya? |
+| Webhook fail | `RAZORPAY_WEBHOOK_SECRET` / `NOWPAYMENTS_IPN_SECRET` dobara check karo |
 | Supabase RLS error | `service_role` key sahi se copy hua? |
 | Page errors | Browser console (F12) me error check karo |
 
@@ -188,12 +185,9 @@ NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = pk_test_...
 
 Jab tested ho jaye aur real customers chahiye:
 
-### a) Stripe Live Mode
-1. Stripe dashboard → top-right **Test mode toggle OFF**
-2. **Activate account** karo (KYC: PAN, business proof, bank account)
-3. Live keys copy karo (`sk_live_...` aur `pk_live_...`)
-4. Vercel env vars me replace karo
-5. Live webhook bhi alag se banao
+### a) Live Payments
+**Razorpay:** Dashboard → **Test Mode OFF** → KYC complete karo (PAN, business proof, bank account) → **Live API keys** copy → Vercel me replace → live webhook banao.
+**NOWPayments:** already real crypto leta hai; bas wallet address sahi rakho.
 
 ### b) MetaApi (Real MT5)
 1. [metaapi.cloud](https://metaapi.cloud) signup

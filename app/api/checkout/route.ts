@@ -1,26 +1,40 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { stripe, lookupPrice, stepLabel, type Step } from "@/lib/stripe";
+import { lookupPrice, stepLabel, type Step } from "@/lib/plans";
 import { dbServer, dbAdmin } from "@/lib/db";
-import { isStripeConfigured, isSupabaseAdminConfigured } from "@/lib/config";
+import { isSupabaseAdminConfigured } from "@/lib/config";
+import { isRazorpayConfigured, createPaymentLink } from "@/lib/razorpay";
+import { isCryptoConfigured, createInvoice } from "@/lib/crypto-pay";
 
 /**
  * POST /api/checkout
- * Body: { step: "one"|"two"|"three", account_size_usd: number, guest_email?: string }
+ * Body: {
+ *   step: "one"|"two"|"three",
+ *   account_size_usd: number,
+ *   method: "upi" | "crypto"
+ * }
  *
- * Live mode:  creates a Stripe Checkout session + pending DB row.
- * Demo mode:  if Stripe / Supabase aren't configured, returns a URL to a
- *             local /demo-success page that simulates a paid challenge.
+ * Live mode: creates a pending `challenges` row, then a hosted payment page:
+ *   • method "upi"    → Razorpay Payment Link (UPI/cards/netbanking)
+ *   • method "crypto" → NOWPayments invoice (USDT/BTC/ETH/…)
+ * Returns { url } to redirect the user to. A webhook fulfills the order.
+ *
+ * Demo mode: if the chosen gateway (or Supabase admin) isn't configured,
+ * returns a /demo-success URL so the full flow can be previewed without paying.
  */
+export type CheckoutMethod = "upi" | "crypto";
+
 export async function POST(req: Request) {
-  let body: { step?: Step; account_size_usd?: number; guest_email?: string };
+  let body: { step?: Step; account_size_usd?: number; method?: CheckoutMethod };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { step, account_size_usd, guest_email } = body;
+  const { step, account_size_usd } = body;
+  const method: CheckoutMethod = body.method === "crypto" ? "crypto" : "upi";
+
   if (!step || !account_size_usd) {
     return NextResponse.json({ error: "Missing step or account_size_usd" }, { status: 400 });
   }
@@ -32,96 +46,103 @@ export async function POST(req: Request) {
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || new URL(req.url).origin;
 
+  const gatewayReady = method === "crypto" ? isCryptoConfigured() : isRazorpayConfigured();
+
   // ──────────────────────────────────────────────────────────────────────
-  // DEMO MODE — keys missing. Send the user to a fake "checkout success"
-  // page so they can preview the full flow without paying anything real.
+  // DEMO MODE — gateway or DB not configured. Preview the flow, no real pay.
   // ──────────────────────────────────────────────────────────────────────
-  if (!isStripeConfigured()) {
+  if (!gatewayReady || !isSupabaseAdminConfigured()) {
     const url = new URL("/demo-success", siteUrl);
     url.searchParams.set("step", step);
     url.searchParams.set("size", String(account_size_usd));
     url.searchParams.set("price", String(price));
+    url.searchParams.set("method", method);
     return NextResponse.json({
       url: url.toString(),
       mode: "demo",
-      hint: "Stripe keys not configured — showing demo checkout. See SETUP.md to enable real payments.",
+      hint: `${method === "crypto" ? "NOWPayments" : "Razorpay"} not configured — showing demo checkout. See SETUP.md.`,
     });
   }
 
   // ──────────────────────────────────────────────────────────────────────
-  // LIVE MODE
+  // LIVE MODE — must be signed in (challenge rows require a user id).
   // ──────────────────────────────────────────────────────────────────────
-  const customerEmail = await resolveEmail(guest_email);
-  if (!customerEmail) {
+  const user = await resolveUser();
+  if (!user) {
     return NextResponse.json(
-      { error: "No email provided. Sign in or pass guest_email." },
+      { error: "Please sign in to start a challenge.", needsAuth: true },
       { status: 401 },
     );
   }
 
-  let session;
+  // 1. Create the pending challenge row.
+  const { data: challenge, error: chErr } = await dbAdmin()
+    .from("challenges")
+    .insert({
+      user_id: user.id,
+      step,
+      account_size_usd,
+      price_usd: price,
+      gateway: method === "crypto" ? "nowpayments" : "razorpay",
+      state: "pending",
+    })
+    .select("id")
+    .single();
+
+  if (chErr || !challenge) {
+    return NextResponse.json({ error: `Could not create order: ${chErr?.message}` }, { status: 500 });
+  }
+
+  const label = `ApexFunded ${stepLabel(step)} — $${account_size_usd.toLocaleString()} Challenge`;
+
+  // 2. Create the hosted payment page on the chosen gateway.
   try {
-    session = await stripe().checkout.sessions.create({
-      mode: "payment",
-      payment_method_types: ["card"],
-      customer_email: customerEmail.email,
-      line_items: [
-        {
-          quantity: 1,
-          price_data: {
-            currency: "usd",
-            unit_amount: price * 100,
-            product_data: {
-              name: `ApexFunded ${stepLabel(step)} — $${account_size_usd.toLocaleString()} Challenge`,
-              description: "One-time evaluation fee. Refunded with your first payout on a funded account.",
-            },
-          },
-        },
-      ],
-      success_url: `${siteUrl}/dashboard?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${siteUrl}/#plans`,
-      metadata: {
+    if (method === "crypto") {
+      const inv = await createInvoice({
+        amountUsd: price,
+        orderId: challenge.id,
+        description: label,
+        ipnCallbackUrl: `${siteUrl}/api/webhooks/nowpayments`,
+        successUrl: `${siteUrl}/dashboard?checkout=success`,
+        cancelUrl: `${siteUrl}/#plans`,
+      });
+      await dbAdmin().from("challenges").update({ gateway_ref: inv.id }).eq("id", challenge.id);
+      return NextResponse.json({ url: inv.url, mode: "live", method });
+    }
+
+    const link = await createPaymentLink({
+      amountUsd: price,
+      email: user.email,
+      description: label,
+      notes: {
+        challenge_id: challenge.id,
+        user_id: user.id,
         step,
         account_size_usd: String(account_size_usd),
-        user_id: customerEmail.userId ?? "",
-        email: customerEmail.email,
       },
+      callbackUrl: `${siteUrl}/dashboard?checkout=success`,
     });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Stripe error";
+    await dbAdmin().from("challenges").update({ gateway_ref: link.id }).eq("id", challenge.id);
+    return NextResponse.json({ url: link.url, mode: "live", method });
+  } catch (err) {
+    // Roll the challenge back so a failed gateway call doesn't leave orphans.
+    await dbAdmin().from("challenges").delete().eq("id", challenge.id);
+    const message = err instanceof Error ? err.message : "Payment gateway error";
     return NextResponse.json({ error: message }, { status: 502 });
   }
-
-  // Best-effort: record a pending challenge if Supabase is configured.
-  if (customerEmail.userId && isSupabaseAdminConfigured()) {
-    try {
-      await dbAdmin().from("challenges").insert({
-        user_id: customerEmail.userId,
-        step,
-        account_size_usd,
-        price_usd: price,
-        stripe_session_id: session.id,
-        state: "pending",
-      });
-    } catch (e) {
-      console.warn("Could not insert pending challenge:", e);
-    }
-  }
-
-  return NextResponse.json({ url: session.url, id: session.id, mode: "live" });
 }
 
-/** Try the logged-in user first, then fall back to guest email. */
-async function resolveEmail(guestEmail?: string) {
-  if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
-    try {
-      const supabase = dbServer(cookies());
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user?.email) return { email: user.email, userId: user.id };
-    } catch {
-      // ignore — fall through to guest
-    }
+/** Resolve the logged-in Supabase user (email required). */
+async function resolveUser(): Promise<{ id: string; email: string } | null> {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return null;
+  try {
+    const supabase = dbServer(cookies());
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user?.email) return { id: user.id, email: user.email };
+  } catch {
+    // ignore
   }
-  if (guestEmail) return { email: guestEmail, userId: null };
   return null;
 }

@@ -250,3 +250,22 @@ exception when duplicate_object then null; end $$;
 -- To make yourself an admin, run (replace the email):
 --   update public.profiles set is_admin = true
 --   where id = (select id from auth.users where email = 'you@example.com');
+
+
+-- ══════════════════════════════════════════════════════════════════════
+-- PAYMENT GATEWAY MIGRATION  (Razorpay UPI + NOWPayments crypto)
+--
+-- Idempotent — safe to re-run. Replaces the old Stripe-only columns with
+-- gateway-agnostic ones used by /api/checkout + the payment webhooks.
+-- ══════════════════════════════════════════════════════════════════════
+alter table public.challenges
+  add column if not exists gateway            text;  -- 'razorpay' | 'nowpayments'
+alter table public.challenges
+  add column if not exists gateway_ref         text;  -- payment-link id / invoice id
+alter table public.challenges
+  add column if not exists gateway_payment_id  text;  -- gateway's payment id
+
+-- The legacy stripe_session_id (if present) is no longer required.
+do $$ begin
+  alter table public.challenges alter column stripe_session_id drop not null;
+exception when others then null; end $$;

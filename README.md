@@ -1,6 +1,6 @@
 # ApexFunded — Forex Prop Firm Platform
 
-A premium forex proprietary trading firm website + backend, built with Next.js 14, Supabase, and Stripe.
+A premium forex proprietary trading firm website + backend, built with Next.js 14, Supabase, Razorpay (UPI) and NOWPayments (crypto).
 
 🌐 **Live site:** deploy to Vercel (see [`SETUP.md`](./SETUP.md))
 
@@ -13,7 +13,8 @@ A premium forex proprietary trading firm website + backend, built with Next.js 1
 - **Framer Motion** — scroll & hover animations
 - **lucide-react** — icons
 - **Supabase** — auth + Postgres database (RLS-protected)
-- **Stripe** — checkout + webhooks
+- **Razorpay** — UPI / cards / netbanking checkout (India)
+- **NOWPayments** — crypto checkout (USDT / BTC / ETH …)
 - **MetaApi** (optional) — real MT5 account provisioning
 
 ---
@@ -42,8 +43,9 @@ A premium forex proprietary trading firm website + backend, built with Next.js 1
 | `app/auth/callback/route.ts` | GET — exchanges the email-confirmation code for a session |
 | `app/auth/signout/route.ts` | POST — clears the session and redirects home |
 | `middleware.ts` | Refreshes the Supabase session cookie on every request |
-| `app/api/checkout/route.ts` | POST — creates Stripe Checkout session + pending challenge row |
-| `app/api/webhooks/stripe/route.ts` | Verifies signature → activates challenge → provisions MT5 account |
+| `app/api/checkout/route.ts` | POST `{ step, account_size_usd, method: "upi"\|"crypto" }` — creates a pending challenge + hosted payment page (Razorpay link / NOWPayments invoice). Demo fallback when unconfigured |
+| `app/api/webhooks/razorpay/route.ts` | Verifies `x-razorpay-signature` → fulfills challenge (provisions MT5) on `payment_link.paid` |
+| `app/api/webhooks/nowpayments/route.ts` | Verifies `x-nowpayments-sig` → fulfills challenge on `finished`/`confirmed` status |
 | `app/api/account/route.ts` | GET — returns user's accounts (RLS-protected) |
 | `app/api/payouts/route.ts` | GET list + POST request — withdrawal requests (RLS-protected) |
 | `app/api/trades/route.ts` | GET — user's trades, optional `?account_id=` filter (RLS-protected) |
@@ -52,7 +54,10 @@ A premium forex proprietary trading firm website + backend, built with Next.js 1
 | `app/api/admin/route.ts` | GET — back-office overview (stats + recent challenges/accounts/payouts). Admin-only |
 | `app/api/admin/payouts/route.ts` | POST — approve / reject / mark-paid a withdrawal. Admin-only |
 | `app/api/admin/accounts/route.ts` | POST — manual account override (phase / equity / profit split). Admin-only |
-| `lib/stripe.ts` | Stripe client + plan catalog + per-step risk rules |
+| `lib/plans.ts` | Plan catalog + per-step risk rules + USD→INR rate (gateway-agnostic) |
+| `lib/razorpay.ts` | Razorpay UPI Payment Links + webhook signature verify |
+| `lib/crypto-pay.ts` | NOWPayments crypto invoices + IPN signature verify |
+| `lib/fulfillment.ts` | Shared post-payment fulfillment (activate challenge + provision MT5 + email) |
 | `lib/db.ts` | Supabase clients (browser, server, admin) |
 | `lib/admin.ts` | `requireAdmin()` — gates admin routes via `ADMIN_USER_IDS` or `profiles.is_admin` |
 | `lib/risk.ts` | Pure evaluation engine — drawdown breach, profit-target pass, step progression, daily reset |
