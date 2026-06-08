@@ -70,7 +70,7 @@ export default function Footer() {
             {/* Newsletter */}
             <form
               onSubmit={(e) => e.preventDefault()}
-              className="mt-6 flex max-w-sm items-center gap-2 rounded-full border border-gold/20 bg-white/[0.04] p-1 backdrop-blur"
+              className="mt-6 flex max-w-sm items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] p-1 backdrop-blur focus-within:border-gold/30"
             >
               <input
                 type="email"
@@ -96,9 +96,9 @@ export default function Footer() {
                 <a
                   key={i}
                   href="#"
-                  className={`grid h-9 w-9 place-items-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition-colors ${color}`}
+                  className={`grid h-8 w-8 place-items-center rounded-full border border-white/10 bg-white/5 text-slate-400 transition-colors ${color}`}
                 >
-                  <Icon className="h-4 w-4" />
+                  <Icon className="h-3.5 w-3.5" />
                 </a>
               ))}
             </div>
@@ -127,15 +127,17 @@ export default function Footer() {
         </div>
 
         {/* Risk disclaimer */}
-        <div className="mt-12 rounded-2xl border border-white/5 bg-white/[0.02] p-5 text-xs leading-relaxed text-slate-500">
-          <span className="font-semibold text-slate-300">
-            Risk Disclosure:
-          </span>{" "}
-          Trading foreign exchange and CFDs carries a high level of risk to
-          your capital. Only trade with funds you can afford to lose. Past
-          performance is not indicative of future results. ApexFunded does not
-          provide trading services to retail clients — challenges are
-          educational evaluations of trading skill.
+        <div className="mt-12 border-t border-white/5 pt-8">
+          <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5 text-xs leading-relaxed text-slate-500">
+            <span className="font-semibold text-slate-300">
+              Risk Disclosure:
+            </span>{" "}
+            Trading foreign exchange and CFDs carries a high level of risk to
+            your capital. Only trade with funds you can afford to lose. Past
+            performance is not indicative of future results. ApexFunded does not
+            provide trading services to retail clients — challenges are
+            educational evaluations of trading skill.
+          </div>
         </div>
 
         <div className="mt-8 flex flex-col items-center justify-between gap-3 border-t border-white/5 pt-6 text-xs text-slate-500 sm:flex-row">

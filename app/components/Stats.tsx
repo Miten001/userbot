@@ -79,7 +79,7 @@ export default function Stats() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: "-80px" }}
                 transition={{ duration: 0.5, delay: i * 0.07 }}
-                className={`group relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] p-5 backdrop-blur-xl transition-colors ${a.border}`}
+                className={`group relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] p-5 backdrop-blur-xl transition-all duration-300 hover:scale-[1.02] ${a.border}`}
               >
                 <div
                   className={`pointer-events-none absolute -right-8 -top-8 h-28 w-28 rounded-full bg-gradient-to-br ${a.bg} blur-2xl transition-opacity duration-500 group-hover:scale-125`}
@@ -93,7 +93,7 @@ export default function Stats() {
                   </span>
                 </div>
                 <div
-                  className={`mt-4 font-display text-3xl font-bold tracking-tight ${
+                  className={`mt-4 font-display text-3xl font-bold tracking-tight tabular-nums ${
                     s.accent === "gold" ? "gradient-text" : a.text
                   }`}
                 >
@@ -119,7 +119,7 @@ export default function Stats() {
             {[...partners, ...partners].map((p, i) => (
               <div
                 key={i}
-                className="flex items-center gap-2 whitespace-nowrap text-lg font-semibold text-slate-400/70 transition-colors hover:text-gold"
+                className="flex items-center gap-2 whitespace-nowrap text-base font-semibold text-slate-400/70 transition-colors hover:text-gold"
               >
                 <span className="h-1.5 w-1.5 rounded-full bg-gold/60" />
                 {p}

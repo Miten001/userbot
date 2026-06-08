@@ -65,6 +65,10 @@ const config: Config = {
         royal: "0 12px 40px -10px rgba(139,92,246,0.55), inset 0 1px 0 rgba(255,255,255,0.4)",
         emerald: "0 12px 40px -10px rgba(16,185,129,0.55)",
         glass: "0 30px 80px -20px rgba(0,0,0,0.6)",
+        "hover-glow": "0 0 20px -5px rgba(251,191,36,0.15)",
+      },
+      letterSpacing: {
+        "tight-2": "-0.03em",
       },
       animation: {
         "marquee": "marquee 40s linear infinite",

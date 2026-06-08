@@ -132,8 +132,8 @@ function BentoCard({
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-80px" }}
       transition={{ duration: 0.5 }}
-      whileHover={{ y: -4 }}
-      className={`group relative overflow-hidden rounded-3xl border p-6 backdrop-blur-xl transition-colors ${
+      whileHover={{ y: -2 }}
+      className={`group relative overflow-hidden rounded-3xl border p-6 backdrop-blur-xl transition-all duration-300 hover:shadow-[0_0_20px_rgba(251,191,36,0.08)] ${
         isPremium
           ? "border-gold/30 bg-gradient-to-br from-gold/[0.06] to-transparent hover:border-gold/50"
           : "border-white/10 bg-white/[0.025] hover:border-white/20"
@@ -162,7 +162,7 @@ function IconBadge({
   };
   return (
     <span
-      className={`inline-grid h-11 w-11 place-items-center rounded-xl border bg-gradient-to-br ${map[color]} backdrop-blur shadow-[inset_0_1px_0_rgba(255,255,255,0.15)]`}
+      className={`inline-grid h-10 w-10 place-items-center rounded-xl border bg-gradient-to-br ${map[color]} backdrop-blur shadow-[inset_0_1px_0_rgba(255,255,255,0.15)]`}
     >
       {children}
     </span>

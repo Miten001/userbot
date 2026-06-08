@@ -1,0 +1,29 @@
+{
+  "id": "FEAT-002",
+  "type": "feat",
+  "description": "Polish the landing page and overall site for a more professional look. Refine typography, spacing, component styling, and micro-interactions to elevate the design from 'flashy' to 'premium professional'. Improve the Navbar, Hero, Stats, Features, Footer, and other landing sections with tighter spacing, better hierarchy, subtle refinements to glass effects, and more polished animations.",
+  "status": "in_progress",
+  "steps": [
+    "Update app/components/Navbar.tsx - Make the navbar more refined: slightly tighter padding, more subtle gold accents (reduce glow intensity), add a subtle separator line below when scrolled, improve the logo area with cleaner spacing. Make the CTA button slightly smaller and more elegant. Clean up mobile menu styling for a more polished feel.",
+    "Update app/components/Hero.tsx - Improve headline typography (tighter line-height, better weight distribution), reduce the intensity of glow blobs (lower opacity from 0.55 to 0.35 for a more subtle premium feel), add a subtle text-shadow to the main heading, refine the floating cards to look more polished (slightly smaller, cleaner borders). Improve the trust badges section spacing.",
+    "Update app/components/Stats.tsx - Refine the stat cards: add subtle hover transitions, improve the number typography (use tabular-nums for alignment), add a slight border-glow on hover instead of just color change. Improve the partners marquee with better spacing and a more refined look.",
+    "Update app/components/Features.tsx - Improve the bento grid cards: tighter padding consistency, better icon badge sizing, improved hover state (subtle scale + border glow rather than just y-translate). Ensure the premium card stands out more from regular cards.",
+    "Update app/components/Footer.tsx - Make the footer more professional: reduce visual noise, improve the link column spacing, make the newsletter input more refined (thinner border, better focus state), add a subtle separator between sections. Clean up the risk disclosure styling.",
+    "Update app/globals.css - Reduce global glow-blob opacity from 0.55 to 0.35 for a more subtle ambient effect. Add new utility classes: .text-balance for balanced text wrapping, improve the scrollbar styling to be thinner and less colorful (single gold color instead of multicolor gradient). Refine the glass classes for a more subtle effect. Add a subtle body grain/noise at lower opacity.",
+    "Update tailwind.config.ts - Add letter-spacing utilities and any needed animation adjustments for more refined micro-interactions."
+  ],
+  "acceptance_criteria": [
+    "The landing page looks more refined and professional with reduced visual noise",
+    "Glow effects are more subtle (lower opacity) giving a premium rather than flashy feel",
+    "Typography is tighter and more polished with better hierarchy",
+    "Hover states are more refined with subtle transitions",
+    "The build passes without TypeScript errors (npx next build)",
+    "All existing landing page functionality remains intact (links, animations, modals)"
+  ],
+  "verification": [
+    "Run: cd /projects/sandbox/userbot && npx next build",
+    "Run: cd /projects/sandbox/userbot && npx next lint"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

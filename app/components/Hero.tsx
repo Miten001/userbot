@@ -15,10 +15,10 @@ export default function Hero() {
     <section className="relative isolate overflow-hidden pt-32 sm:pt-36">
       {/* Grid + glow blobs */}
       <div className="absolute inset-0 -z-10 grid-bg" />
-      <div className="glow-blob left-[-10%] top-20 h-[460px] w-[460px] bg-gold-radial" />
-      <div className="glow-blob right-[-15%] top-32 h-[480px] w-[480px] bg-royal-radial" />
-      <div className="glow-blob left-1/3 bottom-[-15%] h-[380px] w-[380px] bg-emerald-radial" />
-      <div className="glow-blob right-1/4 top-1/2 h-[260px] w-[260px] bg-rose-radial opacity-40" />
+      <div className="glow-blob left-[-10%] top-20 h-[380px] w-[380px] bg-gold-radial opacity-25" />
+      <div className="glow-blob right-[-15%] top-32 h-[400px] w-[400px] bg-royal-radial opacity-25" />
+      <div className="glow-blob left-1/3 bottom-[-15%] h-[320px] w-[320px] bg-emerald-radial opacity-25" />
+      <div className="glow-blob right-1/4 top-1/2 h-[220px] w-[220px] bg-rose-radial opacity-25" />
 
       <div className="mx-auto grid w-full max-w-7xl grid-cols-1 items-center gap-10 px-6 pb-20 sm:px-10 lg:grid-cols-2 lg:gap-6">
         {/* Left: copy */}
@@ -37,7 +37,8 @@ export default function Hero() {
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.05 }}
-            className="h-display mt-6 text-5xl leading-[1.02] sm:text-6xl lg:text-7xl"
+            className="h-display mt-6 text-5xl leading-[0.95] sm:text-6xl lg:text-7xl"
+            style={{ textShadow: '0 2px 40px rgba(251,191,36,0.15)' }}
           >
             Trade Big.
             <br />
@@ -106,7 +107,7 @@ export default function Hero() {
             initial={{ opacity: 0, x: -20, y: 10 }}
             animate={{ opacity: 1, x: 0, y: 0 }}
             transition={{ duration: 0.7, delay: 0.4 }}
-            className="absolute -left-2 top-10 hidden w-60 rounded-2xl border border-gold/30 bg-bg-soft/85 p-4 shadow-gold backdrop-blur-2xl sm:block"
+            className="absolute -left-2 top-10 hidden w-56 rounded-2xl border border-gold/30 bg-bg-soft/85 p-4 shadow-gold backdrop-blur-2xl sm:block"
           >
             <div className="flex items-center justify-between text-xs text-slate-400">
               <span className="flex items-center gap-1.5">
@@ -137,7 +138,7 @@ export default function Hero() {
             initial={{ opacity: 0, x: 20, y: 10 }}
             animate={{ opacity: 1, x: 0, y: 0 }}
             transition={{ duration: 0.7, delay: 0.5 }}
-            className="absolute bottom-12 right-2 hidden w-56 rounded-2xl border border-emerald2/30 bg-bg-soft/85 p-4 shadow-emerald backdrop-blur-2xl sm:block"
+            className="absolute bottom-12 right-2 hidden w-52 rounded-2xl border border-emerald2/30 bg-bg-soft/85 p-4 shadow-emerald backdrop-blur-2xl sm:block"
           >
             <div className="text-xs text-slate-400">Today P/L</div>
             <div className="mt-1 flex items-baseline gap-2">

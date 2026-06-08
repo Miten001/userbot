@@ -53,9 +53,9 @@ export default function Navbar() {
         initial={{ y: -20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.5, ease: "easeOut" }}
-        className={`flex w-full max-w-6xl items-center justify-between rounded-full border px-4 py-2.5 transition-all duration-300 sm:px-6 ${
+        className={`flex w-full max-w-6xl items-center justify-between rounded-full border px-4 py-2 transition-all duration-300 sm:px-6 ${
           scrolled
-            ? "border-gold/15 bg-bg-deep/80 shadow-[0_8px_30px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(251,191,36,0.08)] backdrop-blur-2xl"
+            ? "border-gold/10 bg-bg-deep/80 shadow-[0_4px_20px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(251,191,36,0.06)] backdrop-blur-2xl"
             : "border-white/[0.06] bg-white/[0.02] backdrop-blur-md"
         }`}
       >
@@ -107,7 +107,7 @@ export default function Navbar() {
               Log in
             </Link>
           )}
-          <a href="#plans" className="btn-primary group !px-4 !py-2 !text-sm">
+          <a href="#plans" className="btn-primary group !px-4 !py-2 !text-[11px]">
             <Crown className="h-3.5 w-3.5" />
             Get Funded
             <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
