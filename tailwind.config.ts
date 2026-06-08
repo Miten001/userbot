@@ -78,6 +78,7 @@ const config: Config = {
         "shine": "shine 3s linear infinite",
         "aurora": "aurora 24s ease infinite",
         "spin-slow": "spin 28s linear infinite",
+        "shimmer": "shimmer 2s ease-in-out infinite",
       },
       keyframes: {
         marquee: {
@@ -99,6 +100,10 @@ const config: Config = {
         aurora: {
           "0%, 100%": { backgroundPosition: "0% 50%" },
           "50%": { backgroundPosition: "100% 50%" },
+        },
+        shimmer: {
+          "0%": { transform: "translateX(-100%)" },
+          "100%": { transform: "translateX(100%)" },
         },
       },
     },

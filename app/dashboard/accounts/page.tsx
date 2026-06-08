@@ -9,6 +9,8 @@ import {
 import {
   Account, Payout, DEMO_ACCOUNTS, DEMO_PAYOUTS, WITHDRAW_METHODS,
 } from "@/app/dashboard/data";
+import PageTransition from "@/app/components/PageTransition";
+import { SkeletonCard } from "@/app/components/SkeletonCard";
 
 export default function AccountsPage() {
   const [accounts, setAccounts] = useState<Account[] | null>(null);
@@ -70,13 +72,18 @@ export default function AccountsPage() {
         )}
 
         {loading ? (
-          <SkeletonGrid />
-        ) : accounts && accounts.length > 0 ? (
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {accounts.map((a) => (
-              <AccountCard key={a.id} account={a} onWithdraw={() => setWithdrawFor(a)} />
-            ))}
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <SkeletonCard height="h-72" />
+            <SkeletonCard height="h-72" />
           </div>
+        ) : accounts && accounts.length > 0 ? (
+          <PageTransition>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              {accounts.map((a) => (
+                <AccountCard key={a.id} account={a} onWithdraw={() => setWithdrawFor(a)} />
+              ))}
+            </div>
+          </PageTransition>
         ) : (
           <EmptyState />
         )}
@@ -320,10 +327,4 @@ function EmptyState() {
   );
 }
 
-function SkeletonGrid() {
-  return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-      {[0, 1].map((i) => <div key={i} className="h-72 animate-pulse rounded-3xl border border-white/10 bg-white/[0.02]" />)}
-    </div>
-  );
-}
+

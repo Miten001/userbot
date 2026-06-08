@@ -7,6 +7,8 @@ import {
 import {
   Account, Payout, DEMO_ACCOUNTS, DEMO_PAYOUTS, WITHDRAW_METHODS, fmtDate,
 } from "@/app/dashboard/data";
+import PageTransition from "@/app/components/PageTransition";
+import { SkeletonCard } from "@/app/components/SkeletonCard";
 
 export default function PayoutsPage() {
   const [payouts, setPayouts] = useState<Payout[]>([]);
@@ -82,9 +84,9 @@ export default function PayoutsPage() {
         )}
 
         {loading ? (
-          <div className="h-48 animate-pulse rounded-3xl border border-white/10 bg-white/[0.02]" />
+          <SkeletonCard height="h-48" />
         ) : (
-          <>
+          <PageTransition>
             {/* Summary cards */}
             <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
               <SummaryCard label="Total Paid" value={`$${totalPaid.toLocaleString()}`} tone="good" />
@@ -120,7 +122,7 @@ export default function PayoutsPage() {
                 </div>
               )}
             </div>
-          </>
+          </PageTransition>
         )}
       </div>
 

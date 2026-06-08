@@ -27,13 +27,68 @@ const adminLinks: NavItem[] = [
   { icon: ShieldCheck, label: "Admin Console", href: "/admin" },
 ];
 
-export default function Sidebar({ isAdmin, profileName }: { isAdmin?: boolean; profileName?: string }) {
+export default function Sidebar({ isAdmin, profileName, collapsed }: { isAdmin?: boolean; profileName?: string; collapsed?: boolean }) {
   const pathname = usePathname();
 
   function isActive(item: NavItem) {
     if (item.href === "/admin") return pathname === "/admin";
     if (item.href === "/dashboard") return pathname === "/dashboard";
     return pathname.startsWith(item.href);
+  }
+
+  if (collapsed) {
+    return (
+      <nav className="flex flex-1 flex-col items-center gap-1 py-2">
+        {mainLinks.map((item) => {
+          const active = isActive(item);
+          return (
+            <Link
+              key={item.label}
+              href={item.href}
+              title={item.label}
+              className={`grid h-10 w-10 place-items-center rounded-xl transition-colors ${
+                active
+                  ? "bg-gold/10 text-gold"
+                  : "text-slate-400 hover:bg-white/[0.04] hover:text-slate-200"
+              }`}
+            >
+              <item.icon className="h-5 w-5" />
+            </Link>
+          );
+        })}
+        {isAdmin && (
+          <>
+            <div className="my-2 h-px w-6 bg-white/10" />
+            {adminLinks.map((item) => {
+              const active = isActive(item);
+              return (
+                <Link
+                  key={item.label}
+                  href={item.href}
+                  title={item.label}
+                  className={`grid h-10 w-10 place-items-center rounded-xl transition-colors ${
+                    active
+                      ? "bg-gold/10 text-gold"
+                      : "text-slate-400 hover:bg-white/[0.04] hover:text-slate-200"
+                  }`}
+                >
+                  <item.icon className="h-5 w-5" />
+                </Link>
+              );
+            })}
+          </>
+        )}
+        <div className="mt-auto">
+          <Link
+            href="/"
+            title="Home"
+            className="grid h-10 w-10 place-items-center rounded-xl text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-slate-200"
+          >
+            <Home className="h-5 w-5" />
+          </Link>
+        </div>
+      </nav>
+    );
   }
 
   return (

@@ -19,13 +19,23 @@ export default function DashboardLayout({
 
   return (
     <div className="flex min-h-screen">
-      {/* Desktop sidebar */}
+      {/* Desktop sidebar - full width */}
       <div className="hidden lg:fixed lg:inset-y-0 lg:z-40 lg:flex lg:w-64">
         <Sidebar isAdmin={isAdmin} profileName={profileName} />
       </div>
 
+      {/* Tablet sidebar - collapsed (icons only) */}
+      <div className="hidden md:fixed md:inset-y-0 md:z-40 md:flex md:w-16 lg:hidden">
+        <div className="flex h-full w-full flex-col items-center border-r border-white/[0.06] bg-bg-deep/95 py-4 backdrop-blur-2xl">
+          <div className="mb-6">
+            <MobileLogo />
+          </div>
+          <Sidebar isAdmin={isAdmin} profileName={profileName} collapsed />
+        </div>
+      </div>
+
       {/* Mobile top bar */}
-      <div className="fixed inset-x-0 top-0 z-40 flex h-16 items-center justify-between border-b border-white/[0.06] bg-bg-deep/95 px-4 backdrop-blur-2xl lg:hidden">
+      <div className="fixed inset-x-0 top-0 z-40 flex h-16 items-center justify-between border-b border-white/[0.06] bg-bg-deep/95 px-4 backdrop-blur-2xl md:hidden">
         <div className="flex items-center gap-2.5">
           <MobileLogo />
           <span className="font-display text-lg font-bold tracking-tight">
@@ -53,7 +63,7 @@ export default function DashboardLayout({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm lg:hidden"
+              className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm md:hidden"
               onClick={() => setMobileOpen(false)}
             />
             <motion.div
@@ -61,7 +71,7 @@ export default function DashboardLayout({
               animate={{ x: 0 }}
               exit={{ x: -280 }}
               transition={{ type: "spring", bounce: 0.15, duration: 0.4 }}
-              className="fixed inset-y-0 left-0 z-50 w-64 lg:hidden"
+              className="fixed inset-y-0 left-0 z-50 w-64 md:hidden"
             >
               <Sidebar isAdmin={isAdmin} profileName={profileName} />
               <button
@@ -77,8 +87,8 @@ export default function DashboardLayout({
       </AnimatePresence>
 
       {/* Main content */}
-      <main className="w-full pt-16 lg:ml-64 lg:pt-0">
-        <div className="p-6 sm:p-8">
+      <main className="w-full pt-16 md:ml-16 md:pt-0 lg:ml-64">
+        <div className="p-4 sm:p-6 lg:p-8">
           {children}
         </div>
       </main>

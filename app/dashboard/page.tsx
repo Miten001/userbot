@@ -11,6 +11,9 @@ import {
   Account, Profile, Payout, Trade,
   DEMO_ACCOUNTS, DEMO_PROFILE, DEMO_PAYOUTS, DEMO_TRADES, fmtDate,
 } from "./data";
+import PageTransition from "@/app/components/PageTransition";
+import { SkeletonStats, SkeletonCard } from "@/app/components/SkeletonCard";
+import EquityCurve from "@/app/components/EquityCurve";
 
 export default function DashboardOverview() {
   const [accounts, setAccounts] = useState<Account[] | null>(null);
@@ -96,15 +99,23 @@ export default function DashboardOverview() {
         )}
 
         {loading ? (
-          <SkeletonGrid />
+          <div className="space-y-6">
+            <SkeletonStats />
+            <SkeletonCard height="h-48" />
+          </div>
         ) : (
-          <>
+          <PageTransition>
             {/* Summary Stats */}
-            <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <StatCard icon={Wallet} label="Total Balance" value={`$${totalBalance.toLocaleString()}`} />
               <StatCard icon={TrendingUp} label="Total P/L" value={`${totalPnl >= 0 ? "+" : ""}$${totalPnl.toLocaleString()}`} tone={totalPnl >= 0 ? "good" : "bad"} />
               <StatCard icon={BarChart3} label="Active Accounts" value={activeAccounts} />
               <StatCard icon={ArrowUpRight} label="Recent Trades" value={trades.length} />
+            </div>
+
+            {/* Equity Curve - mini version */}
+            <div className="mb-8">
+              <EquityCurve data={generateEquityData()} height={160} title="Equity Performance (30d)" />
             </div>
 
             {/* Quick Actions */}
@@ -123,7 +134,7 @@ export default function DashboardOverview() {
             </div>
 
             {/* Recent Activity */}
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
               {/* Recent Trades */}
               <div className="rounded-3xl border border-white/10 bg-bg-soft/50 p-5 backdrop-blur-xl">
                 <div className="mb-4 flex items-center justify-between">
@@ -194,7 +205,7 @@ export default function DashboardOverview() {
                 )}
               </div>
             </div>
-          </>
+          </PageTransition>
         )}
       </div>
     </div>
@@ -230,10 +241,21 @@ function PayoutBadge({ status }: { status: string }) {
   return <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${map[status] ?? "border-white/10 bg-white/5 text-slate-400"}`}>{status}</span>;
 }
 
-function SkeletonGrid() {
-  return (
-    <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-      {[0, 1, 2, 3].map((i) => <div key={i} className="h-24 animate-pulse rounded-2xl border border-white/10 bg-white/[0.02]" />)}
-    </div>
-  );
+/* ---- Demo Data Generator ---- */
+
+function generateEquityData() {
+  const data: { date: string; value: number }[] = [];
+  let equity = 50000;
+  const now = new Date();
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const change = (Math.random() - 0.4) * 1000;
+    equity += change;
+    data.push({
+      date: d.toISOString().split("T")[0],
+      value: Math.round(equity),
+    });
+  }
+  return data;
 }

@@ -6,6 +6,8 @@ import {
   Bell, AlertTriangle, Trash2, Save,
 } from "lucide-react";
 import { Profile, DEMO_PROFILE } from "@/app/dashboard/data";
+import PageTransition from "@/app/components/PageTransition";
+import { SkeletonCard } from "@/app/components/SkeletonCard";
 
 export default function SettingsPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -94,7 +96,7 @@ export default function SettingsPage() {
       <div className="relative min-h-screen overflow-hidden pb-24">
         <div className="glow-blob -left-24 top-12 h-[420px] w-[420px] bg-gold-radial" />
         <div className="relative mx-auto w-full max-w-3xl">
-          <div className="h-96 animate-pulse rounded-3xl border border-white/10 bg-white/[0.02]" />
+          <SkeletonCard height="h-96" />
         </div>
       </div>
     );
@@ -106,6 +108,7 @@ export default function SettingsPage() {
       <div className="glow-blob -right-24 top-1/3 h-[420px] w-[420px] bg-royal-radial" />
 
       <div className="relative mx-auto w-full max-w-3xl">
+        <PageTransition>
         {/* Header */}
         <div className="mb-8">
           <h1 className="h-display text-4xl sm:text-5xl">
@@ -218,6 +221,7 @@ export default function SettingsPage() {
             <Trash2 className="h-4 w-4" /> Delete Account
           </button>
         </section>
+        </PageTransition>
       </div>
 
       {toast && (

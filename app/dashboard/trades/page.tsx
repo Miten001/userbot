@@ -2,11 +2,15 @@
 
 import { useEffect, useState } from "react";
 import {
-  BarChart3, ArrowUpRight, ArrowDownRight, Info, TrendingUp,
+  BarChart3, ArrowUpRight, ArrowDownRight, Info,
 } from "lucide-react";
 import {
   Trade, DEMO_TRADES, fmtDate,
 } from "@/app/dashboard/data";
+import PageTransition from "@/app/components/PageTransition";
+import { SkeletonStats, SkeletonTable } from "@/app/components/SkeletonCard";
+import EquityCurve from "@/app/components/EquityCurve";
+import PnLChart from "@/app/components/PnLChart";
 
 export default function TradesPage() {
   const [trades, setTrades] = useState<Trade[]>([]);
@@ -59,7 +63,10 @@ export default function TradesPage() {
         )}
 
         {loading ? (
-          <div className="h-64 animate-pulse rounded-3xl border border-white/10 bg-white/[0.02]" />
+          <div className="space-y-6">
+            <SkeletonStats />
+            <SkeletonTable />
+          </div>
         ) : trades.length === 0 ? (
           <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-12 text-center backdrop-blur-xl">
             <BarChart3 className="mx-auto h-10 w-10 text-gold" />
@@ -69,16 +76,21 @@ export default function TradesPage() {
             </p>
           </div>
         ) : (
-          <>
+          <PageTransition>
             {/* Stats row */}
-            <div className="mb-6 grid grid-cols-3 gap-4">
+            <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
               <MiniStat label="Net P/L" value={`${totalPnl >= 0 ? "+" : ""}$${totalPnl.toLocaleString(undefined, { maximumFractionDigits: 0 })}`} tone={totalPnl >= 0 ? "good" : "bad"} />
               <MiniStat label="Win rate" value={`${winRate}%`} />
               <MiniStat label="Closed trades" value={closed.length} />
             </div>
 
             {/* Equity Curve */}
-            <EquityCurve trades={closed} />
+            <EquityCurve data={buildEquityData(closed)} height={200} title="Equity Curve" />
+
+            {/* P/L Chart */}
+            <div className="mt-6">
+              <PnLChart data={buildPnLData(closed)} height={180} />
+            </div>
 
             {/* Trade table */}
             <div className="mt-6 rounded-3xl border border-white/10 bg-bg-soft/50 p-4 backdrop-blur-xl sm:p-5">
@@ -128,71 +140,92 @@ export default function TradesPage() {
                 </table>
               </div>
             </div>
-          </>
+          </PageTransition>
         )}
       </div>
     </div>
   );
 }
 
-/* ---- Equity Curve ---- */
+/* ---- Data helpers for charts ---- */
 
-function EquityCurve({ trades }: { trades: Trade[] }) {
-  // Build cumulative equity points from trades sorted by close date
+function buildEquityData(trades: Trade[]) {
   const sorted = [...trades]
     .filter((t) => t.closed_at)
     .sort((a, b) => new Date(a.closed_at!).getTime() - new Date(b.closed_at!).getTime());
 
-  if (sorted.length < 2) return null;
-
-  const startingEquity = 100_000;
-  const points: number[] = [startingEquity];
-  let equity = startingEquity;
-  for (const t of sorted) {
-    equity += t.profit_usd ?? 0;
-    points.push(equity);
+  if (sorted.length < 2) {
+    // Generate demo data if not enough trades
+    return generateDemoEquityData();
   }
 
-  const min = Math.min(...points);
-  const max = Math.max(...points);
-  const range = max - min || 1;
-  const width = 400;
-  const height = 120;
-  const padding = 8;
+  const startingEquity = 100_000;
+  let equity = startingEquity;
+  const data: { date: string; value: number }[] = [
+    { date: sorted[0].closed_at!.split("T")[0], value: startingEquity },
+  ];
+  for (const t of sorted) {
+    equity += t.profit_usd ?? 0;
+    data.push({
+      date: t.closed_at!.split("T")[0],
+      value: Math.round(equity),
+    });
+  }
+  return data;
+}
 
-  const pathPoints = points.map((val, i) => {
-    const x = padding + (i / (points.length - 1)) * (width - padding * 2);
-    const y = padding + (1 - (val - min) / range) * (height - padding * 2);
-    return `${x},${y}`;
-  });
+function buildPnLData(trades: Trade[]) {
+  const sorted = [...trades]
+    .filter((t) => t.closed_at)
+    .sort((a, b) => new Date(a.closed_at!).getTime() - new Date(b.closed_at!).getTime());
 
-  const linePath = `M ${pathPoints.join(" L ")}`;
-  const areaPath = `${linePath} L ${padding + (width - padding * 2)},${height - padding} L ${padding},${height - padding} Z`;
+  if (sorted.length < 2) {
+    return generateDemoPnLData();
+  }
 
-  const finalEquity = points[points.length - 1];
-  const isUp = finalEquity >= startingEquity;
+  // Group by day
+  const byDay: Record<string, number> = {};
+  for (const t of sorted) {
+    const day = t.closed_at!.split("T")[0];
+    byDay[day] = (byDay[day] ?? 0) + (t.profit_usd ?? 0);
+  }
 
-  return (
-    <div className="rounded-3xl border border-white/10 bg-bg-soft/50 p-5 backdrop-blur-xl">
-      <div className="mb-3 flex items-center gap-2">
-        <TrendingUp className="h-4 w-4 text-gold" />
-        <h2 className="font-display text-lg font-bold text-white">Equity Curve</h2>
-        <span className={`ml-auto font-display text-lg font-bold tabular-nums ${isUp ? "text-emerald2-400" : "text-rose2-400"}`}>
-          ${finalEquity.toLocaleString()}
-        </span>
-      </div>
-      <svg viewBox={`0 0 ${width} ${height}`} className="w-full" preserveAspectRatio="none">
-        <defs>
-          <linearGradient id="eq-grad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={isUp ? "#34d399" : "#fb7185"} stopOpacity="0.3" />
-            <stop offset="100%" stopColor={isUp ? "#34d399" : "#fb7185"} stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        <path d={areaPath} fill="url(#eq-grad)" />
-        <path d={linePath} fill="none" stroke={isUp ? "#34d399" : "#fb7185"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    </div>
-  );
+  return Object.entries(byDay).map(([date, value]) => ({
+    date,
+    value: Math.round(value),
+  }));
+}
+
+function generateDemoEquityData() {
+  const data: { date: string; value: number }[] = [];
+  let equity = 50000;
+  const now = new Date();
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const change = (Math.random() - 0.4) * 1000;
+    equity += change;
+    data.push({
+      date: d.toISOString().split("T")[0],
+      value: Math.round(equity),
+    });
+  }
+  return data;
+}
+
+function generateDemoPnLData() {
+  const data: { date: string; value: number }[] = [];
+  const now = new Date();
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const value = Math.round((Math.random() - 0.45) * 1200);
+    data.push({
+      date: d.toISOString().split("T")[0],
+      value,
+    });
+  }
+  return data;
 }
 
 /* ---- MiniStat ---- */
