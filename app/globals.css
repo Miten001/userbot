@@ -216,3 +216,50 @@ body::before {
 .bg-rose-radial {
   background: radial-gradient(circle at 50% 50%, rgba(244, 63, 94, 0.4), rgba(244, 63, 94, 0) 70%);
 }
+
+/* ===== Light Mode Overrides ===== */
+html:not(.dark) body {
+  background: #f8f9fc;
+  background-image: none;
+  color: #1e293b;
+}
+
+html:not(.dark) body::before {
+  display: none;
+}
+
+html:not(.dark) ::selection {
+  background: rgba(251, 191, 36, 0.25);
+  color: #1e293b;
+}
+
+html:not(.dark) ::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+html:not(.dark) ::-webkit-scrollbar-thumb {
+  background: #d97706;
+}
+
+@layer components {
+  html:not(.dark) .glass {
+    @apply bg-white/60 border-slate-200/80 backdrop-blur-xl;
+  }
+
+  html:not(.dark) .glass-strong {
+    @apply bg-white/80 border-slate-200 backdrop-blur-2xl;
+  }
+
+  html:not(.dark) .lux-card {
+    @apply border-slate-200/80 bg-white/80 backdrop-blur-xl;
+    background-image: none;
+  }
+
+  html:not(.dark) .btn-secondary {
+    @apply border-slate-200 bg-white/80 text-slate-700 hover:border-gold/40 hover:bg-white;
+  }
+
+  html:not(.dark) .chip {
+    @apply border-slate-200 bg-white/60 text-slate-600;
+  }
+}

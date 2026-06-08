@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X, ChevronRight, Crown, LayoutDashboard, LogOut } from "lucide-react";
 import { dbBrowser } from "@/lib/db";
 import { SUPABASE_READY } from "@/app/components/AuthShell";
+import ThemeToggle from "./ThemeToggle";
 
 const links = [
   { href: "#plans", label: "Funding" },
@@ -80,6 +81,7 @@ export default function Navbar() {
         </ul>
 
         <div className="hidden items-center gap-2 md:flex">
+          <ThemeToggle />
           {authed ? (
             <>
               <Link

@@ -1,6 +1,9 @@
+import LiveTicker from "./components/LiveTicker";
 import Navbar from "./components/Navbar";
 import Hero from "./components/Hero";
 import Stats from "./components/Stats";
+import Partners from "./components/Partners";
+import VideoDemo from "./components/VideoDemo";
 import Plans from "./components/Plans";
 import HowItWorks from "./components/HowItWorks";
 import Features from "./components/Features";
@@ -13,9 +16,12 @@ import Footer from "./components/Footer";
 export default function Home() {
   return (
     <main className="relative overflow-x-hidden">
+      <LiveTicker />
       <Navbar />
       <Hero />
       <Stats />
+      <Partners />
+      <VideoDemo />
       <Plans />
       <HowItWorks />
       <Features />

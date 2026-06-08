@@ -7,6 +7,7 @@ import {
   LayoutDashboard, Wallet, BarChart3, Banknote,
   Settings, ShieldCheck, Home, User,
 } from "lucide-react";
+import NotificationBell from "./NotificationBell";
 
 type NavItem = {
   icon: React.ComponentType<{ className?: string }>;
@@ -38,11 +39,14 @@ export default function Sidebar({ isAdmin, profileName }: { isAdmin?: boolean; p
   return (
     <aside className="flex h-full flex-col bg-bg-deep/95 border-r border-white/[0.06] backdrop-blur-2xl">
       {/* Logo */}
-      <div className="flex items-center gap-2.5 px-6 py-6">
-        <SidebarLogo />
-        <span className="font-display text-lg font-bold tracking-tight">
-          Apex<span className="gradient-text">Funded</span>
-        </span>
+      <div className="flex items-center justify-between px-6 py-6">
+        <div className="flex items-center gap-2.5">
+          <SidebarLogo />
+          <span className="font-display text-lg font-bold tracking-tight">
+            Apex<span className="gradient-text">Funded</span>
+          </span>
+        </div>
+        <NotificationBell />
       </div>
 
       {/* Main nav */}

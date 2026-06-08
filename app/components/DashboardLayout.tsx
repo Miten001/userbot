@@ -4,6 +4,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X } from "lucide-react";
 import Sidebar from "./Sidebar";
+import NotificationBell from "./NotificationBell";
 
 export default function DashboardLayout({
   children,
@@ -31,13 +32,16 @@ export default function DashboardLayout({
             Apex<span className="gradient-text">Funded</span>
           </span>
         </div>
-        <button
-          onClick={() => setMobileOpen(true)}
-          className="grid h-10 w-10 place-items-center rounded-full border border-gold/20 bg-white/5"
-          aria-label="Open menu"
-        >
-          <Menu className="h-5 w-5 text-gold" />
-        </button>
+        <div className="flex items-center gap-2">
+          <NotificationBell />
+          <button
+            onClick={() => setMobileOpen(true)}
+            className="grid h-10 w-10 place-items-center rounded-full border border-gold/20 bg-white/5"
+            aria-label="Open menu"
+          >
+            <Menu className="h-5 w-5 text-gold" />
+          </button>
+        </div>
       </div>
 
       {/* Mobile sidebar overlay */}
