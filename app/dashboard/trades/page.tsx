@@ -75,12 +75,16 @@ export default function TradesPage() {
             </div>
 
             {/* Equity Curve */}
-            <EquityCurve data={equityData} height={200} title="Equity Curve" />
+            {equityData.length > 0 && (
+              <EquityCurve data={equityData} height={200} title="Equity Curve" />
+            )}
 
             {/* P/L Chart */}
-            <div className="mt-6">
-              <PnLChart data={pnlData} height={180} />
-            </div>
+            {pnlData.length > 0 && (
+              <div className="mt-6">
+                <PnLChart data={pnlData} height={180} />
+              </div>
+            )}
 
             {/* Trade table */}
             <div className="mt-6 rounded-3xl border border-white/10 bg-bg-soft/50 p-4 backdrop-blur-xl sm:p-5">
@@ -145,8 +149,7 @@ function buildEquityData(trades: Trade[]) {
     .sort((a, b) => new Date(a.closed_at!).getTime() - new Date(b.closed_at!).getTime());
 
   if (sorted.length < 2) {
-    // Generate demo data if not enough trades
-    return generateDemoEquityData();
+    return [];
   }
 
   const startingEquity = 100_000;
@@ -170,7 +173,7 @@ function buildPnLData(trades: Trade[]) {
     .sort((a, b) => new Date(a.closed_at!).getTime() - new Date(b.closed_at!).getTime());
 
   if (sorted.length < 2) {
-    return generateDemoPnLData();
+    return [];
   }
 
   // Group by day
@@ -184,44 +187,6 @@ function buildPnLData(trades: Trade[]) {
     date,
     value: Math.round(value),
   }));
-}
-
-function generateDemoEquityData() {
-  const data: { date: string; value: number }[] = [];
-  let equity = 50000;
-  let seed = 42;
-  const now = new Date();
-  for (let i = 29; i >= 0; i--) {
-    const d = new Date(now);
-    d.setDate(d.getDate() - i);
-    seed = (seed * 16807 + 0) % 2147483647;
-    const random = (seed & 0x7fffffff) / 0x7fffffff;
-    const change = (random - 0.4) * 1000;
-    equity += change;
-    data.push({
-      date: d.toISOString().split("T")[0],
-      value: Math.round(equity),
-    });
-  }
-  return data;
-}
-
-function generateDemoPnLData() {
-  const data: { date: string; value: number }[] = [];
-  let seed = 123;
-  const now = new Date();
-  for (let i = 29; i >= 0; i--) {
-    const d = new Date(now);
-    d.setDate(d.getDate() - i);
-    seed = (seed * 16807 + 0) % 2147483647;
-    const random = (seed & 0x7fffffff) / 0x7fffffff;
-    const value = Math.round((random - 0.45) * 1200);
-    data.push({
-      date: d.toISOString().split("T")[0],
-      value,
-    });
-  }
-  return data;
 }
 
 /* ---- MiniStat ---- */

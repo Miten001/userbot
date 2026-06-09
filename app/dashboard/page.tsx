@@ -54,7 +54,23 @@ export default function DashboardOverview() {
   const recentTrades = trades.slice(0, 4);
   const recentPayouts = payouts.slice(0, 3);
   const fundedAccounts = accounts?.filter((a) => a.phase === "funded") ?? [];
-  const equityData = useMemo(() => generateEquityData(), []);
+  const equityData = useMemo(() => {
+    const closed = trades.filter((t) => t.profit_usd !== null && t.closed_at);
+    if (closed.length < 2) return [];
+    const sorted = [...closed].sort(
+      (a, b) => new Date(a.closed_at!).getTime() - new Date(b.closed_at!).getTime()
+    );
+    const startingEquity = 100_000;
+    let equity = startingEquity;
+    const data: { date: string; value: number }[] = [
+      { date: sorted[0].closed_at!.split("T")[0], value: startingEquity },
+    ];
+    for (const t of sorted) {
+      equity += t.profit_usd ?? 0;
+      data.push({ date: t.closed_at!.split("T")[0], value: Math.round(equity) });
+    }
+    return data;
+  }, [trades]);
 
   return (
     <div className="relative min-h-screen overflow-hidden pb-24">
@@ -102,9 +118,11 @@ export default function DashboardOverview() {
             </div>
 
             {/* Equity Curve - mini version */}
-            <div className="mb-8">
-              <EquityCurve data={equityData} height={160} title="Equity Performance (30d)" />
-            </div>
+            {equityData.length > 0 && (
+              <div className="mb-8">
+                <EquityCurve data={equityData} height={160} title="Equity Performance (30d)" />
+              </div>
+            )}
 
             {/* Quick Actions */}
             <div className="mb-8 flex flex-wrap gap-3">
@@ -229,24 +247,4 @@ function PayoutBadge({ status }: { status: string }) {
   return <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${map[status] ?? "border-white/10 bg-white/5 text-slate-400"}`}>{status}</span>;
 }
 
-/* ---- Demo Data Generator ---- */
 
-function generateEquityData() {
-  const data: { date: string; value: number }[] = [];
-  let equity = 50000;
-  let seed = 42;
-  const now = new Date();
-  for (let i = 29; i >= 0; i--) {
-    const d = new Date(now);
-    d.setDate(d.getDate() - i);
-    seed = (seed * 16807 + 0) % 2147483647;
-    const random = (seed & 0x7fffffff) / 0x7fffffff;
-    const change = (random - 0.4) * 1000;
-    equity += change;
-    data.push({
-      date: d.toISOString().split("T")[0],
-      value: Math.round(equity),
-    });
-  }
-  return data;
-}
