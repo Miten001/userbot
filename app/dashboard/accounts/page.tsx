@@ -4,10 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Crown, ChevronRight, Wallet, TrendingUp, Banknote,
-  Send, X, Info,
+  Send, X,
 } from "lucide-react";
 import {
-  Account, Payout, DEMO_ACCOUNTS, DEMO_PAYOUTS, WITHDRAW_METHODS,
+  Account, Payout, WITHDRAW_METHODS,
 } from "@/app/dashboard/data";
 import PageTransition from "@/app/components/PageTransition";
 import { SkeletonCard } from "@/app/components/SkeletonCard";
@@ -15,7 +15,6 @@ import { SkeletonCard } from "@/app/components/SkeletonCard";
 export default function AccountsPage() {
   const [accounts, setAccounts] = useState<Account[] | null>(null);
   const [loading, setLoading] = useState(true);
-  const [demo, setDemo] = useState(false);
   const [withdrawFor, setWithdrawFor] = useState<Account | null>(null);
   const [toast, setToast] = useState<{ kind: "ok" | "err"; msg: string } | null>(null);
 
@@ -31,10 +30,8 @@ export default function AccountsPage() {
         if (!r.ok) throw new Error("not configured");
         const data = await r.json();
         setAccounts(data.accounts ?? []);
-        setDemo(false);
       } catch {
-        setAccounts(DEMO_ACCOUNTS);
-        setDemo(true);
+        setAccounts([]);
       } finally {
         setLoading(false);
       }
@@ -60,17 +57,6 @@ export default function AccountsPage() {
           </Link>
         </div>
 
-        {demo && (
-          <div className="mb-6 flex items-start gap-3 rounded-2xl border border-gold/30 bg-gold/[0.06] p-4 text-sm text-slate-300">
-            <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-gold" />
-            <div>
-              <strong className="text-gold">Demo Mode active.</strong>{" "}
-              You&apos;re seeing simulated data.{" "}
-              <Link href="/admin/setup" className="font-semibold text-gold underline">Setup status</Link>
-            </div>
-          </div>
-        )}
-
         {loading ? (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <SkeletonCard height="h-72" />
@@ -92,7 +78,6 @@ export default function AccountsPage() {
       {withdrawFor && (
         <WithdrawModal
           account={withdrawFor}
-          demo={demo}
           onClose={() => setWithdrawFor(null)}
           onDone={() => {
             flash("ok", "Withdrawal request submitted.");
@@ -194,8 +179,8 @@ function AccountCard({ account: a, onWithdraw }: { account: Account; onWithdraw:
 
 /* ---- WithdrawModal ---- */
 
-function WithdrawModal({ account, demo, onClose, onDone, onError }: {
-  account: Account; demo: boolean;
+function WithdrawModal({ account, onClose, onDone, onError }: {
+  account: Account;
   onClose: () => void; onDone: (po?: Payout) => void; onError: (m: string) => void;
 }) {
   const profit = account.equity_usd - account.balance_usd;
@@ -213,14 +198,6 @@ function WithdrawModal({ account, demo, onClose, onDone, onError }: {
 
     setSubmitting(true);
     try {
-      if (demo) {
-        onDone({
-          id: `demo-${Date.now()}`, account_id: account.id, amount_usd: amt,
-          method, destination, status: "requested",
-          requested_at: new Date().toISOString(), paid_at: null,
-        });
-        return;
-      }
       const r = await fetch("/api/payouts", {
         method: "POST",
         headers: { "content-type": "application/json" },

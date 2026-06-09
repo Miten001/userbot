@@ -4,12 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Crown, ChevronRight, ShieldCheck, TrendingUp, Wallet,
-  Banknote, Info, BarChart3, ArrowUpRight, ArrowDownRight,
+  Banknote, BarChart3, ArrowUpRight, ArrowDownRight,
   Send, Eye,
 } from "lucide-react";
 import {
-  Account, Profile, Payout, Trade,
-  DEMO_ACCOUNTS, DEMO_PROFILE, DEMO_PAYOUTS, DEMO_TRADES, fmtDate,
+  Account, Profile, Payout, Trade, fmtDate,
 } from "./data";
 import PageTransition from "@/app/components/PageTransition";
 import { SkeletonStats, SkeletonCard } from "@/app/components/SkeletonCard";
@@ -20,7 +19,6 @@ export default function DashboardOverview() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [payouts, setPayouts] = useState<Payout[]>([]);
   const [trades, setTrades] = useState<Trade[]>([]);
-  const [demo, setDemo] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -30,7 +28,6 @@ export default function DashboardOverview() {
         if (!r.ok) throw new Error("not configured");
         const data = await r.json();
         setAccounts(data.accounts ?? []);
-        setDemo(false);
 
         const [pr, po, tr] = await Promise.all([
           fetch("/api/profile", { cache: "no-store" }),
@@ -41,11 +38,10 @@ export default function DashboardOverview() {
         if (po.ok) setPayouts((await po.json()).payouts ?? []);
         if (tr.ok) setTrades((await tr.json()).trades ?? []);
       } catch {
-        setAccounts(DEMO_ACCOUNTS);
-        setProfile(DEMO_PROFILE);
-        setPayouts(DEMO_PAYOUTS);
-        setTrades(DEMO_TRADES);
-        setDemo(true);
+        setAccounts([]);
+        setProfile(null);
+        setPayouts([]);
+        setTrades([]);
       } finally {
         setLoading(false);
       }
@@ -88,16 +84,7 @@ export default function DashboardOverview() {
           </div>
         </div>
 
-        {demo && (
-          <div className="mb-6 flex items-start gap-3 rounded-2xl border border-gold/30 bg-gold/[0.06] p-4 text-sm text-slate-300">
-            <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-gold" />
-            <div>
-              <strong className="text-gold">Demo Mode active.</strong>{" "}
-              You&apos;re seeing simulated data. Add Razorpay/NOWPayments + Supabase env vars in Vercel to switch to live mode.{" "}
-              <Link href="/admin/setup" className="font-semibold text-gold underline">Setup status</Link>
-            </div>
-          </div>
-        )}
+
 
         {loading ? (
           <div className="space-y-6">

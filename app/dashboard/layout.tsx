@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import DashboardLayout from "@/app/components/DashboardLayout";
-import { Profile, DEMO_PROFILE } from "./data";
+import { Profile } from "./data";
 
 export default function DashboardRootLayout({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -15,10 +15,10 @@ export default function DashboardRootLayout({ children }: { children: React.Reac
           const data = await r.json();
           setProfile(data.profile);
         } else {
-          setProfile(DEMO_PROFILE);
+          setProfile(null);
         }
       } catch {
-        setProfile(DEMO_PROFILE);
+        setProfile(null);
       }
     })();
   }, []);

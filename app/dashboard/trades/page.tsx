@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  BarChart3, ArrowUpRight, ArrowDownRight, Info,
+  BarChart3, ArrowUpRight, ArrowDownRight,
 } from "lucide-react";
 import {
-  Trade, DEMO_TRADES, fmtDate,
+  Trade, fmtDate,
 } from "@/app/dashboard/data";
 import PageTransition from "@/app/components/PageTransition";
 import { SkeletonStats, SkeletonTable } from "@/app/components/SkeletonCard";
@@ -15,7 +15,6 @@ import PnLChart from "@/app/components/PnLChart";
 export default function TradesPage() {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [loading, setLoading] = useState(true);
-  const [demo, setDemo] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -24,10 +23,8 @@ export default function TradesPage() {
         if (!r.ok) throw new Error("not configured");
         const data = await r.json();
         setTrades(data.trades ?? []);
-        setDemo(false);
       } catch {
-        setTrades(DEMO_TRADES);
-        setDemo(true);
+        setTrades([]);
       } finally {
         setLoading(false);
       }
@@ -54,15 +51,6 @@ export default function TradesPage() {
           </h1>
           <p className="mt-1 text-sm text-slate-400">View all your closed positions and performance metrics</p>
         </div>
-
-        {demo && (
-          <div className="mb-6 flex items-start gap-3 rounded-2xl border border-gold/30 bg-gold/[0.06] p-4 text-sm text-slate-300">
-            <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-gold" />
-            <div>
-              <strong className="text-gold">Demo Mode.</strong> Showing simulated trade data.
-            </div>
-          </div>
-        )}
 
         {loading ? (
           <div className="space-y-6">

@@ -5,14 +5,13 @@ import {
   Settings, Camera, User, Globe, Phone, Mail, Lock,
   Bell, AlertTriangle, Trash2, Save,
 } from "lucide-react";
-import { Profile, DEMO_PROFILE } from "@/app/dashboard/data";
+import { Profile } from "@/app/dashboard/data";
 import PageTransition from "@/app/components/PageTransition";
 import { SkeletonCard } from "@/app/components/SkeletonCard";
 
 export default function SettingsPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [email, setEmail] = useState<string | null>(null);
-  const [demo, setDemo] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // Form state
@@ -39,14 +38,12 @@ export default function SettingsPage() {
         setFullName(data.profile?.full_name ?? "");
         setCountry(data.profile?.country ?? "");
         setPhone(data.profile?.phone ?? "");
-        setDemo(false);
       } catch {
-        setProfile(DEMO_PROFILE);
-        setEmail("alex@example.com");
-        setFullName(DEMO_PROFILE.full_name ?? "");
-        setCountry(DEMO_PROFILE.country ?? "");
-        setPhone(DEMO_PROFILE.phone ?? "");
-        setDemo(true);
+        setProfile(null);
+        setEmail(null);
+        setFullName("");
+        setCountry("");
+        setPhone("");
       } finally {
         setLoading(false);
       }
@@ -70,11 +67,6 @@ export default function SettingsPage() {
   async function saveProfile() {
     setSaving(true);
     try {
-      if (demo) {
-        setProfile({ id: "demo", full_name: fullName, country, phone, is_admin: profile?.is_admin });
-        flash("ok", "Profile updated.");
-        return;
-      }
       const r = await fetch("/api/profile", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
