@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Users, Copy, CheckCircle2, DollarSign, Clock, Gift } from "lucide-react";
 import PageTransition from "@/app/components/PageTransition";
 
@@ -12,8 +12,6 @@ type Referral = {
   commission: number;
 };
 
-const REFERRAL_LINK = "https://apexfunded.com/ref/USER123";
-
 const steps = [
   { icon: Copy, title: "Share Your Link", description: "Copy your unique referral link and share it with friends or on social media." },
   { icon: Users, title: "Friend Signs Up", description: "When someone uses your link to purchase a challenge, they get 10% off." },
@@ -22,6 +20,24 @@ const steps = [
 
 export default function ReferralPage() {
   const [copied, setCopied] = useState(false);
+  const [referralLink, setReferralLink] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch("/api/profile", { cache: "no-store" });
+        if (r.ok) {
+          const data = await r.json();
+          const userId = data.profile?.id;
+          if (userId) {
+            setReferralLink(`https://apexfunded.com/ref/${userId}`);
+          }
+        }
+      } catch {
+        // Profile not available - link stays null
+      }
+    })();
+  }, []);
 
   // TODO: fetch from API
   const referrals: Referral[] = [];
@@ -31,7 +47,8 @@ export default function ReferralPage() {
   const pendingCommission = referrals.filter((r) => r.status === "active").reduce((s, r) => s + r.commission, 0);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(REFERRAL_LINK).catch(() => {});
+    if (!referralLink) return;
+    navigator.clipboard.writeText(referralLink).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -59,11 +76,12 @@ export default function ReferralPage() {
             </div>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <div className="flex-1 rounded-xl border border-white/10 bg-bg-deep/50 px-4 py-3 font-mono text-sm text-slate-300">
-                {REFERRAL_LINK}
+                {referralLink ?? "Loading..."}
               </div>
               <button
                 onClick={handleCopy}
-                className="flex items-center justify-center gap-2 rounded-xl border border-gold/30 bg-gold/10 px-5 py-3 text-sm font-semibold text-gold transition-colors hover:bg-gold/20"
+                disabled={!referralLink}
+                className="flex items-center justify-center gap-2 rounded-xl border border-gold/30 bg-gold/10 px-5 py-3 text-sm font-semibold text-gold transition-colors hover:bg-gold/20 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {copied ? <CheckCircle2 className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 {copied ? "Copied!" : "Copy Link"}
