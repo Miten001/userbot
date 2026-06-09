@@ -117,14 +117,21 @@ export default function AdminDashboard() {
     setTimeout(() => setToast(null), 3500);
   }
 
-  async function act(key: string, fn: () => Promise<Response>, okMsg: string) {
+  async function act(key: string, fn: () => Promise<Response>, okMsg: string, checkEmail = false) {
     if (state === "demo") { flash("ok", "Demo mode — action simulated."); return; }
     setBusy(key);
     try {
       const r = await fn();
       const body = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(body.error || "Request failed");
-      flash("ok", okMsg);
+      if (checkEmail) {
+        const emailMsg = body.emailSent
+          ? "Account activated! Email sent."
+          : "Account activated! Email NOT sent - notify customer manually.";
+        flash("ok", emailMsg);
+      } else {
+        flash("ok", okMsg);
+      }
       await load();
     } catch (e) {
       flash("err", e instanceof Error ? e.message : "Failed");
@@ -165,7 +172,8 @@ export default function AdminDashboard() {
           mt5_server: form.mt5_server,
         }),
       }),
-      "Account activated and email sent!");
+      "Account activated!",
+      true);
   };
 
   const updateFormField = (challengeId: string, field: string, value: string) => {

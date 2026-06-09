@@ -97,6 +97,7 @@ export async function POST(req: Request) {
       daily_loss_pct: rules.daily_loss_pct,
       overall_loss_pct: rules.overall_loss_pct,
       profit_target_pct: rules.profit_target_pct,
+      profit_split_pct: 80,
       phase: "evaluation",
       step_index: 1,
       total_steps: rules.steps,
@@ -113,6 +114,7 @@ export async function POST(req: Request) {
 
   // Look up user email and send notification.
   let email: string | null = null;
+  let emailSent = false;
   try {
     const { data } = await db.auth.admin.getUserById(challenge.user_id);
     email = data.user?.email ?? null;
@@ -121,7 +123,7 @@ export async function POST(req: Request) {
   }
 
   if (email) {
-    await notifyAccountReady(email, {
+    emailSent = await notifyAccountReady(email, {
       login: mt5_login,
       server: mt5_server,
       size: accountSize,
@@ -129,5 +131,5 @@ export async function POST(req: Request) {
     });
   }
 
-  return NextResponse.json({ account });
+  return NextResponse.json({ account, emailSent });
 }
