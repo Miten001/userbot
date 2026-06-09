@@ -1,0 +1,29 @@
+{
+  "project_type": "Next.js 14 App Router prop-firm platform",
+  "language": "TypeScript",
+  "build_system": "npm with Next.js build, deployed on Vercel",
+  "test_framework": "vitest (configured but minimal tests)",
+  "build_command": "npm run build",
+  "test_command": "npm run test",
+  "verification_instructions": "Run npm run build to ensure no TypeScript errors and the app compiles successfully",
+  "snapshot_or_generated_files": null,
+  "setup_instructions": "npm install",
+  "environment_constraints": "Supabase for DB, Resend for email. Build must pass with npm run build.",
+  "contribution_requirements": "Follow existing patterns in the codebase. Use service-role dbAdmin() for admin API routes. Use requireAdmin() guard on all admin endpoints.",
+  "key_patterns": "Admin APIs at app/api/admin/* use requireAdmin() + dbAdmin(). Admin page is client-side fetching /api/admin. fulfillChallenge() in lib/fulfillment.ts is called by both payment webhooks. Email notifications use lib/email.ts with Resend. Plans/rules defined in lib/plans.ts.",
+  "relevant_files": [
+    "lib/fulfillment.ts",
+    "lib/mt5.ts",
+    "lib/email.ts",
+    "lib/plans.ts",
+    "lib/admin.ts",
+    "lib/db.ts",
+    "app/admin/page.tsx",
+    "app/api/admin/route.ts",
+    "app/api/admin/accounts/route.ts",
+    "app/api/webhooks/razorpay/route.ts",
+    "app/api/webhooks/nowpayments/route.ts",
+    "supabase/schema.sql"
+  ],
+  "directory_structure": "app/ = Next.js App Router pages + API routes. lib/ = shared business logic. supabase/ = schema SQL. app/admin/ = admin panel pages. app/api/admin/ = admin API routes."
+}

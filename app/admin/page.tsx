@@ -22,9 +22,21 @@ type Stats = {
   evaluation_revenue_usd: number;
 };
 
+type ChallengeRow = {
+  id: string;
+  user_id: string;
+  step: string;
+  account_size_usd: number;
+  price_usd: number | null;
+  state: string;
+  paid_at: string | null;
+  created_at: string;
+};
+
 type AccountRow = {
   id: string;
   user_id: string;
+  challenge_id?: string;
   mt5_login: string | null;
   initial_balance_usd: number | null;
   balance_usd: number;
@@ -49,7 +61,7 @@ type PayoutRow = {
   paid_at: string | null;
 };
 
-type Overview = { stats: Stats; accounts: AccountRow[]; payouts: PayoutRow[] };
+type Overview = { stats: Stats; challenges: ChallengeRow[]; accounts: AccountRow[]; payouts: PayoutRow[] };
 
 /* ───────────────────────── demo data ───────────────────────── */
 
@@ -59,10 +71,16 @@ const DEMO: Overview = {
     accounts_total: 39, accounts_funded: 11, accounts_breached: 6,
     payouts_requested: 4, payouts_paid_usd: 18_420, evaluation_revenue_usd: 9_870,
   },
+  challenges: [
+    { id: "demo-ch1", user_id: "u_8821", step: "two", account_size_usd: 50_000, price_usd: 139, state: "active", paid_at: new Date().toISOString(), created_at: new Date().toISOString() },
+    { id: "demo-ch2", user_id: "u_4410", step: "one", account_size_usd: 100_000, price_usd: 489, state: "active", paid_at: new Date().toISOString(), created_at: new Date().toISOString() },
+    { id: "demo-ch3", user_id: "u_2093", step: "three", account_size_usd: 25_000, price_usd: 59, state: "active", paid_at: new Date().toISOString(), created_at: new Date().toISOString() },
+    { id: "demo-ch4", user_id: "u_7781", step: "two", account_size_usd: 10_000, price_usd: 39, state: "passed", paid_at: new Date().toISOString(), created_at: new Date().toISOString() },
+  ],
   accounts: [
-    { id: "demo-a1", user_id: "u_8821", mt5_login: "10458321", initial_balance_usd: 50_000, balance_usd: 50_000, equity_usd: 53_120, phase: "evaluation", step_index: 1, total_steps: 2, profit_split_pct: 80, breach_reason: null, last_synced_at: new Date().toISOString() },
-    { id: "demo-a2", user_id: "u_4410", mt5_login: "10458109", initial_balance_usd: 100_000, balance_usd: 100_000, equity_usd: 104_900, phase: "funded", step_index: 2, total_steps: 2, profit_split_pct: 85, breach_reason: null, last_synced_at: new Date().toISOString() },
-    { id: "demo-a3", user_id: "u_2093", mt5_login: "10457744", initial_balance_usd: 25_000, balance_usd: 25_000, equity_usd: 22_380, phase: "breached", step_index: 1, total_steps: 1, profit_split_pct: 80, breach_reason: "Daily drawdown breached", last_synced_at: new Date().toISOString() },
+    { id: "demo-a1", user_id: "u_7781", challenge_id: "demo-ch4", mt5_login: "10458321", initial_balance_usd: 50_000, balance_usd: 50_000, equity_usd: 53_120, phase: "evaluation", step_index: 1, total_steps: 2, profit_split_pct: 80, breach_reason: null, last_synced_at: new Date().toISOString() },
+    { id: "demo-a2", user_id: "u_4410", challenge_id: "demo-ch2", mt5_login: "10458109", initial_balance_usd: 100_000, balance_usd: 100_000, equity_usd: 104_900, phase: "funded", step_index: 2, total_steps: 2, profit_split_pct: 85, breach_reason: null, last_synced_at: new Date().toISOString() },
+    { id: "demo-a3", user_id: "u_2093", challenge_id: "demo-ch3", mt5_login: "10457744", initial_balance_usd: 25_000, balance_usd: 25_000, equity_usd: 22_380, phase: "breached", step_index: 1, total_steps: 1, profit_split_pct: 80, breach_reason: "Daily drawdown breached", last_synced_at: new Date().toISOString() },
   ],
   payouts: [
     { id: "demo-p1", user_id: "u_4410", account_id: "demo-a2", amount_usd: 1_240, method: "crypto", destination: "0x91a…f3", status: "requested", requested_at: new Date().toISOString(), paid_at: null },
@@ -77,6 +95,7 @@ export default function AdminDashboard() {
   const [state, setState] = useState<"loading" | "ok" | "forbidden" | "demo">("loading");
   const [busy, setBusy] = useState<string | null>(null);
   const [toast, setToast] = useState<{ kind: "ok" | "err"; msg: string } | null>(null);
+  const [activateForm, setActivateForm] = useState<Record<string, { mt5_login: string; mt5_password: string; mt5_server: string }>>({});
 
   const load = useCallback(async () => {
     try {
@@ -128,6 +147,33 @@ export default function AdminDashboard() {
     act("sync",
       () => fetch("/api/sync", { method: "POST" }),
       "Sync run complete.");
+
+  const activateChallenge = (challengeId: string) => {
+    const form = activateForm[challengeId];
+    if (!form?.mt5_login || !form?.mt5_password || !form?.mt5_server) {
+      flash("err", "Fill all MT5 fields before activating.");
+      return;
+    }
+    act(`activate-${challengeId}`,
+      () => fetch("/api/admin/activate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          challenge_id: challengeId,
+          mt5_login: form.mt5_login,
+          mt5_password: form.mt5_password,
+          mt5_server: form.mt5_server,
+        }),
+      }),
+      "Account activated and email sent!");
+  };
+
+  const updateFormField = (challengeId: string, field: string, value: string) => {
+    setActivateForm((prev) => ({
+      ...prev,
+      [challengeId]: { ...prev[challengeId], [field]: value } as { mt5_login: string; mt5_password: string; mt5_server: string },
+    }));
+  };
 
   if (state === "forbidden") return <Forbidden />;
 
@@ -183,6 +229,67 @@ export default function AdminDashboard() {
               <StatCard icon={AlertTriangle} label="Breached" value={data.stats.accounts_breached} tone="rose" />
               <StatCard icon={Crown} label="Pending Payouts" value={data.stats.payouts_requested} tone="gold" />
             </div>
+
+            {/* Pending Setup */}
+            {(() => {
+              const provisionedChallengeIds = new Set(data.accounts.map((a) => a.challenge_id));
+              const pending = (data.challenges ?? []).filter(
+                (c) => c.state === "active" && !provisionedChallengeIds.has(c.id),
+              );
+              return (
+                <Section title="Pending Setup" count={pending.length}>
+                  {pending.length === 0 ? (
+                    <Empty label="No challenges awaiting MT5 setup." />
+                  ) : (
+                    <div className="space-y-4">
+                      {pending.map((c) => {
+                        const form = activateForm[c.id] || { mt5_login: "", mt5_password: "", mt5_server: "" };
+                        return (
+                          <div key={c.id} className="rounded-2xl border border-gold/20 bg-gold/[0.03] p-4">
+                            <div className="mb-3 flex flex-wrap items-center gap-3 text-sm">
+                              <span className="font-mono text-xs text-slate-400">{c.user_id.slice(0, 8)}...</span>
+                              <span className="font-semibold text-white">${c.account_size_usd.toLocaleString()}</span>
+                              <Badge status={c.step + "-step"} />
+                              {c.paid_at && <span className="text-xs text-slate-500">Paid {fmtDate(c.paid_at)}</span>}
+                            </div>
+                            <div className="flex flex-wrap items-end gap-2">
+                              <input
+                                type="text"
+                                placeholder="MT5 Login"
+                                value={form.mt5_login}
+                                onChange={(e) => updateFormField(c.id, "mt5_login", e.target.value)}
+                                className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-white placeholder:text-slate-500 focus:border-gold/50 focus:outline-none"
+                              />
+                              <input
+                                type="text"
+                                placeholder="MT5 Password"
+                                value={form.mt5_password}
+                                onChange={(e) => updateFormField(c.id, "mt5_password", e.target.value)}
+                                className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-white placeholder:text-slate-500 focus:border-gold/50 focus:outline-none"
+                              />
+                              <input
+                                type="text"
+                                placeholder="MT5 Server"
+                                value={form.mt5_server}
+                                onChange={(e) => updateFormField(c.id, "mt5_server", e.target.value)}
+                                className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-white placeholder:text-slate-500 focus:border-gold/50 focus:outline-none"
+                              />
+                              <ActionBtn
+                                tone="emerald"
+                                loading={busy === `activate-${c.id}`}
+                                onClick={() => activateChallenge(c.id)}
+                              >
+                                <Check className="h-3.5 w-3.5" />Activate
+                              </ActionBtn>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </Section>
+              );
+            })()}
 
             {/* Payouts */}
             <Section title="Withdrawal Requests" count={data.payouts.length}>

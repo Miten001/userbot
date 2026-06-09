@@ -1,0 +1,27 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Remove auto-provision from fulfillment and add admin API + UI for manual MT5 credential entry. The payment webhook should only mark the challenge active (no account creation). Admin panel shows 'Pending Setup' challenges and provides a form to enter MT5 credentials, which creates the account row and sends email to customer.",
+  "status": "in_progress",
+  "steps": [
+    "Step 1: Modify lib/fulfillment.ts - Remove steps 3-5 (MT5 provisioning, account insert, email send). After marking the challenge as active (step 2), just return { ok: true }. Remove imports of getMT5Provider, notifyAccountReady, and stepRules that are no longer needed in this file.",
+    "Step 2: Create a new admin API route at app/api/admin/activate/route.ts. This POST endpoint accepts { challenge_id, mt5_login, mt5_password, mt5_server }. It should: (a) requireAdmin(), (b) load the challenge (must be state='active'), (c) check no account already exists for this challenge_id, (d) use stepRules() from lib/plans.ts to get risk params, (e) insert the accounts row with provider='manual', provider_id=null, the given mt5_login/password/server, balance set to challenge.account_size_usd, (f) look up the user's email via dbAdmin().auth.admin.getUserById(), (g) call notifyAccountReady() from lib/email.ts, (h) return the created account.",
+    "Step 3: Modify app/api/admin/route.ts GET handler - It already returns challenges and accounts. Make sure it includes user email in the challenges data (join or separate lookup). Add a computed field or let the frontend compute which active challenges have no matching account. The response already includes both challenges[] and accounts[] so the frontend can cross-reference by challenge_id.",
+    "Step 4: Modify app/admin/page.tsx - Add a new 'Pending Setup' section between Stats and Payouts. This section filters challenges with state='active' that have no matching account in the accounts array (compare challenge.id against accounts[].challenge_id). For each pending challenge, show: user_id, account_size_usd, step, paid_at. Add an inline form or modal with inputs for mt5_login, mt5_password, mt5_server, and an 'Activate' button that POSTs to /api/admin/activate. On success, show a toast and reload data.",
+    "Step 5: Update the DEMO data in app/admin/page.tsx to include sample challenges with demo 'Pending Setup' entries so the demo mode shows the new section too."
+  ],
+  "acceptance_criteria": [
+    "npm run build passes without errors",
+    "lib/fulfillment.ts no longer imports or calls getMT5Provider, no longer creates account rows, no longer sends email",
+    "Payment webhooks still mark challenges as active via fulfillChallenge()",
+    "New POST /api/admin/activate endpoint exists and is admin-protected",
+    "Admin panel shows a 'Pending Setup' section listing active challenges without accounts",
+    "Admin panel has form inputs for mt5_login, mt5_password, mt5_server per pending challenge",
+    "On activate, account row is created and notifyAccountReady email is sent"
+  ],
+  "verification": [
+    "Run npm run build and confirm it completes successfully with no TypeScript errors"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

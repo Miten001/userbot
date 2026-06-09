@@ -1,0 +1,7 @@
+{
+  "task_id": "task-manual-mt5-admin-fulfillment",
+  "task_description": "Replace auto-provisioning of MT5 accounts with manual admin fulfillment flow. After payment, challenge becomes active but no account is created. Admin panel shows pending challenges and lets admin enter MT5 credentials manually. On submit, account is created and customer gets email with credentials.",
+  "status": "in_progress",
+  "feature_order": ["FEAT-001"],
+  "blocked_reason": null
+}
