@@ -48,9 +48,9 @@ export async function POST(req: Request) {
   // Validate coupon if provided
   let price = catalogPrice;
   if (coupon_code) {
-    const couponResult = validateCoupon(coupon_code, catalogPrice);
+    const couponResult = validateCoupon(coupon_code, catalogPrice, { step, account_size_usd });
     if (!couponResult.valid) {
-      return NextResponse.json({ error: "Invalid coupon code" }, { status: 400 });
+      return NextResponse.json({ error: couponResult.message }, { status: 400 });
     }
     price = couponResult.finalPrice;
   }
