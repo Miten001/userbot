@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { motion } from "framer-motion";
 import { Users, Copy, CheckCircle2, DollarSign, Clock, Gift } from "lucide-react";
 import PageTransition from "@/app/components/PageTransition";
 
@@ -12,14 +11,6 @@ type Referral = {
   status: "active" | "pending" | "completed";
   commission: number;
 };
-
-const DEMO_REFERRALS: Referral[] = [
-  { id: "ref-001", name: "John D.", date: "2025-01-05", status: "completed", commission: 45 },
-  { id: "ref-002", name: "Emily R.", date: "2025-01-12", status: "active", commission: 60 },
-  { id: "ref-003", name: "Mike T.", date: "2025-01-18", status: "pending", commission: 0 },
-  { id: "ref-004", name: "Anna S.", date: "2024-12-28", status: "completed", commission: 35 },
-  { id: "ref-005", name: "David L.", date: "2024-12-15", status: "completed", commission: 50 },
-];
 
 const REFERRAL_LINK = "https://apexfunded.com/ref/USER123";
 
@@ -32,9 +23,12 @@ const steps = [
 export default function ReferralPage() {
   const [copied, setCopied] = useState(false);
 
-  const totalReferrals = DEMO_REFERRALS.length;
-  const earnedCommission = DEMO_REFERRALS.filter((r) => r.status === "completed").reduce((s, r) => s + r.commission, 0);
-  const pendingCommission = DEMO_REFERRALS.filter((r) => r.status === "active").reduce((s, r) => s + r.commission, 0);
+  // TODO: fetch from API
+  const referrals: Referral[] = [];
+
+  const totalReferrals = referrals.length;
+  const earnedCommission = referrals.filter((r) => r.status === "completed").reduce((s, r) => s + r.commission, 0);
+  const pendingCommission = referrals.filter((r) => r.status === "active").reduce((s, r) => s + r.commission, 0);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(REFERRAL_LINK).catch(() => {});
@@ -101,11 +95,8 @@ export default function ReferralPage() {
             <h2 className="mb-5 font-display text-xl font-bold text-white">How It Works</h2>
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
               {steps.map((step, i) => (
-                <motion.div
+                <div
                   key={step.title}
-                  initial={{ opacity: 0, y: 16 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.12, duration: 0.4 }}
                   className="text-center"
                 >
                   <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-gold/10 border border-gold/20">
@@ -114,7 +105,7 @@ export default function ReferralPage() {
                   <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">Step {i + 1}</div>
                   <h3 className="font-display text-sm font-bold text-white">{step.title}</h3>
                   <p className="mt-1 text-xs text-slate-400">{step.description}</p>
-                </motion.div>
+                </div>
               ))}
             </div>
           </div>
@@ -124,44 +115,48 @@ export default function ReferralPage() {
             <div className="mb-3 flex items-center gap-2">
               <Users className="h-4 w-4 text-gold" />
               <h2 className="font-display text-xl font-bold text-white">Referral History</h2>
-              <span className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] text-slate-400">{DEMO_REFERRALS.length}</span>
+              <span className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] text-slate-400">{referrals.length}</span>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-[11px] uppercase tracking-wider text-slate-500">
-                    <th className="px-3 py-2 font-semibold">User</th>
-                    <th className="px-3 py-2 font-semibold">Date</th>
-                    <th className="px-3 py-2 font-semibold">Status</th>
-                    <th className="px-3 py-2 font-semibold">Commission</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {DEMO_REFERRALS.map((ref) => (
-                    <tr key={ref.id} className="border-t border-white/5">
-                      <td className="px-3 py-3 font-display font-bold text-white">{ref.name}</td>
-                      <td className="px-3 py-3 text-slate-400">
-                        {new Date(ref.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                      </td>
-                      <td className="px-3 py-3">
-                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${
-                          ref.status === "completed"
-                            ? "border-emerald2/30 bg-emerald2/10 text-emerald2-400"
-                            : ref.status === "active"
-                            ? "border-gold/30 bg-gold/10 text-gold"
-                            : "border-slate-400/30 bg-slate-400/10 text-slate-400"
-                        }`}>
-                          {ref.status}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 font-semibold text-emerald2-400">
-                        {ref.commission > 0 ? `+$${ref.commission}` : "-"}
-                      </td>
+            {referrals.length === 0 ? (
+              <p className="py-6 text-center text-sm text-slate-500">No referrals yet. Share your link to start earning!</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-[11px] uppercase tracking-wider text-slate-500">
+                      <th className="px-3 py-2 font-semibold">User</th>
+                      <th className="px-3 py-2 font-semibold">Date</th>
+                      <th className="px-3 py-2 font-semibold">Status</th>
+                      <th className="px-3 py-2 font-semibold">Commission</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {referrals.map((ref) => (
+                      <tr key={ref.id} className="border-t border-white/5">
+                        <td className="px-3 py-3 font-display font-bold text-white">{ref.name}</td>
+                        <td className="px-3 py-3 text-slate-400">
+                          {new Date(ref.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                        </td>
+                        <td className="px-3 py-3">
+                          <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${
+                            ref.status === "completed"
+                              ? "border-emerald2/30 bg-emerald2/10 text-emerald2-400"
+                              : ref.status === "active"
+                              ? "border-gold/30 bg-gold/10 text-gold"
+                              : "border-slate-400/30 bg-slate-400/10 text-slate-400"
+                          }`}>
+                            {ref.status}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 font-semibold text-emerald2-400">
+                          {ref.commission > 0 ? `+$${ref.commission}` : "-"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </PageTransition>
       </div>

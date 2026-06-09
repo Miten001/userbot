@@ -1,11 +1,10 @@
 "use client";
 
 const promos = [
-  { text: "Use code APEX10 for 10% off all challenges!", highlight: "APEX10" },
-  { text: "Limited time: 15% off with code FUNDED15", highlight: "FUNDED15" },
-  { text: "New traders get 20% off - code WELCOME20", highlight: "WELCOME20" },
-  { text: "Flash Sale: Use APEX10 at checkout for instant savings", highlight: "APEX10" },
-  { text: "Join 5,000+ funded traders - code FUNDED15 for 15% off", highlight: "FUNDED15" },
+  { text: "Use code APEX45 for 45% OFF all challenges!", highlight: "APEX45" },
+  { text: "FIRST1000: 2-Phase $5,000 account for just $6 - first 1000 customers only!", highlight: "FIRST1000" },
+  { text: "Massive 45% discount with code APEX45 - limited time!", highlight: "APEX45" },
+  { text: "Grab a $5,000 funded account for only $6 - use code FIRST1000 at checkout!", highlight: "FIRST1000" },
 ];
 
 export default function CouponBanner() {

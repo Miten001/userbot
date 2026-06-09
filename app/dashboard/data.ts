@@ -1,4 +1,4 @@
-/* Shared types and demo data for all dashboard pages */
+/* Shared types and utilities for all dashboard pages */
 
 export type Account = {
   id: string;
