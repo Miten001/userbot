@@ -39,11 +39,11 @@ export function stepLabel(step: Step) {
 export function stepRules(step: Step) {
   switch (step) {
     case "one":
-      return { profit_target_pct: 10, daily_loss_pct: 4, overall_loss_pct: 6, steps: 1 };
+      return { profit_target_pct: 6, daily_loss_pct: 4, overall_loss_pct: 6, steps: 1 };
     case "two":
-      return { profit_target_pct: 8, daily_loss_pct: 5, overall_loss_pct: 10, steps: 2 };
+      return { profit_target_pct: 6, daily_loss_pct: 5, overall_loss_pct: 10, steps: 2 };
     case "three":
-      return { profit_target_pct: 6, daily_loss_pct: 5, overall_loss_pct: 12, steps: 3 };
+      return { profit_target_pct: 5, daily_loss_pct: 5, overall_loss_pct: 12, steps: 3 };
   }
 }
 

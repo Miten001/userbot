@@ -60,6 +60,7 @@ type Plan = {
   daily: string;
   overall: string;
   split: string;
+  days: string;
   popular?: boolean;
   starter?: boolean;
   accent: "gold" | "royal" | "emerald" | "rose";
@@ -67,31 +68,31 @@ type Plan = {
 
 const PLANS: Record<Step, Plan[]> = {
   one: [
-    { size: "$2,500", price: "$25", target: "10%", daily: "4%", overall: "6%", split: "75%", starter: true, accent: "emerald" },
-    { size: "$5,000", price: "$45", target: "10%", daily: "4%", overall: "6%", split: "80%", accent: "rose" },
-    { size: "$10,000", price: "$69", target: "10%", daily: "4%", overall: "6%", split: "80%", accent: "royal" },
-    { size: "$25,000", price: "$139", target: "10%", daily: "4%", overall: "6%", split: "80%", accent: "emerald" },
-    { size: "$50,000", price: "$229", target: "10%", daily: "4%", overall: "6%", split: "85%", popular: true, accent: "gold" },
-    { size: "$100,000", price: "$489", target: "10%", daily: "4%", overall: "6%", split: "85%", accent: "rose" },
-    { size: "$200,000", price: "$989", target: "10%", daily: "4%", overall: "6%", split: "90%", accent: "royal" },
+    { size: "$2,500", price: "$25", target: "6%", daily: "4%", overall: "6%", split: "75%", days: "3 days", starter: true, accent: "emerald" },
+    { size: "$5,000", price: "$45", target: "6%", daily: "4%", overall: "6%", split: "80%", days: "3 days", accent: "rose" },
+    { size: "$10,000", price: "$69", target: "6%", daily: "4%", overall: "6%", split: "80%", days: "4 days", accent: "royal" },
+    { size: "$25,000", price: "$139", target: "6%", daily: "4%", overall: "6%", split: "80%", days: "4 days", accent: "emerald" },
+    { size: "$50,000", price: "$229", target: "6%", daily: "4%", overall: "6%", split: "85%", days: "5 days", popular: true, accent: "gold" },
+    { size: "$100,000", price: "$489", target: "6%", daily: "4%", overall: "6%", split: "85%", days: "5 days", accent: "rose" },
+    { size: "$200,000", price: "$989", target: "6%", daily: "4%", overall: "6%", split: "90%", days: "5 days", accent: "royal" },
   ],
   two: [
-    { size: "$2,500", price: "$19", target: "8% / 5%", daily: "5%", overall: "10%", split: "75%", starter: true, accent: "emerald" },
-    { size: "$5,000", price: "$29", target: "8% / 5%", daily: "5%", overall: "10%", split: "80%", accent: "rose" },
-    { size: "$10,000", price: "$39", target: "8% / 5%", daily: "5%", overall: "10%", split: "80%", accent: "royal" },
-    { size: "$25,000", price: "$79", target: "8% / 5%", daily: "5%", overall: "10%", split: "80%", accent: "emerald" },
-    { size: "$50,000", price: "$139", target: "8% / 5%", daily: "5%", overall: "10%", split: "85%", popular: true, accent: "gold" },
-    { size: "$100,000", price: "$329", target: "8% / 5%", daily: "5%", overall: "10%", split: "85%", accent: "rose" },
-    { size: "$200,000", price: "$649", target: "8% / 5%", daily: "5%", overall: "10%", split: "90%", accent: "royal" },
+    { size: "$2,500", price: "$19", target: "6% / 4%", daily: "5%", overall: "10%", split: "75%", days: "3 days", starter: true, accent: "emerald" },
+    { size: "$5,000", price: "$29", target: "6% / 4%", daily: "5%", overall: "10%", split: "80%", days: "3 days", accent: "rose" },
+    { size: "$10,000", price: "$39", target: "6% / 4%", daily: "5%", overall: "10%", split: "80%", days: "4 days", accent: "royal" },
+    { size: "$25,000", price: "$79", target: "6% / 4%", daily: "5%", overall: "10%", split: "80%", days: "4 days", accent: "emerald" },
+    { size: "$50,000", price: "$139", target: "6% / 4%", daily: "5%", overall: "10%", split: "85%", days: "5 days", popular: true, accent: "gold" },
+    { size: "$100,000", price: "$329", target: "6% / 4%", daily: "5%", overall: "10%", split: "85%", days: "5 days", accent: "rose" },
+    { size: "$200,000", price: "$649", target: "6% / 4%", daily: "5%", overall: "10%", split: "90%", days: "5 days", accent: "royal" },
   ],
   three: [
-    { size: "$2,500", price: "$15", target: "6% / 4% / 3%", daily: "5%", overall: "12%", split: "75%", starter: true, accent: "emerald" },
-    { size: "$5,000", price: "$22", target: "6% / 4% / 3%", daily: "5%", overall: "12%", split: "75%", accent: "rose" },
-    { size: "$10,000", price: "$29", target: "6% / 4% / 3%", daily: "5%", overall: "12%", split: "75%", accent: "royal" },
-    { size: "$25,000", price: "$59", target: "6% / 4% / 3%", daily: "5%", overall: "12%", split: "80%", accent: "emerald" },
-    { size: "$50,000", price: "$109", target: "6% / 4% / 3%", daily: "5%", overall: "12%", split: "85%", popular: true, accent: "gold" },
-    { size: "$100,000", price: "$259", target: "6% / 4% / 3%", daily: "5%", overall: "12%", split: "85%", accent: "rose" },
-    { size: "$200,000", price: "$499", target: "6% / 4% / 3%", daily: "5%", overall: "12%", split: "90%", accent: "royal" },
+    { size: "$2,500", price: "$15", target: "5% / 3% / 2%", daily: "5%", overall: "12%", split: "75%", days: "3 days", starter: true, accent: "emerald" },
+    { size: "$5,000", price: "$22", target: "5% / 3% / 2%", daily: "5%", overall: "12%", split: "75%", days: "3 days", accent: "rose" },
+    { size: "$10,000", price: "$29", target: "5% / 3% / 2%", daily: "5%", overall: "12%", split: "75%", days: "4 days", accent: "royal" },
+    { size: "$25,000", price: "$59", target: "5% / 3% / 2%", daily: "5%", overall: "12%", split: "80%", days: "4 days", accent: "emerald" },
+    { size: "$50,000", price: "$109", target: "5% / 3% / 2%", daily: "5%", overall: "12%", split: "85%", days: "5 days", popular: true, accent: "gold" },
+    { size: "$100,000", price: "$259", target: "5% / 3% / 2%", daily: "5%", overall: "12%", split: "85%", days: "5 days", accent: "rose" },
+    { size: "$200,000", price: "$499", target: "5% / 3% / 2%", daily: "5%", overall: "12%", split: "90%", days: "5 days", accent: "royal" },
   ],
 };
 
@@ -226,6 +227,7 @@ function PlanCard({ plan, onStart }: { plan: Plan; onStart: () => void }) {
             <Row label="Profit Target" value={plan.target} />
             <Row label="Daily Loss" value={plan.daily} />
             <Row label="Overall Loss" value={plan.overall} />
+            <Row label="Min. Trading Days" value={plan.days} />
             <Row label="Profit Split" value={plan.split} highlight />
             <Row label="Time Limit" value="Unlimited" />
           </ul>
