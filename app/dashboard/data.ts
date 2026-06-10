@@ -48,8 +48,10 @@ export type Trade = {
 };
 
 export const WITHDRAW_METHODS = [
-  { value: "bank", label: "Bank transfer" },
+  { value: "upi", label: "UPI" },
+  { value: "crypto", label: "Crypto (USDT/BTC)" },
   { value: "usdt-trc20", label: "USDT (TRC-20)" },
+  { value: "bank", label: "Bank transfer" },
   { value: "wise", label: "Wise" },
 ];
 
