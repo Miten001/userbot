@@ -22,6 +22,9 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ kind: "ok" | "err"; msg: string } | null>(null);
 
+  // Delete account
+  const [deleting, setDeleting] = useState(false);
+
   // Preferences
   const [emailNotifs, setEmailNotifs] = useState(true);
   const [tradeAlerts, setTradeAlerts] = useState(true);
@@ -80,6 +83,24 @@ export default function SettingsPage() {
       flash("err", e instanceof Error ? e.message : "Failed to save");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function deleteAccount() {
+    const confirmed = window.confirm(
+      "Are you sure you want to delete your account? This action cannot be undone and all your data will be permanently removed.",
+    );
+    if (!confirmed) return;
+
+    setDeleting(true);
+    try {
+      const r = await fetch("/api/account/delete", { method: "POST" });
+      const body = await r.json();
+      if (!r.ok) throw new Error(body.error || "Failed to delete account");
+      window.location.href = "/";
+    } catch (e) {
+      flash("err", e instanceof Error ? e.message : "Failed to delete account");
+      setDeleting(false);
     }
   }
 
@@ -211,8 +232,12 @@ export default function SettingsPage() {
           <p className="mb-4 text-sm text-slate-400">
             Permanently delete your account and all associated data. This action cannot be undone.
           </p>
-          <button className="inline-flex items-center gap-2 rounded-full border border-rose2/40 bg-rose2/10 px-4 py-2.5 text-sm font-semibold text-rose2-400 transition-colors hover:bg-rose2/20">
-            <Trash2 className="h-4 w-4" /> Delete Account
+          <button
+            onClick={deleteAccount}
+            disabled={deleting}
+            className="inline-flex items-center gap-2 rounded-full border border-rose2/40 bg-rose2/10 px-4 py-2.5 text-sm font-semibold text-rose2-400 transition-colors hover:bg-rose2/20 disabled:opacity-60"
+          >
+            <Trash2 className="h-4 w-4" /> {deleting ? "Deleting..." : "Delete Account"}
           </button>
         </section>
         </PageTransition>
