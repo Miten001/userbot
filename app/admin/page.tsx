@@ -63,36 +63,12 @@ type PayoutRow = {
 
 type Overview = { stats: Stats; challenges: ChallengeRow[]; accounts: AccountRow[]; payouts: PayoutRow[] };
 
-/* ───────────────────────── demo data ───────────────────────── */
-
-const DEMO: Overview = {
-  stats: {
-    challenges_total: 42, challenges_active: 28, challenges_pending: 3,
-    accounts_total: 39, accounts_funded: 11, accounts_breached: 6,
-    payouts_requested: 4, payouts_paid_usd: 18_420, evaluation_revenue_usd: 9_870,
-  },
-  challenges: [
-    { id: "demo-ch1", user_id: "u_8821", step: "two", account_size_usd: 50_000, price_usd: 139, state: "active", paid_at: new Date().toISOString(), created_at: new Date().toISOString() },
-    { id: "demo-ch2", user_id: "u_4410", step: "one", account_size_usd: 100_000, price_usd: 489, state: "active", paid_at: new Date().toISOString(), created_at: new Date().toISOString() },
-    { id: "demo-ch3", user_id: "u_2093", step: "three", account_size_usd: 25_000, price_usd: 59, state: "active", paid_at: new Date().toISOString(), created_at: new Date().toISOString() },
-    { id: "demo-ch4", user_id: "u_7781", step: "two", account_size_usd: 10_000, price_usd: 39, state: "passed", paid_at: new Date().toISOString(), created_at: new Date().toISOString() },
-  ],
-  accounts: [
-    { id: "demo-a1", user_id: "u_7781", challenge_id: "demo-ch4", mt5_login: "10458321", initial_balance_usd: 50_000, balance_usd: 50_000, equity_usd: 53_120, phase: "evaluation", step_index: 1, total_steps: 2, profit_split_pct: 80, breach_reason: null, last_synced_at: new Date().toISOString() },
-    { id: "demo-a2", user_id: "u_4410", challenge_id: "demo-ch2", mt5_login: "10458109", initial_balance_usd: 100_000, balance_usd: 100_000, equity_usd: 104_900, phase: "funded", step_index: 2, total_steps: 2, profit_split_pct: 85, breach_reason: null, last_synced_at: new Date().toISOString() },
-    { id: "demo-a3", user_id: "u_2093", challenge_id: "demo-ch3", mt5_login: "10457744", initial_balance_usd: 25_000, balance_usd: 25_000, equity_usd: 22_380, phase: "breached", step_index: 1, total_steps: 1, profit_split_pct: 80, breach_reason: "Daily drawdown breached", last_synced_at: new Date().toISOString() },
-  ],
-  payouts: [
-    { id: "demo-p1", user_id: "u_4410", account_id: "demo-a2", amount_usd: 1_240, method: "crypto", destination: "0x91a…f3", status: "requested", requested_at: new Date().toISOString(), paid_at: null },
-    { id: "demo-p2", user_id: "u_7781", account_id: "demo-a9", amount_usd: 860, method: "bank", destination: "IBAN ****", status: "approved", requested_at: new Date().toISOString(), paid_at: null },
-  ],
-};
-
 /* ───────────────────────── page ───────────────────────── */
 
 export default function AdminDashboard() {
   const [data, setData] = useState<Overview | null>(null);
-  const [state, setState] = useState<"loading" | "ok" | "forbidden" | "demo">("loading");
+  const [state, setState] = useState<"loading" | "ok" | "forbidden" | "error">("loading");
+  const [errorMsg, setErrorMsg] = useState<string>("");
   const [busy, setBusy] = useState<string | null>(null);
   const [toast, setToast] = useState<{ kind: "ok" | "err"; msg: string } | null>(null);
   const [activateForm, setActivateForm] = useState<Record<string, { mt5_login: string; mt5_password: string; mt5_server: string }>>({});
@@ -101,12 +77,17 @@ export default function AdminDashboard() {
     try {
       const r = await fetch("/api/admin", { cache: "no-store" });
       if (r.status === 403) { setState("forbidden"); return; }
-      if (!r.ok) { setData(DEMO); setState("demo"); return; }
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        setErrorMsg(body.error || "Failed to load admin data. Check your database configuration.");
+        setState("error");
+        return;
+      }
       setData(await r.json());
       setState("ok");
     } catch {
-      setData(DEMO);
-      setState("demo");
+      setErrorMsg("Failed to load admin data. Check your database configuration.");
+      setState("error");
     }
   }, []);
 
@@ -118,7 +99,6 @@ export default function AdminDashboard() {
   }
 
   async function act(key: string, fn: () => Promise<Response>, okMsg: string, checkEmail = false) {
-    if (state === "demo") { flash("ok", "Demo mode — action simulated."); return; }
     setBusy(key);
     try {
       const r = await fn();
@@ -215,11 +195,11 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-        {state === "demo" && (
-          <div className="mb-6 flex items-start gap-3 rounded-2xl border border-gold/30 bg-gold/[0.06] p-4 text-sm text-slate-300">
-            <Crown className="mt-0.5 h-4 w-4 flex-shrink-0 text-gold" />
+        {state === "error" && (
+          <div className="mb-6 flex items-start gap-3 rounded-2xl border border-rose2/30 bg-rose2/[0.06] p-4 text-sm text-slate-300">
+            <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-rose2-400" />
             <div>
-              <strong className="text-gold">Demo Mode.</strong> Showing sample data — configure Supabase admin keys and sign in as an admin to manage live accounts.
+              <strong className="text-rose2-400">Error.</strong> {errorMsg}
             </div>
           </div>
         )}
