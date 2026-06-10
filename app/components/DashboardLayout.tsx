@@ -26,7 +26,7 @@ export default function DashboardLayout({
 
       {/* Tablet sidebar - collapsed (icons only) */}
       <div className="hidden md:fixed md:inset-y-0 md:z-40 md:flex md:w-16 lg:hidden">
-        <div className="flex h-full w-full flex-col items-center border-r border-white/[0.06] bg-bg-deep/95 py-4 backdrop-blur-2xl">
+        <div className="flex h-full w-full flex-col items-center border-r border-white/[0.06] bg-bg-deep/95 py-4 backdrop-blur-xl">
           <div className="mb-6">
             <MobileLogo />
           </div>
@@ -35,7 +35,7 @@ export default function DashboardLayout({
       </div>
 
       {/* Mobile top bar */}
-      <div className="fixed inset-x-0 top-0 z-40 flex h-16 items-center justify-between border-b border-white/[0.06] bg-bg-deep/95 px-4 backdrop-blur-2xl md:hidden">
+      <div className="fixed inset-x-0 top-0 z-40 flex h-16 items-center justify-between border-b border-white/[0.06] bg-bg-deep/95 px-4 backdrop-blur-xl md:hidden">
         <div className="flex items-center gap-2.5">
           <MobileLogo />
           <span className="font-display text-lg font-bold tracking-tight">

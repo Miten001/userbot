@@ -9,11 +9,11 @@ const promos = [
 
 export default function CouponBanner() {
   return (
-    <div className="relative w-full h-9 overflow-hidden border-b border-gold/20 bg-bg-deep/95 backdrop-blur-md z-[60]">
+    <div className="relative w-full h-9 overflow-hidden border-b border-gold/20 bg-bg-deep/95 backdrop-blur-sm z-[60]">
       {/* Subtle gold gradient overlay */}
       <div className="absolute inset-0 bg-gradient-to-r from-gold/[0.03] via-transparent to-gold/[0.03] pointer-events-none" />
 
-      <div className="flex animate-marquee whitespace-nowrap h-full items-center">
+      <div className="flex animate-marquee whitespace-nowrap h-full items-center" style={{ willChange: 'transform' }}>
         {[...promos, ...promos].map((promo, i) => (
           <span key={i} className="inline-flex items-center gap-2 px-6 text-xs">
             <span className="text-gold-400">&#9733;</span>

@@ -56,7 +56,7 @@ export default function Navbar() {
         transition={{ duration: 0.5, ease: "easeOut" }}
         className={`flex w-full max-w-6xl items-center justify-between rounded-full border px-4 py-2 transition-all duration-300 sm:px-6 ${
           scrolled
-            ? "border-gold/10 bg-bg-deep/80 shadow-[0_4px_20px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(251,191,36,0.06)] backdrop-blur-2xl"
+            ? "border-gold/10 bg-bg-deep/80 shadow-[0_4px_20px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(251,191,36,0.06)] backdrop-blur-xl"
             : "border-white/[0.06] bg-white/[0.02] backdrop-blur-md"
         }`}
       >
@@ -131,7 +131,7 @@ export default function Navbar() {
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
-            className="absolute left-4 right-4 top-20 z-40 rounded-3xl border border-gold/20 bg-bg-soft/95 p-4 shadow-gold backdrop-blur-2xl md:hidden"
+            className="absolute left-4 right-4 top-20 z-40 rounded-3xl border border-gold/20 bg-bg-soft/95 p-4 shadow-gold backdrop-blur-xl md:hidden"
           >
             <ul className="flex flex-col gap-1">
               {links.map((l) => (

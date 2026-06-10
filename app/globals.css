@@ -78,11 +78,11 @@ body::before {
 
 @layer components {
   .glass {
-    @apply bg-white/[0.035] border border-white/10 backdrop-blur-xl;
+    @apply bg-white/[0.035] border border-white/10 backdrop-blur-md;
   }
 
   .glass-strong {
-    @apply bg-white/[0.06] border border-white/15 backdrop-blur-2xl;
+    @apply bg-white/[0.06] border border-white/15 backdrop-blur-xl;
   }
 
   /* Rich multi-stop gradient text */
@@ -194,10 +194,12 @@ body::before {
 .glow-blob {
   position: absolute;
   border-radius: 9999px;
-  filter: blur(90px);
-  opacity: 0.30;
+  filter: blur(70px);
+  opacity: 0.25;
   pointer-events: none;
   z-index: 0;
+  will-change: transform;
+  transform: translateZ(0);
 }
 
 .text-balance {

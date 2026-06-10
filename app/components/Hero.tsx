@@ -8,17 +8,19 @@ import {
   TrendingUp,
   Crown,
 } from "lucide-react";
-import PairsShowcase from "./PairsShowcase";
+import dynamic from "next/dynamic";
+
+const PairsShowcase = dynamic(() => import("./PairsShowcase"), { ssr: false });
 
 export default function Hero() {
   return (
     <section className="relative isolate overflow-hidden pt-32 sm:pt-36">
       {/* Grid + glow blobs */}
       <div className="absolute inset-0 -z-10 grid-bg" />
-      <div className="glow-blob left-[-10%] top-20 h-[380px] w-[380px] bg-gold-radial" />
-      <div className="glow-blob right-[-15%] top-32 h-[400px] w-[400px] bg-royal-radial" />
-      <div className="glow-blob left-1/3 bottom-[-15%] h-[320px] w-[320px] bg-emerald-radial" />
-      <div className="glow-blob right-1/4 top-1/2 h-[220px] w-[220px] bg-rose-radial" />
+      <div className="glow-blob left-[-10%] top-20 h-[380px] w-[380px] bg-gold-radial" style={{ willChange: 'transform' }} />
+      <div className="glow-blob right-[-15%] top-32 h-[400px] w-[400px] bg-royal-radial" style={{ willChange: 'transform' }} />
+      <div className="glow-blob left-1/3 bottom-[-15%] h-[320px] w-[320px] bg-emerald-radial" style={{ willChange: 'transform' }} />
+      <div className="glow-blob right-1/4 top-1/2 h-[220px] w-[220px] bg-rose-radial" style={{ willChange: 'transform' }} />
 
       <div className="mx-auto grid w-full max-w-7xl grid-cols-1 items-center gap-10 px-6 pb-20 sm:px-10 lg:grid-cols-2 lg:gap-6">
         {/* Left: copy */}
@@ -98,47 +100,16 @@ export default function Hero() {
 
         {/* Right: 3D Canvas + floating cards */}
         <div className="relative h-[440px] w-full sm:h-[520px] lg:h-[600px]">
-          <div className="ring-conic absolute inset-0 overflow-hidden rounded-[36px] border border-white/10 bg-bg-deep/80 shadow-glass backdrop-blur-md">
+          <div className="ring-conic absolute inset-0 overflow-hidden rounded-[36px] border border-white/10 bg-bg-deep/80 shadow-glass backdrop-blur-sm">
             <PairsShowcase />
           </div>
-
-          {/* Floating card — Live Account */}
-          <motion.div
-            initial={{ opacity: 0, x: -20, y: 10 }}
-            animate={{ opacity: 1, x: 0, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.4 }}
-            className="absolute -left-2 top-10 hidden w-56 rounded-2xl border border-gold/30 bg-bg-soft/85 p-4 shadow-gold backdrop-blur-2xl sm:block"
-          >
-            <div className="flex items-center justify-between text-xs text-slate-400">
-              <span className="flex items-center gap-1.5">
-                <Crown className="h-3 w-3 text-gold" />
-                Funded Account
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald2-400" />
-                <span className="text-emerald2-400">Active</span>
-              </span>
-            </div>
-            <div className="mt-2 font-display text-2xl font-bold gradient-text">
-              $200,000
-            </div>
-            <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/5">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-gold via-rose2-400 to-emerald2-400"
-                style={{ width: "78%" }}
-              />
-            </div>
-            <div className="mt-2 text-[11px] text-slate-400">
-              78% to next payout
-            </div>
-          </motion.div>
 
           {/* Floating card — Profit */}
           <motion.div
             initial={{ opacity: 0, x: 20, y: 10 }}
             animate={{ opacity: 1, x: 0, y: 0 }}
             transition={{ duration: 0.7, delay: 0.5 }}
-            className="absolute bottom-12 right-2 hidden w-52 rounded-2xl border border-emerald2/30 bg-bg-soft/85 p-4 shadow-emerald backdrop-blur-2xl sm:block"
+            className="absolute bottom-12 right-2 hidden w-52 rounded-2xl border border-emerald2/30 bg-bg-soft/85 p-4 shadow-emerald backdrop-blur-md sm:block"
           >
             <div className="text-xs text-slate-400">Today P/L</div>
             <div className="mt-1 flex items-baseline gap-2">

@@ -140,7 +140,7 @@ export default function Sidebar({ isAdmin, profileName, collapsed }: { isAdmin?:
   }
 
   return (
-    <aside className="flex h-full flex-col bg-bg-deep/95 border-r border-white/[0.06] backdrop-blur-2xl">
+    <aside className="flex h-full flex-col bg-bg-deep/95 border-r border-white/[0.06] backdrop-blur-xl">
       {/* Logo */}
       <div className="flex items-center justify-between px-6 py-6">
         <div className="flex items-center gap-2.5">
