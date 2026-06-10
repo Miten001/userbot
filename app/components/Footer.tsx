@@ -20,7 +20,7 @@ const cols = [
       { label: "Careers", href: "#" },
       { label: "Press", href: "#" },
       { label: "Blog", href: "#" },
-      { label: "Contact", href: "#" },
+      { label: "Contact", href: "mailto:apexfunded619@protonmail.com" },
     ],
   },
   {
@@ -102,6 +102,9 @@ export default function Footer() {
                 </a>
               ))}
             </div>
+            <p className="mt-3 text-xs text-slate-400">
+              Support: <a href="mailto:apexfunded619@protonmail.com" className="text-gold hover:underline">apexfunded619@protonmail.com</a>
+            </p>
           </div>
 
           {/* Link cols */}

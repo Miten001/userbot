@@ -1,14 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   LayoutDashboard, Wallet, BarChart3, Banknote,
   Settings, ShieldCheck, Home, User,
   Trophy, Award, Users, Swords,
-  Gift, Layers, PieChart, BadgeCheck, Activity, ShoppingBag,
+  Gift, Layers, PieChart, BadgeCheck, Activity, ShoppingBag, LogOut,
 } from "lucide-react";
+import { dbBrowser } from "@/lib/db";
 import NotificationBell from "./NotificationBell";
 
 type NavItem = {
@@ -44,6 +45,13 @@ const toolsLinks: NavItem[] = [
 
 export default function Sidebar({ isAdmin, profileName, collapsed }: { isAdmin?: boolean; profileName?: string; collapsed?: boolean }) {
   const pathname = usePathname();
+  const router = useRouter();
+
+  async function handleLogout() {
+    const supabase = dbBrowser();
+    await supabase.auth.signOut();
+    router.push("/");
+  }
 
   function isActive(item: NavItem) {
     if (item.href === "/admin") return pathname === "/admin";
@@ -111,7 +119,7 @@ export default function Sidebar({ isAdmin, profileName, collapsed }: { isAdmin?:
             })}
           </>
         )}
-        <div className="mt-auto">
+        <div className="mt-auto flex flex-col items-center gap-1">
           <Link
             href="/"
             title="Home"
@@ -119,6 +127,13 @@ export default function Sidebar({ isAdmin, profileName, collapsed }: { isAdmin?:
           >
             <Home className="h-5 w-5" />
           </Link>
+          <button
+            onClick={handleLogout}
+            title="Logout"
+            className="grid h-10 w-10 place-items-center rounded-xl text-slate-400 transition-colors hover:bg-rose-500/10 hover:text-rose-400"
+          >
+            <LogOut className="h-5 w-5" />
+          </button>
         </div>
       </nav>
     );
@@ -256,6 +271,13 @@ export default function Sidebar({ isAdmin, profileName, collapsed }: { isAdmin?:
           <Home className="h-4 w-4" />
           <span>Home</span>
         </Link>
+        <button
+          onClick={handleLogout}
+          className="mt-1 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-slate-400 transition-colors hover:bg-rose-500/10 hover:text-rose-400"
+        >
+          <LogOut className="h-4 w-4" />
+          <span>Logout</span>
+        </button>
       </div>
     </aside>
   );
