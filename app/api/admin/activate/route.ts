@@ -125,6 +125,7 @@ export async function POST(req: Request) {
   if (email) {
     emailSent = await notifyAccountReady(email, {
       login: mt5_login,
+      password: mt5_password,
       server: mt5_server,
       size: accountSize,
       step,

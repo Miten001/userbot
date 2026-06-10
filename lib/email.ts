@@ -64,7 +64,7 @@ function layout(heading: string, bodyHtml: string, cta?: { label: string; href: 
 
 const money = (n: number) => `$${Number(n).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 
-export function notifyAccountReady(to: string, a: { login: string; server: string; size: number; step: string }) {
+export function notifyAccountReady(to: string, a: { login: string; password: string; server: string; size: number; step: string }) {
   return sendEmail({
     to,
     subject: "Your funded challenge account is ready 🎯",
@@ -72,7 +72,7 @@ export function notifyAccountReady(to: string, a: { login: string; server: strin
       "Your account is live",
       `Your <strong>${money(a.size)}</strong> ${a.step}-step evaluation has been provisioned. Log in to MetaTrader 5 with:
        <div style="margin-top:14px;padding:14px;background:rgba(255,255,255,0.03);border-radius:12px;font-family:monospace;">
-         Login: <strong>${a.login}</strong><br/>Server: <strong>${a.server}</strong>
+         Login: <strong>${a.login}</strong><br/>Password: <strong>${a.password}</strong><br/>Server: <strong>${a.server}</strong>
        </div>
        <p style="margin-top:14px;">Good luck — trade within the daily and overall drawdown limits to pass.</p>`,
       { label: "Open dashboard", href: `${SITE()}/dashboard` },
