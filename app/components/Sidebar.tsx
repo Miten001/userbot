@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Wallet, BarChart3, Banknote,
   Settings, ShieldCheck, Home, User,
   Trophy, Award, Users, Swords,
-  Gift, Layers, PieChart, BadgeCheck, Activity, ShoppingBag, LogOut,
+  Layers, PieChart, BadgeCheck, Activity, ShoppingBag, LogOut,
 } from "lucide-react";
 import { dbBrowser } from "@/lib/db";
 import NotificationBell from "./NotificationBell";
@@ -35,7 +35,6 @@ const adminLinks: NavItem[] = [
 ];
 
 const toolsLinks: NavItem[] = [
-  { icon: Gift, label: "Free Trial", href: "/dashboard/free-trial" },
   { icon: Layers, label: "Scaling", href: "/dashboard/scaling" },
   { icon: PieChart, label: "Stats", href: "/dashboard/stats" },
   { icon: BadgeCheck, label: "Payout Proof", href: "/dashboard/payout-proof" },
