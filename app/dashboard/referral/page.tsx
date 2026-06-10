@@ -30,7 +30,8 @@ export default function ReferralPage() {
           const data = await r.json();
           const userId = data.profile?.id;
           if (userId) {
-            setReferralLink(`https://apexfunded.com/ref/${userId}`);
+            const origin = window.location.origin;
+            setReferralLink(`${origin}/ref/${userId}`);
           }
         }
       } catch {
