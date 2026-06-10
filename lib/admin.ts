@@ -74,6 +74,10 @@ export async function requireAdmin(): Promise<{ userId: string } | null> {
  * Fallback: read the raw Supabase auth cookie and verify the access token
  * using the service role client. This handles cases where the SSR client
  * fails to parse or refresh the session cookie.
+ *
+ * Supabase SSR v0.5.x uses CHUNKED cookies:
+ *   sb-<ref>-auth-token.0, sb-<ref>-auth-token.1, ...
+ * We also check for the non-chunked name as a fallback.
  */
 async function fallbackGetUser(cookieStore: ReturnType<typeof cookies>) {
   try {
@@ -83,39 +87,43 @@ async function fallbackGetUser(cookieStore: ReturnType<typeof cookies>) {
     // Extract project ref from URL (e.g. "abc123" from "https://abc123.supabase.co")
     const hostname = new URL(supabaseUrl).hostname;
     const projectRef = hostname.split(".")[0];
-    const cookieName = `sb-${projectRef}-auth-token`;
+    const cookieBaseName = `sb-${projectRef}-auth-token`;
 
-    const rawCookie = cookieStore.get(cookieName)?.value;
+    // Attempt 1: Read chunked cookies (sb-<ref>-auth-token.0, .1, .2, ...)
+    let rawCookie = readChunkedCookie(cookieStore, cookieBaseName);
+
+    // Attempt 2: Try the non-chunked cookie name
     if (!rawCookie) {
-      console.warn("[admin][fallback] No auth cookie found with name:", cookieName);
-      return null;
+      rawCookie = cookieStore.get(cookieBaseName)?.value || null;
     }
 
-    // Parse the cookie value - it may be JSON or base64-encoded JSON
-    let parsed: any;
-    try {
-      parsed = JSON.parse(decodeURIComponent(rawCookie));
-    } catch {
-      try {
-        parsed = JSON.parse(rawCookie);
-      } catch {
-        console.warn("[admin][fallback] Could not parse cookie value");
-        return null;
+    if (!rawCookie) {
+      // Attempt 3: List all cookies and look for any that start with sb- and contain auth-token
+      const allCookies = cookieStore.getAll();
+      const authCookies = allCookies.filter(
+        (c) => c.name.startsWith("sb-") && c.name.includes("auth-token"),
+      );
+      console.warn(
+        "[admin][fallback] No auth cookie found. Base name:", cookieBaseName,
+        "| Available sb-*auth* cookies:", authCookies.map((c) => c.name),
+      );
+
+      // If we found chunked cookies with a slightly different pattern, try them
+      if (authCookies.length > 0) {
+        // Sort by name to get correct chunk order
+        const sorted = authCookies.sort((a, b) => a.name.localeCompare(b.name));
+        rawCookie = sorted.map((c) => c.value).join("");
+        console.log("[admin][fallback] Assembled from found cookies:", authCookies.map((c) => c.name));
       }
+
+      if (!rawCookie) return null;
     }
 
-    // Extract access_token - could be at root level or inside first array element
-    let accessToken: string | undefined;
-    if (typeof parsed === "object" && parsed !== null) {
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        accessToken = parsed[0]?.access_token;
-      } else {
-        accessToken = parsed.access_token;
-      }
-    }
+    // Parse the cookie value
+    const accessToken = extractAccessToken(rawCookie);
 
     if (!accessToken) {
-      console.warn("[admin][fallback] No access_token found in parsed cookie");
+      console.warn("[admin][fallback] No access_token found in cookie payload (length:", rawCookie.length, ")");
       return null;
     }
 
@@ -131,6 +139,79 @@ async function fallbackGetUser(cookieStore: ReturnType<typeof cookies>) {
     return data.user;
   } catch (err) {
     console.warn("[admin][fallback] Unexpected error:", err);
+    return null;
+  }
+}
+
+/**
+ * Read chunked Supabase cookies. The SSR library splits large cookies into
+ * chunks named: <baseName>.0, <baseName>.1, <baseName>.2, ...
+ * Returns the concatenated value or null if no chunks found.
+ */
+function readChunkedCookie(
+  cookieStore: ReturnType<typeof cookies>,
+  baseName: string,
+): string | null {
+  const chunks: string[] = [];
+  for (let i = 0; i < 10; i++) {
+    const chunk = cookieStore.get(`${baseName}.${i}`);
+    if (!chunk) break;
+    chunks.push(chunk.value);
+  }
+  if (chunks.length === 0) return null;
+  console.log(`[admin][fallback] Found ${chunks.length} chunked cookie(s) for ${baseName}`);
+  return chunks.join("");
+}
+
+/**
+ * Extract access_token from a raw cookie string.
+ * Handles: JSON, URL-encoded JSON, base64-encoded JSON, and arrays.
+ */
+function extractAccessToken(raw: string): string | null {
+  // Try direct JSON parse
+  let parsed = tryParseJson(raw);
+
+  // Try URL-decoded
+  if (!parsed) {
+    try {
+      parsed = tryParseJson(decodeURIComponent(raw));
+    } catch {
+      // decodeURIComponent can throw on malformed sequences
+    }
+  }
+
+  // Try base64 decode
+  if (!parsed) {
+    try {
+      const decoded = Buffer.from(raw, "base64").toString("utf-8");
+      parsed = tryParseJson(decoded);
+    } catch {
+      // not valid base64
+    }
+  }
+
+  if (!parsed) return null;
+
+  // Extract access_token from various shapes
+  if (typeof parsed === "object" && parsed !== null) {
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      // Supabase stores [access_token, refresh_token, ...] or [{access_token, ...}]
+      if (typeof parsed[0] === "string") {
+        // First element is the access_token itself
+        return parsed[0];
+      }
+      return parsed[0]?.access_token || null;
+    }
+    return parsed.access_token || null;
+  }
+
+  return null;
+}
+
+function tryParseJson(str: string): any {
+  try {
+    return JSON.parse(str);
+  } catch {
     return null;
   }
 }
