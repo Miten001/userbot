@@ -4,7 +4,6 @@ import { lookupPrice, stepLabel, type Step } from "@/lib/plans";
 import { validateCoupon } from "@/lib/coupons";
 import { dbServer, dbAdmin } from "@/lib/db";
 import { isSupabaseAdminConfigured } from "@/lib/config";
-import { isRazorpayConfigured, createPaymentLink } from "@/lib/razorpay";
 import { isCryptoConfigured, createInvoice } from "@/lib/crypto-pay";
 
 /**
@@ -12,18 +11,17 @@ import { isCryptoConfigured, createInvoice } from "@/lib/crypto-pay";
  * Body: {
  *   step: "one"|"two"|"three",
  *   account_size_usd: number,
- *   method: "upi" | "crypto"
+ *   method: "crypto"
  * }
  *
  * Live mode: creates a pending `challenges` row, then a hosted payment page:
- *   • method "upi"    → Razorpay Payment Link (UPI/cards/netbanking)
- *   • method "crypto" → NOWPayments invoice (USDT/BTC/ETH/…)
+ *   • NOWPayments invoice (USDT/BTC/ETH/...)
  * Returns { url } to redirect the user to. A webhook fulfills the order.
  *
- * Demo mode: if the chosen gateway (or Supabase admin) isn't configured,
+ * Demo mode: if the gateway (or Supabase admin) isn't configured,
  * returns a /demo-success URL so the full flow can be previewed without paying.
  */
-export type CheckoutMethod = "upi" | "crypto";
+export type CheckoutMethod = "crypto";
 
 export async function POST(req: Request) {
   let body: { step?: Step; account_size_usd?: number; method?: CheckoutMethod; coupon_code?: string };
@@ -34,7 +32,7 @@ export async function POST(req: Request) {
   }
 
   const { step, account_size_usd, coupon_code } = body;
-  const method: CheckoutMethod = body.method === "crypto" ? "crypto" : "upi";
+  const method: CheckoutMethod = "crypto";
 
   if (!step || !account_size_usd) {
     return NextResponse.json({ error: "Missing step or account_size_usd" }, { status: 400 });
@@ -57,7 +55,7 @@ export async function POST(req: Request) {
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || new URL(req.url).origin;
 
-  const gatewayReady = method === "crypto" ? isCryptoConfigured() : isRazorpayConfigured();
+  const gatewayReady = isCryptoConfigured();
 
   // ──────────────────────────────────────────────────────────────────────
   // DEMO MODE — gateway or DB not configured. Preview the flow, no real pay.
@@ -72,7 +70,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       url: url.toString(),
       mode: "demo",
-      hint: `${method === "crypto" ? "NOWPayments" : "Razorpay"} not configured — showing demo checkout. See SETUP.md.`,
+      hint: "NOWPayments not configured — showing demo checkout. See SETUP.md.",
     });
   }
 
@@ -95,7 +93,7 @@ export async function POST(req: Request) {
       step,
       account_size_usd,
       price_usd: price,
-      gateway: method === "crypto" ? "nowpayments" : "razorpay",
+      gateway: "nowpayments",
       state: "pending",
       ...(coupon_code ? { coupon_code } : {}),
     })
@@ -108,35 +106,18 @@ export async function POST(req: Request) {
 
   const label = `ApexFunded ${stepLabel(step)} — $${account_size_usd.toLocaleString()} Challenge`;
 
-  // 2. Create the hosted payment page on the chosen gateway.
+  // 2. Create the hosted payment page via NOWPayments.
   try {
-    if (method === "crypto") {
-      const inv = await createInvoice({
-        amountUsd: price,
-        orderId: challenge.id,
-        description: label,
-        ipnCallbackUrl: `${siteUrl}/api/webhooks/nowpayments`,
-        successUrl: `${siteUrl}/dashboard?checkout=success`,
-        cancelUrl: `${siteUrl}/#plans`,
-      });
-      await dbAdmin().from("challenges").update({ gateway_ref: inv.id }).eq("id", challenge.id);
-      return NextResponse.json({ url: inv.url, mode: "live", method });
-    }
-
-    const link = await createPaymentLink({
+    const inv = await createInvoice({
       amountUsd: price,
-      email: user.email,
+      orderId: challenge.id,
       description: label,
-      notes: {
-        challenge_id: challenge.id,
-        user_id: user.id,
-        step,
-        account_size_usd: String(account_size_usd),
-      },
-      callbackUrl: `${siteUrl}/dashboard?checkout=success`,
+      ipnCallbackUrl: `${siteUrl}/api/webhooks/nowpayments`,
+      successUrl: `${siteUrl}/dashboard?checkout=success`,
+      cancelUrl: `${siteUrl}/#plans`,
     });
-    await dbAdmin().from("challenges").update({ gateway_ref: link.id }).eq("id", challenge.id);
-    return NextResponse.json({ url: link.url, mode: "live", method });
+    await dbAdmin().from("challenges").update({ gateway_ref: inv.id }).eq("id", challenge.id);
+    return NextResponse.json({ url: inv.url, mode: "live", method });
   } catch (err) {
     // Roll the challenge back so a failed gateway call doesn't leave orphans.
     await dbAdmin().from("challenges").delete().eq("id", challenge.id);

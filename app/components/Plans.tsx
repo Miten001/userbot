@@ -2,23 +2,22 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, Sparkles, ChevronRight, Crown, Loader2, Smartphone, Bitcoin, X } from "lucide-react";
+import { Check, Sparkles, ChevronRight, Crown, Loader2, Bitcoin, X } from "lucide-react";
 
 type Step = "one" | "two" | "three";
-type Method = "upi" | "crypto";
 
 /** "$50,000" -> 50000 (for the API request) */
 function parseSize(s: string) {
   return parseInt(s.replace(/[^0-9]/g, ""), 10);
 }
 
-async function startCheckout(step: Step, size: string, method: Method, couponCode?: string): Promise<void> {
+async function startCheckout(step: Step, size: string, couponCode?: string): Promise<void> {
   const account_size_usd = parseSize(size);
   try {
     const res = await fetch("/api/checkout", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ step, account_size_usd, method, ...(couponCode ? { coupon_code: couponCode } : {}) }),
+      body: JSON.stringify({ step, account_size_usd, method: "crypto", ...(couponCode ? { coupon_code: couponCode } : {}) }),
     });
 
     if (res.status === 401) {
@@ -32,7 +31,7 @@ async function startCheckout(step: Step, size: string, method: Method, couponCod
       if (res.status === 404 || txt.startsWith("<!DOCTYPE")) {
         alert(
           "Payments aren't enabled on this deployment yet.\n\n" +
-            "Deploy to Vercel and add Razorpay / NOWPayments + Supabase env vars.\n" +
+            "Deploy to Vercel and add NOWPayments + Supabase env vars.\n" +
             "See SETUP.md.",
         );
         return;
@@ -126,7 +125,7 @@ export default function Plans() {
         </h2>
         <p className="mt-3 max-w-xl text-slate-400">
           Start with as little as <span className="font-semibold text-emerald2-400">$15</span>. Scale up to{" "}
-          <span className="font-semibold text-gold">$200,000</span>. Pay via <span className="text-white">UPI</span> or{" "}
+          <span className="font-semibold text-gold">$200,000</span>. Pay via{" "}
           <span className="text-white">crypto</span> — one-time fee, refunded with your first payout.
         </p>
 
@@ -248,7 +247,7 @@ function PlanCard({ plan, onStart }: { plan: Plan; onStart: () => void }) {
 }
 
 function MethodModal({ data, onClose }: { data: { step: Step; plan: Plan }; onClose: () => void }) {
-  const [loading, setLoading] = useState<Method | null>(null);
+  const [loading, setLoading] = useState(false);
   const [couponCode, setCouponCode] = useState("");
   const [couponLoading, setCouponLoading] = useState(false);
   const [couponResult, setCouponResult] = useState<{
@@ -278,14 +277,14 @@ function MethodModal({ data, onClose }: { data: { step: Step; plan: Plan }; onCl
     }
   }
 
-  async function pick(method: Method) {
+  async function pay() {
     if (loading) return;
-    setLoading(method);
+    setLoading(true);
     try {
       const validCoupon = couponResult?.valid ? couponCode.trim() : undefined;
-      await startCheckout(data.step, data.plan.size, method, validCoupon);
+      await startCheckout(data.step, data.plan.size, validCoupon);
     } finally {
-      setLoading(null);
+      setLoading(false);
     }
   }
 
@@ -319,7 +318,7 @@ function MethodModal({ data, onClose }: { data: { step: Step; plan: Plan }; onCl
             <span className="gradient-text">{data.plan.price}</span>
           )}
         </div>
-        <p className="mt-1 text-sm text-slate-400">Choose how you&apos;d like to pay:</p>
+        <p className="mt-1 text-sm text-slate-400">Pay with crypto (USDT, BTC, ETH &amp; 100+ coins)</p>
 
         {/* Coupon code input */}
         <div className="mt-4">
@@ -347,31 +346,17 @@ function MethodModal({ data, onClose }: { data: { step: Step; plan: Plan }; onCl
           )}
         </div>
 
-        <div className="mt-5 space-y-3">
+        <div className="mt-5">
           <button
-            onClick={() => pick("upi")}
-            disabled={loading !== null}
-            className="flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-left transition hover:border-gold/40 hover:bg-white/[0.06] disabled:opacity-60"
-          >
-            <span className="grid h-10 w-10 place-items-center rounded-xl bg-emerald2/15 text-emerald2-400">
-              {loading === "upi" ? <Loader2 className="h-5 w-5 animate-spin" /> : <Smartphone className="h-5 w-5" />}
-            </span>
-            <span>
-              <span className="block font-semibold text-white">UPI / Cards</span>
-              <span className="block text-xs text-slate-400">GPay, PhonePe, Paytm, cards, netbanking</span>
-            </span>
-          </button>
-
-          <button
-            onClick={() => pick("crypto")}
-            disabled={loading !== null}
+            onClick={pay}
+            disabled={loading}
             className="flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-left transition hover:border-gold/40 hover:bg-white/[0.06] disabled:opacity-60"
           >
             <span className="grid h-10 w-10 place-items-center rounded-xl bg-gold/15 text-gold">
-              {loading === "crypto" ? <Loader2 className="h-5 w-5 animate-spin" /> : <Bitcoin className="h-5 w-5" />}
+              {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Bitcoin className="h-5 w-5" />}
             </span>
             <span>
-              <span className="block font-semibold text-white">Crypto</span>
+              <span className="block font-semibold text-white">Pay with Crypto</span>
               <span className="block text-xs text-slate-400">USDT, BTC, ETH &amp; 100+ coins</span>
             </span>
           </button>

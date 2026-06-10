@@ -8,7 +8,7 @@ type Status = {
   mode: "live" | "demo";
   supabase_anon: boolean;
   supabase_admin: boolean;
-  razorpay: boolean;
+  razorpay?: boolean;
   crypto: boolean;
   metaapi: boolean;
   cron: boolean;
@@ -99,13 +99,6 @@ export default function SetupPage() {
 
             {/* Checklist */}
             <div className="space-y-3">
-              <Item
-                ok={status.razorpay}
-                title="UPI / Razorpay configured"
-                desc="RAZORPAY_KEY_ID + RAZORPAY_KEY_SECRET (+ RAZORPAY_WEBHOOK_SECRET for the webhook)"
-                ctaLabel="Get Razorpay keys"
-                ctaHref="https://dashboard.razorpay.com/app/keys"
-              />
               <Item
                 ok={status.crypto}
                 title="Crypto / NOWPayments configured"
