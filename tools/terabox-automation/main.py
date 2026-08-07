@@ -85,11 +85,11 @@ TERABOX_URL = "https://1024terabox.com/s/1axTeTaTPATdSOQizMrGeJQ"
 DEBUG_PORT = 9222
 
 # Per-selector probe timeout in seconds (short to avoid cascade)
-SELECTOR_TIMEOUT = 5
+SELECTOR_TIMEOUT = 3
 # Overall page load timeout in seconds
 PAGE_LOAD_TIMEOUT = 30
 # Delay between actions in seconds
-ACTION_DELAY = 2
+ACTION_DELAY = 0.5
 # Maximum number of concurrent browser pages allowed
 MAX_PAGES = 20
 
@@ -219,7 +219,7 @@ class TeraBoxAutomation:
                     f"Connection attempt {attempt} failed: {str(e)}"
                 )
                 if attempt < max_retries:
-                    time.sleep(3)
+                    time.sleep(2)
 
         self.update_status("Could not connect Selenium to Chrome.")
         return None
@@ -253,7 +253,7 @@ class TeraBoxAutomation:
                 return False
 
             # Wait for page to fully load (TeraBox has heavy JS)
-            time.sleep(5)
+            time.sleep(2)
 
             # Verify page loaded
             try:
@@ -265,7 +265,7 @@ class TeraBoxAutomation:
                     self.update_status(
                         f"[Page {page_number}] Page is blank, waiting more..."
                     )
-                    time.sleep(5)
+                    time.sleep(2)
             except Exception:
                 self.update_status(
                     f"[Page {page_number}] Could not get current URL"
@@ -324,7 +324,7 @@ class TeraBoxAutomation:
             if sign_in_btn:
                 sign_in_btn.click()
                 self.update_status(f"[Page {page_number}] Clicked Log In!")
-                time.sleep(3)
+                time.sleep(1)
             else:
                 self.update_status(
                     f"[Page {page_number}] Log In button not found. "
@@ -375,7 +375,7 @@ class TeraBoxAutomation:
             if sign_up_btn:
                 sign_up_btn.click()
                 self.update_status(f"[Page {page_number}] Clicked Sign Up!")
-                time.sleep(3)
+                time.sleep(1)
             else:
                 self.update_status(
                     f"[Page {page_number}] Sign Up button not found. "
@@ -469,7 +469,7 @@ class TeraBoxAutomation:
                 break
 
             # Wait for Chrome to start up
-            time.sleep(4)
+            time.sleep(3)
 
             if self._is_stopped():
                 self.update_status("\nAutomation stopped by user.")
