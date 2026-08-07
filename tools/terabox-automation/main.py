@@ -68,6 +68,12 @@ except ImportError:
     print("Install it with: pip install selenium")
     sys.exit(1)
 
+try:
+    import undetected_chromedriver as uc
+    HAS_UC = True
+except ImportError:
+    HAS_UC = False
+
 
 # Target URL
 TERABOX_URL = "https://1024terabox.com/s/1axTeTaTPATdSOQizMrGeJQ"
@@ -75,7 +81,7 @@ TERABOX_URL = "https://1024terabox.com/s/1axTeTaTPATdSOQizMrGeJQ"
 # Per-selector probe timeout in seconds (short to avoid cascade)
 SELECTOR_TIMEOUT = 2
 # Overall page load timeout in seconds
-PAGE_LOAD_TIMEOUT = 20
+PAGE_LOAD_TIMEOUT = 30
 # Delay between actions in seconds
 ACTION_DELAY = 2
 # Maximum number of concurrent browser pages allowed
@@ -107,22 +113,32 @@ class TeraBoxAutomation:
 
     def create_driver(self):
         """Create a Chrome WebDriver instance in incognito mode."""
-        chrome_options = Options()
-        chrome_options.add_argument("--incognito")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        chrome_options.add_experimental_option("useAutomationExtension", False)
-
         try:
-            driver = webdriver.Chrome(options=chrome_options)
-            driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT)
+            if HAS_UC:
+                # Use undetected-chromedriver (better for bot detection and incognito)
+                options = uc.ChromeOptions()
+                options.add_argument("--incognito")
+                options.add_argument("--disable-dev-shm-usage")
+                options.add_argument("--start-maximized")
+                driver = uc.Chrome(options=options, use_subprocess=True)
+            else:
+                # Fallback to regular selenium
+                chrome_options = Options()
+                chrome_options.add_argument("--incognito")
+                chrome_options.add_argument("--disable-dev-shm-usage")
+                chrome_options.add_argument("--start-maximized")
+                chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+                chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+                chrome_options.add_experimental_option("useAutomationExtension", False)
+                driver = webdriver.Chrome(options=chrome_options)
+
+            driver.set_page_load_timeout(30)
             driver.maximize_window()
             return driver
-        except WebDriverException as e:
+        except Exception as e:
             self.update_status(f"Chrome driver error: {str(e)}")
             self.update_status(
-                "Make sure Chrome and ChromeDriver are installed and in PATH."
+                "Make sure Chrome is installed. Try: pip install undetected-chromedriver"
             )
             return None
 
@@ -182,6 +198,9 @@ class TeraBoxAutomation:
                     f"(attempt {attempt}/{max_retries})..."
                 )
                 driver.get(TERABOX_URL)
+
+                # Give the page time to fully load (TeraBox has heavy JS)
+                time.sleep(5)
 
                 # Wait for the page body to be present to confirm page loaded
                 WebDriverWait(driver, PAGE_LOAD_TIMEOUT).until(
