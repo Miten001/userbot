@@ -3,7 +3,7 @@ TeraBox Automation Tool
 -----------------------
 A GUI tool that automates browser interaction with TeraBox.
 Opens Chrome in incognito mode via subprocess with remote debugging,
-then connects Selenium for Sign In -> Sign Up -> Gmail selection flow.
+then connects Selenium for Log In -> Sign Up -> Email selection flow.
 
 @codex_here
 """
@@ -31,7 +31,7 @@ def _check_help():
         print("The automation will:")
         print("  - Open Chrome in incognito mode (via subprocess)")
         print("  - Navigate to TeraBox")
-        print("  - Click Sign In -> Sign Up -> Gmail")
+        print("  - Click Log In -> Sign Up -> Email")
         print("  - Repeat for each page")
         print()
         print("Requirements:")
@@ -85,7 +85,7 @@ TERABOX_URL = "https://1024terabox.com/s/1axTeTaTPATdSOQizMrGeJQ"
 DEBUG_PORT = 9222
 
 # Per-selector probe timeout in seconds (short to avoid cascade)
-SELECTOR_TIMEOUT = 2
+SELECTOR_TIMEOUT = 5
 # Overall page load timeout in seconds
 PAGE_LOAD_TIMEOUT = 30
 # Delay between actions in seconds
@@ -246,7 +246,7 @@ class TeraBoxAutomation:
         """
         Perform the automation flow on a single page.
         Chrome is already open with the URL loaded via subprocess.
-        Steps: Click Sign In -> Click Sign Up -> Click Gmail option
+        Steps: Click Log In -> Click Sign Up -> Click Email option
         """
         try:
             if self._is_stopped():
@@ -274,13 +274,22 @@ class TeraBoxAutomation:
             if self._is_stopped():
                 return False
 
-            # Step 1: Click "Sign In" button
+            # Step 1: Click "Log In" button
             self.update_status(
-                f"[Page {page_number}] Looking for Sign In button..."
+                f"[Page {page_number}] Looking for Log In button..."
             )
             time.sleep(ACTION_DELAY)
 
             selectors_sign_in = [
+                (By.CSS_SELECTOR, ".download-guide-login-btn"),
+                (By.CSS_SELECTOR, "[class*='guide-login']"),
+                (By.CSS_SELECTOR, "[class*='login-btn']"),
+                (By.CSS_SELECTOR, "[class*='header-login']"),
+                (By.CSS_SELECTOR, ".header-login-btn"),
+                (By.XPATH, "//span[contains(text(),'Log In')]"),
+                (By.XPATH, "//span[contains(text(),'Log in')]"),
+                (By.XPATH, "//div[contains(@class,'login')]//span"),
+                (By.XPATH, "//*[@id='login-btn']"),
                 (By.CSS_SELECTOR, "[class*='download-guide-btn']"),
                 (By.CSS_SELECTOR, ".btn-login"),
                 (By.XPATH, "//div[contains(@class,'login')]"),
@@ -299,7 +308,7 @@ class TeraBoxAutomation:
             ]
 
             sign_in_btn = self._find_element(
-                driver, selectors_sign_in, "Sign In", page_number
+                driver, selectors_sign_in, "Log In", page_number
             )
 
             if self._is_stopped():
@@ -307,11 +316,11 @@ class TeraBoxAutomation:
 
             if sign_in_btn:
                 sign_in_btn.click()
-                self.update_status(f"[Page {page_number}] Clicked Sign In!")
-                time.sleep(ACTION_DELAY)
+                self.update_status(f"[Page {page_number}] Clicked Log In!")
+                time.sleep(3)
             else:
                 self.update_status(
-                    f"[Page {page_number}] Sign In button not found. "
+                    f"[Page {page_number}] Log In button not found. "
                     "You may need to adjust the selectors."
                 )
                 return False
@@ -319,22 +328,24 @@ class TeraBoxAutomation:
             if self._is_stopped():
                 return False
 
-            # Step 3: Click "Sign Up" button
+            # Step 2: Click "Sign Up" button
             self.update_status(f"[Page {page_number}] Looking for Sign Up button...")
             time.sleep(ACTION_DELAY)
 
             selectors_sign_up = [
-                (By.XPATH, "//span[contains(text(),'Sign up')]"),
-                (By.XPATH, "//span[contains(text(),'Sign Up')]"),
+                (By.CSS_SELECTOR, "[class*='signup']"),
+                (By.CSS_SELECTOR, "[class*='sign-up']"),
+                (By.CSS_SELECTOR, ".register-link"),
+                (By.CSS_SELECTOR, "[class*='register']"),
                 (By.XPATH, "//a[contains(text(),'Sign up')]"),
                 (By.XPATH, "//a[contains(text(),'Sign Up')]"),
+                (By.XPATH, "//span[contains(text(),'Sign up')]"),
+                (By.XPATH, "//span[contains(text(),'Sign Up')]"),
+                (By.XPATH, "//div[contains(@class,'tab')]//span[contains(text(),'Sign')]"),
                 (By.XPATH, "//button[contains(text(),'Sign up')]"),
                 (By.XPATH, "//button[contains(text(),'Sign Up')]"),
                 (By.XPATH, "//*[contains(text(),'Create account')]"),
                 (By.XPATH, "//*[contains(text(),'Register')]"),
-                (By.CSS_SELECTOR, "[class*='sign-up']"),
-                (By.CSS_SELECTOR, "[class*='signup']"),
-                (By.CSS_SELECTOR, "[class*='register']"),
             ]
 
             sign_up_btn = self._find_element(
@@ -347,7 +358,7 @@ class TeraBoxAutomation:
             if sign_up_btn:
                 sign_up_btn.click()
                 self.update_status(f"[Page {page_number}] Clicked Sign Up!")
-                time.sleep(ACTION_DELAY)
+                time.sleep(3)
             else:
                 self.update_status(
                     f"[Page {page_number}] Sign Up button not found. "
@@ -358,49 +369,47 @@ class TeraBoxAutomation:
             if self._is_stopped():
                 return False
 
-            # Step 4: Click Gmail option
+            # Step 3: Click Email icon option
             self.update_status(
-                f"[Page {page_number}] Looking for Gmail option..."
+                f"[Page {page_number}] Looking for Email icon option..."
             )
             time.sleep(ACTION_DELAY)
 
-            selectors_gmail = [
-                # Google-specific class selectors (highest priority)
-                (By.CSS_SELECTOR, "[class*='google-btn']"),
-                (By.CSS_SELECTOR, "[class*='third-login-google']"),
-                (By.CSS_SELECTOR, "[data-type='google']"),
-                # Google icon/image within a google-classed container
-                (By.XPATH, "//div[contains(@class,'google')]//img"),
-                (By.XPATH, "//div[contains(@class,'google')]"),
-                (By.XPATH, "//a[contains(@class,'google')]"),
-                # Google logo image - click the parent element
-                (By.XPATH, "//img[contains(@src,'google')]/.."),
-                (By.XPATH, "//img[contains(@alt,'Google')]/.."),
-                # Broader Google selectors
-                (By.XPATH, "//*[contains(text(),'Google')]"),
-                (By.XPATH, "//img[contains(@src,'google')]"),
-                (By.XPATH, "//img[contains(@alt,'Google')]"),
-                (By.CSS_SELECTOR, "[class*='google']"),
-                (By.CSS_SELECTOR, ".google-login"),
-                (By.CSS_SELECTOR, ".btn-google"),
+            selectors_email = [
+                (By.CSS_SELECTOR, "[class*='email-btn']"),
+                (By.CSS_SELECTOR, "[class*='email-login']"),
+                (By.CSS_SELECTOR, "[class*='login-email']"),
+                (By.CSS_SELECTOR, "[data-type='email']"),
+                (By.CSS_SELECTOR, "[class*='mail']"),
+                (By.XPATH, "//div[contains(@class,'email')]"),
+                (By.XPATH, "//a[contains(@class,'email')]"),
+                (By.XPATH, "//span[contains(text(),'Email')]"),
+                (By.XPATH, "//span[contains(text(),'email')]"),
+                (By.XPATH, "//*[contains(@class,'mail')]"),
+                (By.XPATH, "//img[contains(@src,'mail')]/.."),
+                (By.XPATH, "//img[contains(@alt,'mail')]/.."),
+                (By.XPATH, "//img[contains(@alt,'Mail')]/.."),
+                (By.XPATH, "//svg[contains(@class,'mail')]/.."),
+                (By.CSS_SELECTOR, "[class*='icon-email']"),
+                (By.CSS_SELECTOR, "[class*='icon-mail']"),
             ]
 
-            gmail_btn = self._find_element(
-                driver, selectors_gmail, "Gmail", page_number
+            email_btn = self._find_element(
+                driver, selectors_email, "Email", page_number
             )
 
             if self._is_stopped():
                 return False
 
-            if gmail_btn:
-                gmail_btn.click()
+            if email_btn:
+                email_btn.click()
                 self.update_status(
-                    f"[Page {page_number}] Clicked Gmail option! Done."
+                    f"[Page {page_number}] Clicked Email option! Done."
                 )
                 time.sleep(ACTION_DELAY)
             else:
                 self.update_status(
-                    f"[Page {page_number}] Gmail option not found. "
+                    f"[Page {page_number}] Email option not found. "
                     "You may need to adjust the selectors."
                 )
                 return False
@@ -569,7 +578,7 @@ class TeraBoxGUI:
 
         subtitle_label = tk.Label(
             title_frame,
-            text="Sign In > Sign Up > Gmail Selection",
+            text="Log In > Sign Up > Email Selection",
             font=("Consolas", 10),
             fg=fg_purple,
             bg=bg_dark,
