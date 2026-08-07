@@ -281,6 +281,13 @@ class TeraBoxAutomation:
             time.sleep(ACTION_DELAY)
 
             selectors_sign_in = [
+                (By.XPATH, "//button[contains(text(),'Login')]"),
+                (By.XPATH, "//a[contains(text(),'Login')]"),
+                (By.XPATH, "//*[contains(text(),'Login')]"),
+                (By.XPATH, "//button[text()='Login']"),
+                (By.XPATH, "//a[text()='Login']"),
+                (By.CSS_SELECTOR, "button.login"),
+                (By.CSS_SELECTOR, "a.login"),
                 (By.CSS_SELECTOR, ".download-guide-login-btn"),
                 (By.CSS_SELECTOR, "[class*='guide-login']"),
                 (By.CSS_SELECTOR, "[class*='login-btn']"),
