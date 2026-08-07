@@ -91,7 +91,7 @@ PAGE_LOAD_TIMEOUT = 30
 # Delay between actions in seconds
 ACTION_DELAY = 0.5
 # Maximum number of concurrent browser pages allowed
-MAX_PAGES = 20
+MAX_PAGES = 50
 
 
 def find_chrome_path():
@@ -446,73 +446,58 @@ class TeraBoxAutomation:
             return False
 
     def run(self, num_pages):
-        """Run the automation for the specified number of pages."""
-        self.update_status(f"Starting automation for {num_pages} page(s)...")
+        """Run the automation for the specified number of pages simultaneously."""
+        self.update_status(f"Starting automation for {num_pages} page(s) simultaneously...")
 
+        threads = []
         for i in range(1, num_pages + 1):
             if self._is_stopped():
-                self.update_status("\nAutomation stopped by user.")
                 break
+            t = threading.Thread(target=self._run_single_page, args=(i, num_pages), daemon=True)
+            threads.append(t)
 
-            self.update_status(f"\n--- Opening Page {i} of {num_pages} ---")
+        # Start ALL threads at once
+        for t in threads:
+            t.start()
 
-            # Use a unique debug port per page
-            port = DEBUG_PORT + (i - 1)
-
-            # PRIMARY METHOD: Launch Chrome via subprocess
-            process = self.launch_chrome_subprocess(TERABOX_URL, port)
-
-            if process is None:
-                self.update_status(
-                    f"[Page {i}] Failed to launch Chrome. Stopping."
-                )
-                break
-
-            # Wait for Chrome to start up
-            time.sleep(3)
-
-            if self._is_stopped():
-                self.update_status("\nAutomation stopped by user.")
-                break
-
-            # Connect Selenium to the running Chrome for element interaction
-            driver = self.connect_selenium_to_chrome(port)
-
-            if driver is None:
-                self.update_status(
-                    f"[Page {i}] Chrome is open but Selenium could not "
-                    "connect.\nThe page is loaded - you can interact manually."
-                )
-                continue
-
-            self.drivers.append(driver)
-
-            if self._is_stopped():
-                self.update_status("\nAutomation stopped by user.")
-                break
-
-            success = self.perform_automation(driver, i)
-
-            if self._is_stopped():
-                self.update_status("\nAutomation stopped by user.")
-                break
-
-            if success:
-                self.update_status(
-                    f"[Page {i}] Automation completed successfully!"
-                )
-            else:
-                self.update_status(
-                    f"[Page {i}] Automation completed with issues."
-                )
-
-            time.sleep(1)
+        # Wait for all to complete
+        for t in threads:
+            t.join()
 
         if not self._is_stopped():
-            self.update_status(
-                f"\nAll {num_pages} page(s) processed. "
-                "Browsers will remain open."
-            )
+            self.update_status(f"\nAll {num_pages} page(s) processed.")
+
+    def _run_single_page(self, page_number, total_pages):
+        """Run automation for a single page (called in its own thread)."""
+        self.update_status(f"[Page {page_number}/{total_pages}] Launching Chrome...")
+
+        port = DEBUG_PORT + (page_number - 1)
+
+        process = self.launch_chrome_subprocess(TERABOX_URL, port)
+        if process is None:
+            self.update_status(f"[Page {page_number}] Failed to launch Chrome.")
+            return
+
+        time.sleep(3)  # Wait for Chrome to start
+
+        if self._is_stopped():
+            return
+
+        driver = self.connect_selenium_to_chrome(port)
+        if driver is None:
+            self.update_status(f"[Page {page_number}] Chrome open but Selenium failed.")
+            return
+
+        self.drivers.append(driver)
+
+        if self._is_stopped():
+            return
+
+        success = self.perform_automation(driver, page_number)
+        if success:
+            self.update_status(f"[Page {page_number}] Done!")
+        else:
+            self.update_status(f"[Page {page_number}] Completed with issues.")
 
     def close_all(self):
         """Close all open browser instances and Chrome processes."""
