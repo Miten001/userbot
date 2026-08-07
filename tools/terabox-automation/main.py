@@ -340,6 +340,16 @@ class TeraBoxAutomation:
             time.sleep(ACTION_DELAY)
 
             selectors_sign_up = [
+                (By.XPATH, "//*[text()='Sign up']"),
+                (By.XPATH, "//div[text()='Sign up']"),
+                (By.XPATH, "//span[text()='Sign up']"),
+                (By.XPATH, "//p[text()='Sign up']"),
+                (By.XPATH, "//a[text()='Sign up']"),
+                (By.XPATH, "//li[text()='Sign up']"),
+                (By.XPATH, "//*[contains(@class,'tab')]//*[text()='Sign up']"),
+                (By.XPATH, "//*[contains(@class,'tab')]//*[contains(text(),'Sign up')]"),
+                (By.XPATH, "//*[contains(@class,'switch')]//*[contains(text(),'Sign up')]"),
+                (By.XPATH, "//*[contains(@class,'register-tab')]"),
                 (By.CSS_SELECTOR, "[class*='signup']"),
                 (By.CSS_SELECTOR, "[class*='sign-up']"),
                 (By.CSS_SELECTOR, ".register-link"),
@@ -383,6 +393,14 @@ class TeraBoxAutomation:
             time.sleep(ACTION_DELAY)
 
             selectors_email = [
+                (By.XPATH, "//*[contains(@class,'other-login')]//*[contains(@class,'mail')]"),
+                (By.XPATH, "//*[contains(@class,'other')]//*[contains(@class,'mail')]"),
+                (By.XPATH, "//*[contains(@class,'third')]//*[contains(@class,'mail')]"),
+                (By.XPATH, "//*[contains(@class,'social')]//*[contains(@class,'mail')]"),
+                (By.XPATH, "//*[contains(@class,'login-type')]//*[contains(@class,'mail')]"),
+                (By.CSS_SELECTOR, ".other-login-way [class*='mail']"),
+                (By.CSS_SELECTOR, "[class*='other-login'] [class*='mail']"),
+                (By.CSS_SELECTOR, "[class*='third-party'] [class*='mail']"),
                 (By.CSS_SELECTOR, "[class*='email-btn']"),
                 (By.CSS_SELECTOR, "[class*='email-login']"),
                 (By.CSS_SELECTOR, "[class*='login-email']"),
