@@ -281,6 +281,9 @@ class TeraBoxAutomation:
             time.sleep(ACTION_DELAY)
 
             selectors_sign_in = [
+                (By.CSS_SELECTOR, "[class*='download-guide-btn']"),
+                (By.CSS_SELECTOR, ".btn-login"),
+                (By.XPATH, "//div[contains(@class,'login')]"),
                 (By.XPATH, "//span[contains(text(),'Sign in')]"),
                 (By.XPATH, "//span[contains(text(),'Sign In')]"),
                 (By.XPATH, "//button[contains(text(),'Sign in')]"),
@@ -362,15 +365,22 @@ class TeraBoxAutomation:
             time.sleep(ACTION_DELAY)
 
             selectors_gmail = [
+                # Google-specific class selectors (highest priority)
+                (By.CSS_SELECTOR, "[class*='google-btn']"),
+                (By.CSS_SELECTOR, "[class*='third-login-google']"),
+                (By.CSS_SELECTOR, "[data-type='google']"),
+                # Google icon/image within a google-classed container
+                (By.XPATH, "//div[contains(@class,'google')]//img"),
+                (By.XPATH, "//div[contains(@class,'google')]"),
+                (By.XPATH, "//a[contains(@class,'google')]"),
+                # Google logo image - click the parent element
+                (By.XPATH, "//img[contains(@src,'google')]/.."),
+                (By.XPATH, "//img[contains(@alt,'Google')]/.."),
+                # Broader Google selectors
                 (By.XPATH, "//*[contains(text(),'Google')]"),
-                (By.XPATH, "//*[contains(text(),'Gmail')]"),
-                (By.XPATH, "//*[contains(text(),'google')]"),
-                (By.XPATH, "//*[contains(text(),'gmail')]"),
                 (By.XPATH, "//img[contains(@src,'google')]"),
                 (By.XPATH, "//img[contains(@alt,'Google')]"),
                 (By.CSS_SELECTOR, "[class*='google']"),
-                (By.CSS_SELECTOR, "[class*='Gmail']"),
-                (By.CSS_SELECTOR, "[data-type='google']"),
                 (By.CSS_SELECTOR, ".google-login"),
                 (By.CSS_SELECTOR, ".btn-google"),
             ]
