@@ -109,7 +109,6 @@ class TeraBoxAutomation:
         """Create a Chrome WebDriver instance in incognito mode."""
         chrome_options = Options()
         chrome_options.add_argument("--incognito")
-        chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
         chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
@@ -117,6 +116,7 @@ class TeraBoxAutomation:
 
         try:
             driver = webdriver.Chrome(options=chrome_options)
+            driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT)
             driver.maximize_window()
             return driver
         except WebDriverException as e:
@@ -158,6 +158,75 @@ class TeraBoxAutomation:
                 continue
         return None
 
+    def _navigate_to_url(self, driver, page_number, max_retries=3):
+        """
+        Navigate to the TeraBox URL with retry logic and explicit wait.
+
+        Ensures the page actually loads by waiting for the body element
+        to be present after navigation. Retries on timeout.
+
+        Args:
+            driver: Selenium WebDriver instance
+            page_number: Page number for status updates
+            max_retries: Maximum number of navigation attempts
+
+        Returns:
+            True if navigation succeeded, False otherwise.
+        """
+        for attempt in range(1, max_retries + 1):
+            if self._is_stopped():
+                return False
+            try:
+                self.update_status(
+                    f"[Page {page_number}] Navigating to TeraBox "
+                    f"(attempt {attempt}/{max_retries})..."
+                )
+                driver.get(TERABOX_URL)
+
+                # Wait for the page body to be present to confirm page loaded
+                WebDriverWait(driver, PAGE_LOAD_TIMEOUT).until(
+                    EC.presence_of_element_located((By.TAG_NAME, "body"))
+                )
+
+                # Verify we are no longer on a blank page
+                current_url = driver.current_url
+                if current_url == "data:," or current_url == "about:blank":
+                    self.update_status(
+                        f"[Page {page_number}] Page still blank after "
+                        f"navigation attempt {attempt}. Retrying..."
+                    )
+                    time.sleep(ACTION_DELAY)
+                    continue
+
+                self.update_status(
+                    f"[Page {page_number}] Page loaded successfully: "
+                    f"{current_url}"
+                )
+                return True
+
+            except TimeoutException:
+                self.update_status(
+                    f"[Page {page_number}] Page load timed out on "
+                    f"attempt {attempt}."
+                )
+                if attempt < max_retries:
+                    time.sleep(ACTION_DELAY)
+                continue
+            except WebDriverException as e:
+                self.update_status(
+                    f"[Page {page_number}] Navigation error on "
+                    f"attempt {attempt}: {str(e)}"
+                )
+                if attempt < max_retries:
+                    time.sleep(ACTION_DELAY)
+                continue
+
+        self.update_status(
+            f"[Page {page_number}] Failed to load TeraBox after "
+            f"{max_retries} attempts."
+        )
+        return False
+
     def perform_automation(self, driver, page_number):
         """
         Perform the automation flow on a single page:
@@ -174,10 +243,12 @@ class TeraBoxAutomation:
             if self._is_stopped():
                 return False
 
-            # Step 1: Navigate to TeraBox
-            self.update_status(f"[Page {page_number}] Opening TeraBox...")
-            driver.get(TERABOX_URL)
-            time.sleep(ACTION_DELAY)
+            # Step 1: Navigate to TeraBox with retry and explicit wait
+            if not self._navigate_to_url(driver, page_number):
+                return False
+
+            # Longer initial wait to let the page fully render
+            time.sleep(3)
 
             if self._is_stopped():
                 return False
