@@ -2,11 +2,15 @@
 TeraBox Automation Tool
 -----------------------
 A GUI tool that automates browser interaction with TeraBox.
-Opens Chrome in incognito mode, navigates to TeraBox, and performs
-Sign In -> Sign Up -> Gmail selection flow for multiple pages.
+Opens Chrome in incognito mode via subprocess with remote debugging,
+then connects Selenium for Sign In -> Sign Up -> Gmail selection flow.
+
+@codex_here
 """
 
 import atexit
+import os
+import subprocess
 import threading
 import time
 import sys
@@ -25,7 +29,7 @@ def _check_help():
         print("  2. Click 'Start Automation' to begin")
         print()
         print("The automation will:")
-        print("  - Open Chrome in incognito mode")
+        print("  - Open Chrome in incognito mode (via subprocess)")
         print("  - Navigate to TeraBox")
         print("  - Click Sign In -> Sign Up -> Gmail")
         print("  - Repeat for each page")
@@ -33,8 +37,8 @@ def _check_help():
         print("Requirements:")
         print("  - Python 3.7+")
         print("  - Google Chrome browser installed")
-        print("  - ChromeDriver (matching your Chrome version)")
         print("  - selenium (pip install selenium)")
+        print("  - pyautogui (pip install pyautogui)")
         print("  - tkinter (usually included with Python)")
         sys.exit(0)
 
@@ -63,20 +67,22 @@ try:
         NoSuchElementException,
         WebDriverException,
     )
+    HAS_SELENIUM = True
 except ImportError:
-    print("Error: selenium is not installed.")
-    print("Install it with: pip install selenium")
-    sys.exit(1)
+    HAS_SELENIUM = False
 
 try:
-    import undetected_chromedriver as uc
-    HAS_UC = True
+    import pyautogui
+    HAS_PYAUTOGUI = True
 except ImportError:
-    HAS_UC = False
+    HAS_PYAUTOGUI = False
 
 
 # Target URL
 TERABOX_URL = "https://1024terabox.com/s/1axTeTaTPATdSOQizMrGeJQ"
+
+# Remote debugging port for Chrome
+DEBUG_PORT = 9222
 
 # Per-selector probe timeout in seconds (short to avoid cascade)
 SELECTOR_TIMEOUT = 2
@@ -88,19 +94,47 @@ ACTION_DELAY = 2
 MAX_PAGES = 20
 
 
+def find_chrome_path():
+    """Find Chrome executable path on Windows."""
+    possible_paths = [
+        os.path.join(
+            os.environ.get("PROGRAMFILES", r"C:\Program Files"),
+            "Google", "Chrome", "Application", "chrome.exe"
+        ),
+        os.path.join(
+            os.environ.get("PROGRAMFILES(X86)", r"C:\Program Files (x86)"),
+            "Google", "Chrome", "Application", "chrome.exe"
+        ),
+        os.path.join(
+            os.environ.get("LOCALAPPDATA", ""),
+            "Google", "Chrome", "Application", "chrome.exe"
+        ),
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+    ]
+    for path in possible_paths:
+        if path and os.path.isfile(path):
+            return path
+    # Try to find via where command on Windows
+    try:
+        result = subprocess.run(
+            ["where", "chrome"], capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip().split("\n")[0].strip()
+    except Exception:
+        pass
+    # Last resort: return chrome.exe and hope it is on PATH
+    return "chrome.exe"
+
+
 class TeraBoxAutomation:
-    """Handles the Selenium automation flow for TeraBox."""
+    """Handles browser automation flow for TeraBox using subprocess + Selenium."""
 
     def __init__(self, status_callback=None, stop_event=None):
-        """
-        Initialize the automation handler.
-
-        Args:
-            status_callback: Function to call with status updates (str)
-            stop_event: threading.Event that signals cancellation
-        """
         self.status_callback = status_callback or print
         self.stop_event = stop_event or threading.Event()
+        self.chrome_processes = []
         self.drivers = []
 
     def _is_stopped(self):
@@ -111,53 +145,87 @@ class TeraBoxAutomation:
         """Send status update to callback."""
         self.status_callback(message)
 
-    def create_driver(self):
-        """Create a Chrome WebDriver instance in incognito mode."""
-        try:
-            if HAS_UC:
-                # Use undetected-chromedriver (better for bot detection and incognito)
-                options = uc.ChromeOptions()
-                options.add_argument("--incognito")
-                options.add_argument("--disable-dev-shm-usage")
-                options.add_argument("--start-maximized")
-                driver = uc.Chrome(options=options, use_subprocess=True)
-            else:
-                # Fallback to regular selenium
-                chrome_options = Options()
-                chrome_options.add_argument("--incognito")
-                chrome_options.add_argument("--disable-dev-shm-usage")
-                chrome_options.add_argument("--start-maximized")
-                chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-                chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-                chrome_options.add_experimental_option("useAutomationExtension", False)
-                driver = webdriver.Chrome(options=chrome_options)
+    def launch_chrome_subprocess(self, url, debug_port):
+        """
+        Launch Chrome via subprocess with remote debugging enabled.
+        This is the PRIMARY method - most reliable on Windows.
+        """
+        chrome_path = find_chrome_path()
+        self.update_status(f"Chrome path: {chrome_path}")
 
-            driver.set_page_load_timeout(30)
-            driver.maximize_window()
-            return driver
-        except Exception as e:
-            self.update_status(f"Chrome driver error: {str(e)}")
+        # Create a unique user data dir to allow multiple instances
+        temp_dir = os.environ.get("TEMP", os.path.expanduser("~"))
+        user_data_dir = os.path.join(temp_dir, f"chrome_terabox_{debug_port}")
+
+        args = [
+            chrome_path,
+            "--incognito",
+            f"--remote-debugging-port={debug_port}",
+            f"--user-data-dir={user_data_dir}",
+            "--disable-dev-shm-usage",
+            "--start-maximized",
+            "--no-first-run",
+            "--no-default-browser-check",
+            url,
+        ]
+
+        try:
+            process = subprocess.Popen(
+                args,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            self.chrome_processes.append(process)
+            self.update_status(f"Chrome launched via subprocess (PID: {process.pid})")
+            return process
+        except FileNotFoundError:
             self.update_status(
-                "Make sure Chrome is installed. Try: pip install undetected-chromedriver"
+                f"ERROR: Chrome not found at '{chrome_path}'.\n"
+                "Please install Google Chrome or check the path."
+            )
+            return None
+        except Exception as e:
+            self.update_status(f"ERROR launching Chrome: {str(e)}")
+            return None
+
+    def connect_selenium_to_chrome(self, debug_port, max_retries=5):
+        """
+        Connect Selenium to an already-running Chrome via remote debugging.
+        """
+        if not HAS_SELENIUM:
+            self.update_status(
+                "Selenium not installed - cannot connect for automation."
             )
             return None
 
+        for attempt in range(1, max_retries + 1):
+            if self._is_stopped():
+                return None
+            try:
+                self.update_status(
+                    f"Connecting Selenium to Chrome "
+                    f"(attempt {attempt}/{max_retries})..."
+                )
+                chrome_options = Options()
+                chrome_options.add_experimental_option(
+                    "debuggerAddress", f"127.0.0.1:{debug_port}"
+                )
+                driver = webdriver.Chrome(options=chrome_options)
+                driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT)
+                self.update_status("Selenium connected to Chrome successfully!")
+                return driver
+            except Exception as e:
+                self.update_status(
+                    f"Connection attempt {attempt} failed: {str(e)}"
+                )
+                if attempt < max_retries:
+                    time.sleep(3)
+
+        self.update_status("Could not connect Selenium to Chrome.")
+        return None
+
     def _find_element(self, driver, selectors, step_name, page_number):
-        """
-        Try each selector with a short timeout to find a clickable element.
-
-        Uses a short per-selector timeout (SELECTOR_TIMEOUT) to avoid the
-        cascade problem where many failing selectors each burn a long wait.
-
-        Args:
-            driver: Selenium WebDriver instance
-            selectors: List of (By, selector_string) tuples
-            step_name: Name of the step for logging
-            page_number: Page number for status updates
-
-        Returns:
-            The found WebElement, or None if not found or stopped.
-        """
+        """Try each selector with a short timeout to find a clickable element."""
         for by, selector in selectors:
             if self._is_stopped():
                 self.update_status(
@@ -174,106 +242,42 @@ class TeraBoxAutomation:
                 continue
         return None
 
-    def _navigate_to_url(self, driver, page_number, max_retries=3):
-        """
-        Navigate to the TeraBox URL with retry logic and explicit wait.
-
-        Ensures the page actually loads by waiting for the body element
-        to be present after navigation. Retries on timeout.
-
-        Args:
-            driver: Selenium WebDriver instance
-            page_number: Page number for status updates
-            max_retries: Maximum number of navigation attempts
-
-        Returns:
-            True if navigation succeeded, False otherwise.
-        """
-        for attempt in range(1, max_retries + 1):
-            if self._is_stopped():
-                return False
-            try:
-                self.update_status(
-                    f"[Page {page_number}] Navigating to TeraBox "
-                    f"(attempt {attempt}/{max_retries})..."
-                )
-                driver.get(TERABOX_URL)
-
-                # Give the page time to fully load (TeraBox has heavy JS)
-                time.sleep(5)
-
-                # Wait for the page body to be present to confirm page loaded
-                WebDriverWait(driver, PAGE_LOAD_TIMEOUT).until(
-                    EC.presence_of_element_located((By.TAG_NAME, "body"))
-                )
-
-                # Verify we are no longer on a blank page
-                current_url = driver.current_url
-                if current_url == "data:," or current_url == "about:blank":
-                    self.update_status(
-                        f"[Page {page_number}] Page still blank after "
-                        f"navigation attempt {attempt}. Retrying..."
-                    )
-                    time.sleep(ACTION_DELAY)
-                    continue
-
-                self.update_status(
-                    f"[Page {page_number}] Page loaded successfully: "
-                    f"{current_url}"
-                )
-                return True
-
-            except TimeoutException:
-                self.update_status(
-                    f"[Page {page_number}] Page load timed out on "
-                    f"attempt {attempt}."
-                )
-                if attempt < max_retries:
-                    time.sleep(ACTION_DELAY)
-                continue
-            except WebDriverException as e:
-                self.update_status(
-                    f"[Page {page_number}] Navigation error on "
-                    f"attempt {attempt}: {str(e)}"
-                )
-                if attempt < max_retries:
-                    time.sleep(ACTION_DELAY)
-                continue
-
-        self.update_status(
-            f"[Page {page_number}] Failed to load TeraBox after "
-            f"{max_retries} attempts."
-        )
-        return False
-
     def perform_automation(self, driver, page_number):
         """
-        Perform the automation flow on a single page:
-        1. Navigate to TeraBox URL
-        2. Click Sign In
-        3. Click Sign Up
-        4. Click Gmail option
-
-        Args:
-            driver: Selenium WebDriver instance
-            page_number: Page number for status updates
+        Perform the automation flow on a single page.
+        Chrome is already open with the URL loaded via subprocess.
+        Steps: Click Sign In -> Click Sign Up -> Click Gmail option
         """
         try:
             if self._is_stopped():
                 return False
 
-            # Step 1: Navigate to TeraBox with retry and explicit wait
-            if not self._navigate_to_url(driver, page_number):
-                return False
+            # Wait for page to fully load (TeraBox has heavy JS)
+            time.sleep(5)
 
-            # Longer initial wait to let the page fully render
-            time.sleep(3)
+            # Verify page loaded
+            try:
+                current_url = driver.current_url
+                self.update_status(
+                    f"[Page {page_number}] Current URL: {current_url}"
+                )
+                if current_url in ("data:,", "about:blank"):
+                    self.update_status(
+                        f"[Page {page_number}] Page is blank, waiting more..."
+                    )
+                    time.sleep(5)
+            except Exception:
+                self.update_status(
+                    f"[Page {page_number}] Could not get current URL"
+                )
 
             if self._is_stopped():
                 return False
 
-            # Step 2: Click "Sign In" button
-            self.update_status(f"[Page {page_number}] Looking for Sign In button...")
+            # Step 1: Click "Sign In" button
+            self.update_status(
+                f"[Page {page_number}] Looking for Sign In button..."
+            )
             time.sleep(ACTION_DELAY)
 
             selectors_sign_in = [
@@ -398,12 +402,7 @@ class TeraBoxAutomation:
             return False
 
     def run(self, num_pages):
-        """
-        Run the automation for the specified number of pages.
-
-        Args:
-            num_pages: Number of browser pages to open
-        """
+        """Run the automation for the specified number of pages."""
         self.update_status(f"Starting automation for {num_pages} page(s)...")
 
         for i in range(1, num_pages + 1):
@@ -412,11 +411,35 @@ class TeraBoxAutomation:
                 break
 
             self.update_status(f"\n--- Opening Page {i} of {num_pages} ---")
-            driver = self.create_driver()
+
+            # Use a unique debug port per page
+            port = DEBUG_PORT + (i - 1)
+
+            # PRIMARY METHOD: Launch Chrome via subprocess
+            process = self.launch_chrome_subprocess(TERABOX_URL, port)
+
+            if process is None:
+                self.update_status(
+                    f"[Page {i}] Failed to launch Chrome. Stopping."
+                )
+                break
+
+            # Wait for Chrome to start up
+            time.sleep(4)
+
+            if self._is_stopped():
+                self.update_status("\nAutomation stopped by user.")
+                break
+
+            # Connect Selenium to the running Chrome for element interaction
+            driver = self.connect_selenium_to_chrome(port)
 
             if driver is None:
-                self.update_status(f"[Page {i}] Failed to create browser. Stopping.")
-                break
+                self.update_status(
+                    f"[Page {i}] Chrome is open but Selenium could not "
+                    "connect.\nThe page is loaded - you can interact manually."
+                )
+                continue
 
             self.drivers.append(driver)
 
@@ -431,36 +454,48 @@ class TeraBoxAutomation:
                 break
 
             if success:
-                self.update_status(f"[Page {i}] Automation completed successfully!")
+                self.update_status(
+                    f"[Page {i}] Automation completed successfully!"
+                )
             else:
-                self.update_status(f"[Page {i}] Automation completed with issues.")
+                self.update_status(
+                    f"[Page {i}] Automation completed with issues."
+                )
 
             time.sleep(1)
 
         if not self._is_stopped():
             self.update_status(
-                f"\nAll {num_pages} page(s) processed. Browsers will remain open."
+                f"\nAll {num_pages} page(s) processed. "
+                "Browsers will remain open."
             )
 
     def close_all(self):
-        """Close all open browser instances."""
+        """Close all open browser instances and Chrome processes."""
         for driver in self.drivers:
             try:
                 driver.quit()
             except Exception:
                 pass
         self.drivers = []
+        for proc in self.chrome_processes:
+            try:
+                proc.terminate()
+            except Exception:
+                pass
+        self.chrome_processes = []
 
 
 class TeraBoxGUI:
-    """Main GUI application for TeraBox automation."""
+    """Main GUI application for TeraBox automation with dark hacker theme."""
 
     def __init__(self):
         """Initialize the GUI."""
         self.root = tk.Tk()
         self.root.title("TeraBox Automation Tool")
-        self.root.geometry("600x500")
+        self.root.geometry("650x550")
         self.root.resizable(True, True)
+        self.root.configure(bg="#0f0f0f")
 
         # Automation instance
         self.automation = None
@@ -489,70 +524,105 @@ class TeraBoxGUI:
             self.automation.close_all()
 
     def _setup_gui(self):
-        """Set up the GUI layout."""
+        """Set up the GUI layout with dark hacker theme."""
+        # Dark theme colors
+        bg_dark = "#0f0f0f"
+        bg_frame = "#1a1a2e"
+        bg_entry = "#16213e"
+        fg_text = "#ffffff"
+        fg_accent = "#00fff5"
+        fg_purple = "#bf00ff"
+        fg_green = "#00ff41"
+
+        # Branding - @codex_here
+        brand_label = tk.Label(
+            self.root,
+            text="@codex_here",
+            font=("Consolas", 11, "bold"),
+            fg=fg_accent,
+            bg=bg_dark,
+        )
+        brand_label.pack(pady=(10, 0))
+
         # Title
-        title_frame = tk.Frame(self.root, pady=10)
+        title_frame = tk.Frame(self.root, bg=bg_dark, pady=5)
         title_frame.pack(fill=tk.X)
 
         title_label = tk.Label(
             title_frame,
             text="TeraBox Automation Tool",
-            font=("Arial", 16, "bold"),
+            font=("Consolas", 18, "bold"),
+            fg=fg_accent,
+            bg=bg_dark,
         )
         title_label.pack()
 
         subtitle_label = tk.Label(
             title_frame,
-            text="Automated Sign In -> Sign Up -> Gmail Selection",
-            font=("Arial", 10),
-            fg="gray",
+            text="Sign In > Sign Up > Gmail Selection",
+            font=("Consolas", 10),
+            fg=fg_purple,
+            bg=bg_dark,
         )
         subtitle_label.pack()
 
         # Input frame
-        input_frame = tk.Frame(self.root, pady=10, padx=20)
-        input_frame.pack(fill=tk.X)
+        input_frame = tk.Frame(self.root, bg=bg_frame, pady=10, padx=20)
+        input_frame.pack(fill=tk.X, padx=20, pady=5)
 
-        # Number of pages input
         pages_label = tk.Label(
             input_frame,
             text=f"Kitne pages open karne hain? (1-{MAX_PAGES}):",
-            font=("Arial", 11),
+            font=("Consolas", 11),
+            fg=fg_text,
+            bg=bg_frame,
         )
         pages_label.pack(anchor=tk.W)
 
         self.pages_entry = tk.Entry(
             input_frame,
-            font=("Arial", 12),
+            font=("Consolas", 12),
             width=10,
+            bg=bg_entry,
+            fg=fg_accent,
+            insertbackground=fg_accent,
+            relief=tk.FLAT,
+            highlightthickness=1,
+            highlightcolor=fg_accent,
         )
         self.pages_entry.pack(anchor=tk.W, pady=5)
         self.pages_entry.insert(0, "1")
 
         # Buttons frame
-        btn_frame = tk.Frame(self.root, pady=10, padx=20)
+        btn_frame = tk.Frame(self.root, bg=bg_dark, pady=10, padx=20)
         btn_frame.pack(fill=tk.X)
 
         self.start_btn = tk.Button(
             btn_frame,
             text="Start Automation",
-            font=("Arial", 12, "bold"),
-            bg="#4CAF50",
-            fg="white",
-            padx=20,
+            font=("Consolas", 11, "bold"),
+            bg="#00c853",
+            fg="#000000",
+            activebackground="#00e676",
+            padx=15,
             pady=5,
+            relief=tk.FLAT,
+            cursor="hand2",
             command=self._start_automation,
         )
         self.start_btn.pack(side=tk.LEFT, padx=5)
 
         self.stop_btn = tk.Button(
             btn_frame,
-            text="Stop Automation",
-            font=("Arial", 12, "bold"),
-            bg="#FF9800",
-            fg="white",
-            padx=20,
+            text="Stop",
+            font=("Consolas", 11, "bold"),
+            bg="#ff6d00",
+            fg="#000000",
+            activebackground="#ff9100",
+            padx=15,
             pady=5,
+            relief=tk.FLAT,
+            cursor="hand2",
             command=self._stop_automation,
             state=tk.DISABLED,
         )
@@ -560,49 +630,72 @@ class TeraBoxGUI:
 
         self.close_btn = tk.Button(
             btn_frame,
-            text="Close All Browsers",
-            font=("Arial", 12),
-            bg="#f44336",
-            fg="white",
-            padx=20,
+            text="Close Browsers",
+            font=("Consolas", 11, "bold"),
+            bg="#d50000",
+            fg="#ffffff",
+            activebackground="#ff1744",
+            padx=15,
             pady=5,
+            relief=tk.FLAT,
+            cursor="hand2",
             command=self._close_browsers,
             state=tk.DISABLED,
         )
         self.close_btn.pack(side=tk.LEFT, padx=5)
 
-        # Status/Progress frame
-        status_frame = tk.Frame(self.root, pady=10, padx=20)
+        # Status frame
+        status_frame = tk.Frame(self.root, bg=bg_dark, pady=5, padx=20)
         status_frame.pack(fill=tk.BOTH, expand=True)
 
         status_label = tk.Label(
             status_frame,
-            text="Status / Progress:",
-            font=("Arial", 11, "bold"),
+            text="[ Terminal Output ]",
+            font=("Consolas", 10, "bold"),
+            fg=fg_green,
+            bg=bg_dark,
         )
         status_label.pack(anchor=tk.W)
 
         # Text widget with scrollbar for status messages
-        text_frame = tk.Frame(status_frame)
+        text_frame = tk.Frame(status_frame, bg=bg_dark)
         text_frame.pack(fill=tk.BOTH, expand=True, pady=5)
 
-        scrollbar = tk.Scrollbar(text_frame)
+        scrollbar = tk.Scrollbar(text_frame, bg=bg_dark, troughcolor=bg_dark)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
         self.status_text = tk.Text(
             text_frame,
             height=12,
-            font=("Courier", 10),
+            font=("Consolas", 9),
             wrap=tk.WORD,
             state=tk.DISABLED,
+            bg="#000000",
+            fg=fg_green,
+            insertbackground=fg_green,
+            relief=tk.FLAT,
+            highlightthickness=1,
+            highlightcolor=fg_accent,
             yscrollcommand=scrollbar.set,
         )
         self.status_text.pack(fill=tk.BOTH, expand=True)
         scrollbar.config(command=self.status_text.yview)
 
-        # Progress bar
+        # Progress bar with dark style
+        style = ttk.Style()
+        style.theme_use("default")
+        style.configure(
+            "dark.Horizontal.TProgressbar",
+            troughcolor=bg_frame,
+            background=fg_accent,
+            darkcolor=fg_accent,
+            lightcolor=fg_accent,
+        )
         self.progress = ttk.Progressbar(
-            self.root, mode="indeterminate", length=400
+            self.root,
+            mode="indeterminate",
+            length=400,
+            style="dark.Horizontal.TProgressbar",
         )
         self.progress.pack(pady=10)
 
@@ -717,6 +810,10 @@ class TeraBoxGUI:
             "Tayyar! Pages ki number daalein aur Start dabayein."
         )
         self._update_status(f"(Maximum {MAX_PAGES} pages allowed)")
+        self._update_status("")
+        self._update_status(
+            "Method: subprocess Chrome launch + Selenium connect"
+        )
         self.root.mainloop()
 
 
