@@ -156,17 +156,13 @@ class TeraBoxAutomation:
         self.status_callback(message)
 
     def _fetch_proxies(self):
-        """Fetch free proxy list from public APIs filtered by country."""
-        self.update_status("Fetching proxies from: SA, AE, US, KR, JP, MX, QA...")
+        """Fetch free HTTP proxy list from public APIs filtered by country."""
+        self.update_status("Fetching HTTP proxies from: SA, AE, US, KR, JP, MX, QA...")
         proxies = []
         try:
             import urllib.request
-            import json
-            # Try multiple free proxy APIs with country filtering
             apis = [
                 f"https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=5000&country={PROXY_COUNTRIES}&ssl=all&anonymity=all",
-                f"https://api.proxyscrape.com/v2/?request=displayproxies&protocol=socks4&timeout=5000&country={PROXY_COUNTRIES}",
-                f"https://api.proxyscrape.com/v2/?request=displayproxies&protocol=socks5&timeout=5000&country={PROXY_COUNTRIES}",
             ]
             for api_url in apis:
                 try:
@@ -181,7 +177,19 @@ class TeraBoxAutomation:
                     continue
         except Exception:
             pass
+        random.shuffle(proxies)
         return proxies
+
+    def _test_proxy(self, proxy):
+        """Quick test if proxy is alive (3 second timeout)."""
+        try:
+            import urllib.request
+            proxy_handler = urllib.request.ProxyHandler({'http': f'http://{proxy}', 'https': f'http://{proxy}'})
+            opener = urllib.request.build_opener(proxy_handler)
+            opener.open('http://httpbin.org/ip', timeout=3)
+            return True
+        except Exception:
+            return False
 
     def _get_random_fingerprint(self):
         """Generate random browser fingerprint for each instance."""
@@ -264,7 +272,7 @@ class TeraBoxAutomation:
         if language:
             args.append(f"--lang={language}")
         if proxy:
-            args.append(f"--proxy-server=http://{proxy}")
+            args.append(f"--proxy-server={proxy}")
 
         args.append(url)
 
@@ -563,10 +571,25 @@ class TeraBoxAutomation:
 
         # Handle proxies
         if custom_proxies == "auto":
-            self.update_status("Fetching proxies from: SA, AE, US, KR, JP, MX, QA...")
+            self.update_status("Fetching HTTP proxies from: SA, AE, US, KR, JP, MX, QA...")
             self.proxies = self._fetch_proxies()
             if self.proxies:
                 self.update_status(f"Found {len(self.proxies)} proxies!")
+                self.update_status(f"Testing proxies... (checking first 10)")
+                working = []
+                for p in self.proxies[:10]:
+                    if self._is_stopped():
+                        break
+                    if self._test_proxy(p):
+                        working.append(p)
+                        self.update_status(f"  Working: {p}")
+                    if len(working) >= 3:
+                        break
+                self.proxies = working if working else []
+                if self.proxies:
+                    self.update_status(f"Using {len(self.proxies)} working proxies")
+                else:
+                    self.update_status("No working proxies found - using direct connection")
             else:
                 self.update_status("No proxies found - using direct connection")
         elif custom_proxies and isinstance(custom_proxies, list):
@@ -627,38 +650,48 @@ Object.defineProperty(screen, 'height', {{get: () => {fingerprint["screen"][1]}}
             pass
 
         # First tab already has URL loaded
-        self.update_status(f"[Tab 1/{num_pages}] Opened")
+        self.update_status(f"[Tab 1/{num_pages}] Already open")
 
-        # Open ALL remaining tabs at once
+        # Open ALL remaining tabs at once - reliable method
         for i in range(2, num_pages + 1):
             if self._is_stopped():
                 break
             try:
-                # Method 1: Use window.open with about:blank then navigate
-                driver.execute_script("window.open('about:blank', '_blank');")
-                time.sleep(0.3)
-                # Switch to new tab and navigate
-                driver.switch_to.window(driver.window_handles[-1])
-                driver.get(target_url)
-                time.sleep(0.3)
+                # Use JavaScript to create a link click (bypasses popup blocker)
+                driver.execute_script("""
+                    var a = document.createElement('a');
+                    a.href = arguments[0];
+                    a.target = '_blank';
+                    a.rel = 'noopener';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                """, target_url)
+                time.sleep(0.5)
                 self.update_status(f"[Tab {i}/{num_pages}] Opened")
-            except Exception as e:
-                # Fallback: try Keys Ctrl+T
+            except Exception:
                 try:
-                    body = driver.find_element(By.TAG_NAME, 'body')
-                    body.send_keys(Keys.CONTROL + 't')
+                    # Fallback - window.open
+                    driver.execute_script(f"window.open('{target_url}')")
                     time.sleep(0.5)
-                    driver.switch_to.window(driver.window_handles[-1])
-                    driver.get(target_url)
-                    time.sleep(0.3)
-                    self.update_status(f"[Tab {i}/{num_pages}] Opened (fallback)")
-                except Exception:
-                    self.update_status(f"[Tab {i}] Failed to open tab: {str(e)}")
+                    self.update_status(f"[Tab {i}/{num_pages}] Opened (method 2)")
+                except Exception as e:
+                    self.update_status(f"[Tab {i}] Failed: {str(e)}")
+
+        # Verify tabs opened
+        total_tabs = len(driver.window_handles)
+        self.update_status(f"\nTotal tabs opened: {total_tabs}")
+
+        if total_tabs < num_pages:
+            self.update_status(f"Only {total_tabs} tabs opened (some may have been blocked)")
 
         # Switch back to first tab
-        driver.switch_to.window(driver.window_handles[0])
+        try:
+            driver.switch_to.window(driver.window_handles[0])
+        except Exception:
+            pass
 
-        self.update_status(f"\nAll {num_pages} tabs opened! Running automation on each...")
+        self.update_status(f"\nAll tabs opened! Running automation on each...")
 
         # Now do automation on each tab one by one
         for i, handle in enumerate(driver.window_handles, 1):
