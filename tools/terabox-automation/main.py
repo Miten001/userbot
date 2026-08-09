@@ -11,11 +11,13 @@ then connects Selenium for Log In -> Sign Up -> Email selection flow.
 import atexit
 import os
 import random
+import shutil
 import string
 import subprocess
 import threading
 import time
 import sys
+import uuid
 
 
 def _check_help():
@@ -247,26 +249,36 @@ class TeraBoxAutomation:
         """
         Launch Chrome via subprocess with remote debugging enabled.
         This is the PRIMARY method - most reliable on Windows.
+        Uses UUID-based user-data-dir so each Chrome is truly independent.
         """
         chrome_path = find_chrome_path()
         self.update_status(f"Chrome path: {chrome_path}")
 
-        # Create a unique user data dir to allow multiple instances
+        # Create a truly unique user data dir with UUID to prevent singleton detection
         temp_dir = os.environ.get("TEMP", os.path.expanduser("~"))
-        user_data_dir = os.path.join(temp_dir, f"chrome_terabox_{debug_port}")
+        user_data_dir = os.path.join(temp_dir, f"chrome_{uuid.uuid4().hex[:8]}")
+
+        # Delete folder if it exists to remove old lock files
+        if os.path.exists(user_data_dir):
+            try:
+                shutil.rmtree(user_data_dir)
+            except Exception:
+                pass
+        os.makedirs(user_data_dir, exist_ok=True)
 
         args = [
             chrome_path,
-            "--new-window",
-            f"--remote-debugging-port={debug_port}",
             f"--user-data-dir={user_data_dir}",
-            "--disable-dev-shm-usage",
+            f"--remote-debugging-port={debug_port}",
             "--no-first-run",
             "--no-default-browser-check",
             "--disable-popup-blocking",
             "--disable-notifications",
             "--disable-session-crashed-bubble",
             "--disable-infobars",
+            "--disable-features=ChromeWhatsNewUI",
+            "--no-service-autorun",
+            "--password-store=basic",
         ]
 
         if user_agent:
@@ -713,8 +725,12 @@ Object.defineProperty(navigator, 'languages', {{get: () => ['{fingerprint["langu
         for proc in self.chrome_processes:
             try:
                 proc.terminate()
+                proc.wait(timeout=5)
             except Exception:
-                pass
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
         self.chrome_processes = []
 
 
