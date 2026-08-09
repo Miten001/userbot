@@ -489,14 +489,11 @@ class TeraBoxAutomation:
 
         self.drivers.append(driver)
 
-        # Get screen size using JavaScript
-        screen_width = driver.execute_script("return window.screen.availWidth")
-        screen_height = driver.execute_script("return window.screen.availHeight")
-
-        # Position on right half of screen
-        half_width = screen_width // 2
-        driver.set_window_position(half_width, 0)
-        driver.set_window_size(half_width, screen_height)
+        # Snap Chrome to right half using Windows shortcut (Win + Right)
+        time.sleep(0.5)
+        if HAS_PYAUTOGUI:
+            pyautogui.hotkey('win', 'right')
+            time.sleep(0.5)
 
         # Zoom out the page to 80% for better visibility
         driver.execute_script("document.body.style.zoom='80%'")
