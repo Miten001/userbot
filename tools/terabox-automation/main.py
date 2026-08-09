@@ -582,8 +582,9 @@ class TeraBoxAutomation:
     def run(self, num_pages, custom_proxies=None, url=None):
         """Run the automation for the specified number of pages as separate Chrome windows.
         
-        Launches each window ONE BY ONE sequentially, using Win+Right hotkey
-        to snap each new Chrome window to the right half of the screen.
+        Two-phase approach for maximum speed:
+        Phase 1: Open ALL Chrome windows fast (no selenium, no automation)
+        Phase 2: Connect selenium to each and do automation
         """
         target_url = url or TERABOX_URL
         self.update_status(f"Starting automation for {num_pages} browser(s)...")
@@ -616,53 +617,46 @@ class TeraBoxAutomation:
             self.proxies = []
             self.update_status("Proxy disabled - direct connection")
 
-        # Launch each Chrome window ONE BY ONE sequentially
+        # PHASE 1: Launch ALL Chrome windows fast
+        launched_ports = []
         for page_number in range(1, num_pages + 1):
             if self._is_stopped():
                 break
 
-            # Generate unique fingerprint for this window
             fingerprint = self._get_random_fingerprint()
-
-            # Pick proxy
             proxy = None
             if self.proxies:
                 proxy = self.proxies[(page_number - 1) % len(self.proxies)]
-                self.update_status(f"[Window {page_number}] Proxy: {proxy}")
 
-            # Launch Chrome with unique port
             port = DEBUG_PORT + (page_number - 1)
-            self.update_status(f"[Window {page_number}/{num_pages}] Launching...")
+            self.update_status(f"[{page_number}/{num_pages}] Opening browser...")
 
             process = self.launch_chrome_subprocess(
                 target_url, port, fingerprint['user_agent'],
                 fingerprint['language'], proxy
             )
             if process is None:
-                self.update_status(f"[Window {page_number}] Failed to launch Chrome.")
                 continue
 
-            # Wait for Chrome to fully open and become the active window
-            time.sleep(1)
+            launched_ports.append((port, fingerprint, page_number))
 
+            # Quick wait + snap to right half
+            time.sleep(1)
+            if HAS_PYAUTOGUI:
+                pyautogui.hotkey('win', 'right')
+                time.sleep(0.3)
+
+        self.update_status(f"\n--- All {len(launched_ports)} browsers opened! ---")
+        self.update_status("Now running automation on each...")
+
+        # PHASE 2: Connect selenium and automate each window
+        for port, fingerprint, page_number in launched_ports:
             if self._is_stopped():
                 break
 
-            # Snap the active window to right half using Win+Right hotkey
-            if HAS_PYAUTOGUI:
-                try:
-                    pyautogui.hotkey('win', 'right')
-                    self.update_status(f"[Window {page_number}] Snapped to right half (Win+Right)")
-                    time.sleep(0.3)
-                except Exception as e:
-                    self.update_status(f"[Window {page_number}] Win+Right failed: {e}")
-            else:
-                self.update_status(f"[Window {page_number}] pyautogui not available, skipping snap")
-
-            # Connect Selenium
             driver = self.connect_selenium_to_chrome(port)
             if driver is None:
-                self.update_status(f"[Window {page_number}] Selenium connection failed.")
+                self.update_status(f"[Window {page_number}] Selenium failed, skipping.")
                 continue
 
             self.drivers.append(driver)
@@ -686,7 +680,6 @@ Object.defineProperty(navigator, 'languages', {{get: () => ['{fingerprint["langu
                 pass
 
             # Check for error pages - auto close
-            time.sleep(1)
             try:
                 page_source = driver.page_source
                 if "ERR_" in page_source or "This site can" in page_source or "took too long" in page_source or "DNS" in page_source:
@@ -696,19 +689,12 @@ Object.defineProperty(navigator, 'languages', {{get: () => ['{fingerprint["langu
             except Exception:
                 pass
 
-            if self._is_stopped():
-                break
-
             # Run automation
-            self.update_status(f"[Window {page_number}/{num_pages}] Running automation...")
-            success = self.perform_automation(driver, page_number)
-            if success:
-                self.update_status(f"[Window {page_number}] Done!")
-            else:
-                self.update_status(f"[Window {page_number}] Completed with issues.")
+            self.update_status(f"[Window {page_number}] Automating...")
+            self.perform_automation(driver, page_number)
 
         if not self._is_stopped():
-            self.update_status(f"\nAll {num_pages} browser(s) launched!")
+            self.update_status(f"\n--- Done! All browsers processed. ---")
 
     def close_all(self):
         """Close all open browser instances and Chrome processes."""
