@@ -10,6 +10,8 @@ then connects Selenium for Log In -> Sign Up -> Email selection flow.
 
 import atexit
 import os
+import random
+import string
 import subprocess
 import threading
 import time
@@ -145,7 +147,59 @@ class TeraBoxAutomation:
         """Send status update to callback."""
         self.status_callback(message)
 
-    def launch_chrome_subprocess(self, url, debug_port):
+    def _get_random_fingerprint(self):
+        """Generate random browser fingerprint for each instance."""
+        user_agents = [
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 11.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+        ]
+
+        screen_resolutions = [
+            (1920, 1080), (1366, 768), (1536, 864), (1440, 900),
+            (1280, 720), (1600, 900), (2560, 1440), (1280, 1024),
+        ]
+
+        webgl_vendors = [
+            "Google Inc. (NVIDIA)",
+            "Google Inc. (AMD)",
+            "Google Inc. (Intel)",
+            "Google Inc.",
+        ]
+
+        webgl_renderers = [
+            "ANGLE (NVIDIA, NVIDIA GeForce GTX 1650 Direct3D11 vs_5_0 ps_5_0)",
+            "ANGLE (AMD, AMD Radeon RX 580 Direct3D11 vs_5_0 ps_5_0)",
+            "ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0)",
+            "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0)",
+            "ANGLE (AMD, AMD Radeon(TM) Graphics Direct3D11 vs_5_0 ps_5_0)",
+            "ANGLE (Intel, Intel(R) Iris(R) Xe Graphics Direct3D11 vs_5_0 ps_5_0)",
+        ]
+
+        languages = ["en-US", "en-GB", "en-IN", "en-AU", "en-CA"]
+        platforms = ["Win32", "Win64", "MacIntel", "Linux x86_64"]
+        timezones = ["Asia/Kolkata", "America/New_York", "Europe/London", "Asia/Dubai", "America/Los_Angeles", "Europe/Berlin"]
+
+        return {
+            "user_agent": random.choice(user_agents),
+            "screen": random.choice(screen_resolutions),
+            "webgl_vendor": random.choice(webgl_vendors),
+            "webgl_renderer": random.choice(webgl_renderers),
+            "language": random.choice(languages),
+            "platform": random.choice(platforms),
+            "timezone": random.choice(timezones),
+            "hardware_concurrency": random.choice([2, 4, 6, 8, 12, 16]),
+            "device_memory": random.choice([2, 4, 8, 16, 32]),
+        }
+
+    def launch_chrome_subprocess(self, url, debug_port, user_agent=None, language=None):
         """
         Launch Chrome via subprocess with remote debugging enabled.
         This is the PRIMARY method - most reliable on Windows.
@@ -165,8 +219,14 @@ class TeraBoxAutomation:
             "--disable-dev-shm-usage",
             "--no-first-run",
             "--no-default-browser-check",
-            url,
         ]
+
+        if user_agent:
+            args.append(f"--user-agent={user_agent}")
+        if language:
+            args.append(f"--lang={language}")
+
+        args.append(url)
 
         try:
             process = subprocess.Popen(
@@ -472,7 +532,9 @@ class TeraBoxAutomation:
 
         port = DEBUG_PORT + (page_number - 1)
 
-        process = self.launch_chrome_subprocess(TERABOX_URL, port)
+        fingerprint = self._get_random_fingerprint()
+
+        process = self.launch_chrome_subprocess(TERABOX_URL, port, fingerprint['user_agent'], fingerprint['language'])
         if process is None:
             self.update_status(f"[Page {page_number}] Failed to launch Chrome.")
             return
@@ -488,6 +550,30 @@ class TeraBoxAutomation:
             return
 
         self.drivers.append(driver)
+
+        # Inject fingerprint spoofing
+        spoof_script = f"""
+Object.defineProperty(navigator, 'platform', {{get: () => '{fingerprint["platform"]}'}});
+Object.defineProperty(navigator, 'hardwareConcurrency', {{get: () => {fingerprint["hardware_concurrency"]}}});
+Object.defineProperty(navigator, 'deviceMemory', {{get: () => {fingerprint["device_memory"]}}});
+Object.defineProperty(navigator, 'languages', {{get: () => ['{fingerprint["language"]}', 'en']}});
+Object.defineProperty(screen, 'width', {{get: () => {fingerprint["screen"][0]}}});
+Object.defineProperty(screen, 'height', {{get: () => {fingerprint["screen"][1]}}});
+const getParam = WebGLRenderingContext.prototype.getParameter;
+WebGLRenderingContext.prototype.getParameter = function(p) {{
+    if (p === 37445) return '{fingerprint["webgl_vendor"]}';
+    if (p === 37446) return '{fingerprint["webgl_renderer"]}';
+    return getParam.call(this, p);
+}};
+const toDataURL = HTMLCanvasElement.prototype.toDataURL;
+HTMLCanvasElement.prototype.toDataURL = function(type) {{
+    const ctx = this.getContext('2d');
+    if (ctx) {{ ctx.fillStyle = 'rgba({random.randint(0,5)},{random.randint(0,5)},{random.randint(0,5)},0.01)'; ctx.fillRect(0,0,1,1); }}
+    return toDataURL.call(this, type);
+}};
+"""
+        driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {'source': spoof_script})
+        self.update_status(f"[Page {page_number}] Fingerprint: {fingerprint['user_agent'][-30:]}")
 
         # Snap Chrome to right half using Windows shortcut (Win + Right)
         time.sleep(0.5)
