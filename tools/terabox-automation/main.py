@@ -2,7 +2,7 @@
 TeraBox Automation Tool
 -----------------------
 A GUI tool that automates browser interaction with TeraBox.
-Opens Chrome in incognito mode via subprocess with remote debugging,
+Opens Chrome with unique profiles via subprocess with remote debugging,
 then connects Selenium for Log In -> Sign Up -> Email selection flow.
 
 @codex_here
@@ -31,7 +31,7 @@ def _check_help():
         print("  2. Click 'Start Automation' to begin")
         print()
         print("The automation will:")
-        print("  - Open Chrome in incognito mode (via subprocess)")
+        print("  - Open Chrome with unique profiles (via subprocess)")
         print("  - Navigate to TeraBox")
         print("  - Click Log In -> Sign Up -> Email")
         print("  - Repeat for each page")
@@ -257,7 +257,7 @@ class TeraBoxAutomation:
 
         args = [
             chrome_path,
-            "--incognito",
+            "--new-window",
             f"--remote-debugging-port={debug_port}",
             f"--user-data-dir={user_data_dir}",
             "--disable-dev-shm-usage",
@@ -265,6 +265,8 @@ class TeraBoxAutomation:
             "--no-default-browser-check",
             "--disable-popup-blocking",
             "--disable-notifications",
+            "--disable-session-crashed-bubble",
+            "--disable-infobars",
         ]
 
         if user_agent:
@@ -688,9 +690,10 @@ Object.defineProperty(navigator, 'languages', {{get: () => ['{fingerprint["langu
             t = threading.Thread(target=self._run_single_page, args=(i, num_pages, target_url), daemon=True)
             threads.append(t)
 
-        # Start ALL threads at once
-        for t in threads:
+        # Start ALL threads with small stagger
+        for idx, t in enumerate(threads):
             t.start()
+            time.sleep(0.5)  # 0.5 sec between each launch to avoid conflicts
 
         # Wait for all to complete
         for t in threads:
