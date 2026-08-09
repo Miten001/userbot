@@ -642,13 +642,14 @@ Object.defineProperty(navigator, 'languages', {{get: () => ['{fingerprint["langu
         except Exception:
             pass
 
-        # Position on RIGHT HALF of screen (all windows same position = stacked)
+        # Force position on RIGHT HALF - retry multiple times to override Windows cascading
         try:
-            screen_width = driver.execute_script("return window.screen.availWidth")
-            screen_height = driver.execute_script("return window.screen.availHeight")
-            half_width = screen_width // 2
-            driver.set_window_size(half_width, screen_height)
-            driver.set_window_position(half_width, 0)
+            half_width = self.screen_width // 2
+            # Set position multiple times to ensure it sticks
+            for _ in range(3):
+                driver.set_window_position(half_width, 0)
+                driver.set_window_size(half_width, self.screen_height)
+                time.sleep(0.2)
         except Exception:
             pass
 
@@ -726,9 +727,10 @@ Object.defineProperty(navigator, 'languages', {{get: () => ['{fingerprint["langu
             threads.append(t)
 
         # Start ALL threads with small stagger
+        # Start threads with stagger to avoid Windows cascading
         for idx, t in enumerate(threads):
             t.start()
-            time.sleep(0.5)  # 0.5 sec between each launch to avoid conflicts
+            time.sleep(1.5)  # give Chrome time to open and position
 
         # Wait for all to complete
         for t in threads:
