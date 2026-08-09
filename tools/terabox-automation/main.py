@@ -98,7 +98,7 @@ PAGE_LOAD_TIMEOUT = 30
 # Delay between actions in seconds
 ACTION_DELAY = 0.5
 # Maximum number of concurrent browser pages allowed
-MAX_PAGES = 50
+MAX_PAGES = 1000
 
 
 def find_chrome_path():
@@ -541,8 +541,9 @@ class TeraBoxAutomation:
             self.update_status(f"[Page {page_number}] Error: {str(e)}")
             return False
 
-    def run(self, num_pages, custom_proxies=None):
+    def run(self, num_pages, custom_proxies=None, url=None):
         """Run the automation for the specified number of pages simultaneously."""
+        target_url = url or TERABOX_URL
         self.update_status(f"Starting automation for {num_pages} page(s) simultaneously...")
 
         if custom_proxies:
@@ -560,7 +561,7 @@ class TeraBoxAutomation:
         for i in range(1, num_pages + 1):
             if self._is_stopped():
                 break
-            t = threading.Thread(target=self._run_single_page, args=(i, num_pages), daemon=True)
+            t = threading.Thread(target=self._run_single_page, args=(i, num_pages, target_url), daemon=True)
             threads.append(t)
 
         # Start ALL threads at once
@@ -574,7 +575,7 @@ class TeraBoxAutomation:
         if not self._is_stopped():
             self.update_status(f"\nAll {num_pages} page(s) processed.")
 
-    def _run_single_page(self, page_number, total_pages):
+    def _run_single_page(self, page_number, total_pages, target_url):
         """Run automation for a single page (called in its own thread)."""
         self.update_status(f"[Page {page_number}/{total_pages}] Launching Chrome...")
 
@@ -587,7 +588,7 @@ class TeraBoxAutomation:
             proxy = self.proxies[(page_number - 1) % len(self.proxies)]
             self.update_status(f"[Page {page_number}] Using proxy: {proxy}")
 
-        process = self.launch_chrome_subprocess(TERABOX_URL, port, fingerprint['user_agent'], fingerprint['language'], proxy)
+        process = self.launch_chrome_subprocess(target_url, port, fingerprint['user_agent'], fingerprint['language'], proxy)
         if process is None:
             self.update_status(f"[Page {page_number}] Failed to launch Chrome.")
             return
@@ -745,6 +746,29 @@ class TeraBoxGUI:
         # Input frame
         input_frame = tk.Frame(self.root, bg=bg_frame, pady=10, padx=20)
         input_frame.pack(fill=tk.X, padx=20, pady=5)
+
+        # URL input
+        url_label = tk.Label(
+            input_frame,
+            text="Link (URL):",
+            font=("Consolas", 11),
+            fg=fg_text,
+            bg=bg_frame,
+        )
+        url_label.pack(anchor=tk.W)
+
+        self.url_entry = tk.Entry(
+            input_frame,
+            font=("Consolas", 11),
+            bg=bg_entry,
+            fg=fg_accent,
+            insertbackground=fg_accent,
+            relief=tk.FLAT,
+            highlightthickness=1,
+            highlightcolor=fg_accent,
+        )
+        self.url_entry.pack(anchor=tk.W, fill=tk.X, pady=5)
+        self.url_entry.insert(0, "https://1024terabox.com/s/1axTeTaTPATdSOQizMrGeJQ")
 
         pages_label = tk.Label(
             input_frame,
@@ -915,6 +939,12 @@ class TeraBoxGUI:
 
     def _start_automation(self):
         """Start the automation in a separate thread."""
+        # Validate URL input
+        url = self.url_entry.get().strip()
+        if not url:
+            messagebox.showerror("Error", "Please enter a URL / Link daalo")
+            return
+
         # Validate input
         try:
             num_pages = int(self.pages_entry.get().strip())
@@ -964,7 +994,7 @@ class TeraBoxGUI:
         # Run automation in a separate thread to keep GUI responsive
         thread = threading.Thread(
             target=self._run_automation_thread,
-            args=(num_pages, custom_proxies),
+            args=(num_pages, custom_proxies, url),
             daemon=True,
         )
         thread.start()
@@ -976,16 +1006,17 @@ class TeraBoxGUI:
             self._update_status("\nStopping automation... please wait.")
             self.stop_btn.config(state=tk.DISABLED)
 
-    def _run_automation_thread(self, num_pages, custom_proxies=None):
+    def _run_automation_thread(self, num_pages, custom_proxies=None, url=None):
         """
         Run the automation in a background thread.
 
         Args:
             num_pages: Number of pages to process
             custom_proxies: Optional list of user-provided proxies
+            url: Optional URL to navigate to
         """
         try:
-            self.automation.run(num_pages, custom_proxies)
+            self.automation.run(num_pages, custom_proxies, url)
         except Exception as e:
             self._update_status(f"Error: {str(e)}")
         finally:
