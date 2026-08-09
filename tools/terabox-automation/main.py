@@ -138,6 +138,8 @@ class TeraBoxAutomation:
         self.stop_event = stop_event or threading.Event()
         self.chrome_processes = []
         self.drivers = []
+        self.proxies = []
+        self.proxy_index = 0
 
     def _is_stopped(self):
         """Check if the stop event has been set."""
@@ -146,6 +148,31 @@ class TeraBoxAutomation:
     def update_status(self, message):
         """Send status update to callback."""
         self.status_callback(message)
+
+    def _fetch_proxies(self):
+        """Fetch free proxy list from public APIs."""
+        proxies = []
+        try:
+            import urllib.request
+            import json
+            # Try multiple free proxy APIs
+            apis = [
+                "https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=5000&country=all&ssl=all&anonymity=all",
+            ]
+            for api_url in apis:
+                try:
+                    req = urllib.request.Request(api_url, headers={'User-Agent': 'Mozilla/5.0'})
+                    response = urllib.request.urlopen(req, timeout=10)
+                    data = response.read().decode('utf-8')
+                    for line in data.strip().split('\n'):
+                        line = line.strip()
+                        if ':' in line and line[0].isdigit():
+                            proxies.append(line)
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        return proxies
 
     def _get_random_fingerprint(self):
         """Generate random browser fingerprint for each instance."""
@@ -199,7 +226,7 @@ class TeraBoxAutomation:
             "device_memory": random.choice([2, 4, 8, 16, 32]),
         }
 
-    def launch_chrome_subprocess(self, url, debug_port, user_agent=None, language=None):
+    def launch_chrome_subprocess(self, url, debug_port, user_agent=None, language=None, proxy=None):
         """
         Launch Chrome via subprocess with remote debugging enabled.
         This is the PRIMARY method - most reliable on Windows.
@@ -225,6 +252,8 @@ class TeraBoxAutomation:
             args.append(f"--user-agent={user_agent}")
         if language:
             args.append(f"--lang={language}")
+        if proxy:
+            args.append(f"--proxy-server=http://{proxy}")
 
         args.append(url)
 
@@ -504,9 +533,20 @@ class TeraBoxAutomation:
             self.update_status(f"[Page {page_number}] Error: {str(e)}")
             return False
 
-    def run(self, num_pages):
+    def run(self, num_pages, custom_proxies=None):
         """Run the automation for the specified number of pages simultaneously."""
         self.update_status(f"Starting automation for {num_pages} page(s) simultaneously...")
+
+        if custom_proxies:
+            self.proxies = custom_proxies
+            self.update_status(f"Using {len(self.proxies)} custom proxies")
+        else:
+            self.update_status("Fetching proxy list for IP rotation...")
+            self.proxies = self._fetch_proxies()
+            if self.proxies:
+                self.update_status(f"Found {len(self.proxies)} proxies for IP rotation!")
+            else:
+                self.update_status("No proxies found - using direct connection (same IP)")
 
         threads = []
         for i in range(1, num_pages + 1):
@@ -534,7 +574,12 @@ class TeraBoxAutomation:
 
         fingerprint = self._get_random_fingerprint()
 
-        process = self.launch_chrome_subprocess(TERABOX_URL, port, fingerprint['user_agent'], fingerprint['language'])
+        proxy = None
+        if self.proxies:
+            proxy = self.proxies[(page_number - 1) % len(self.proxies)]
+            self.update_status(f"[Page {page_number}] Using proxy: {proxy}")
+
+        process = self.launch_chrome_subprocess(TERABOX_URL, port, fingerprint['user_agent'], fingerprint['language'], proxy)
         if process is None:
             self.update_status(f"[Page {page_number}] Failed to launch Chrome.")
             return
@@ -616,7 +661,7 @@ class TeraBoxGUI:
         """Initialize the GUI."""
         self.root = tk.Tk()
         self.root.title("TeraBox Automation Tool")
-        self.root.geometry("650x550")
+        self.root.geometry("650x650")
         self.root.resizable(True, True)
         self.root.configure(bg="#0f0f0f")
 
@@ -715,6 +760,29 @@ class TeraBoxGUI:
         )
         self.pages_entry.pack(anchor=tk.W, pady=5)
         self.pages_entry.insert(0, "1")
+
+        # Proxy input
+        proxy_label = tk.Label(
+            input_frame,
+            text="Proxies (optional - one per line):",
+            font=("Consolas", 11),
+            fg=fg_text,
+            bg=bg_frame,
+        )
+        proxy_label.pack(anchor=tk.W, pady=(10, 0))
+
+        self.proxy_text = tk.Text(
+            input_frame,
+            height=4,
+            font=("Consolas", 9),
+            bg="#000000",
+            fg="#00ff41",
+            insertbackground="#00ff41",
+            relief=tk.FLAT,
+            highlightthickness=1,
+            highlightcolor=fg_accent,
+        )
+        self.proxy_text.pack(anchor=tk.W, fill=tk.X, pady=5)
 
         # Buttons frame
         btn_frame = tk.Frame(self.root, bg=bg_dark, pady=10, padx=20)
@@ -859,6 +927,13 @@ class TeraBoxGUI:
             )
             return
 
+        # Read user-provided proxies
+        user_proxies = self.proxy_text.get("1.0", tk.END).strip()
+        if user_proxies:
+            custom_proxies = [p.strip() for p in user_proxies.split('\n') if p.strip()]
+        else:
+            custom_proxies = None
+
         # Disable start button, enable stop button
         self.start_btn.config(state=tk.DISABLED)
         self.stop_btn.config(state=tk.NORMAL)
@@ -881,7 +956,7 @@ class TeraBoxGUI:
         # Run automation in a separate thread to keep GUI responsive
         thread = threading.Thread(
             target=self._run_automation_thread,
-            args=(num_pages,),
+            args=(num_pages, custom_proxies),
             daemon=True,
         )
         thread.start()
@@ -893,15 +968,16 @@ class TeraBoxGUI:
             self._update_status("\nStopping automation... please wait.")
             self.stop_btn.config(state=tk.DISABLED)
 
-    def _run_automation_thread(self, num_pages):
+    def _run_automation_thread(self, num_pages, custom_proxies=None):
         """
         Run the automation in a background thread.
 
         Args:
             num_pages: Number of pages to process
+            custom_proxies: Optional list of user-provided proxies
         """
         try:
-            self.automation.run(num_pages)
+            self.automation.run(num_pages, custom_proxies)
         except Exception as e:
             self._update_status(f"Error: {str(e)}")
         finally:
