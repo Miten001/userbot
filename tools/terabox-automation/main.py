@@ -564,56 +564,24 @@ class TeraBoxAutomation:
             self.update_status(f"[Page {page_number}] Error: {str(e)}")
             return False
 
-    def run(self, num_pages, custom_proxies=None, url=None):
-        """Run the automation for the specified number of pages as tabs in ONE Chrome window."""
-        target_url = url or TERABOX_URL
-        self.update_status(f"Starting automation for {num_pages} tab(s) in one Chrome window...")
-
-        # Handle proxies
-        if custom_proxies == "auto":
-            self.update_status("Fetching HTTP proxies from: SA, AE, US, KR, JP, MX, QA...")
-            self.proxies = self._fetch_proxies()
-            if self.proxies:
-                self.update_status(f"Found {len(self.proxies)} proxies!")
-                self.update_status(f"Testing proxies... (checking first 10)")
-                working = []
-                for p in self.proxies[:10]:
-                    if self._is_stopped():
-                        break
-                    if self._test_proxy(p):
-                        working.append(p)
-                        self.update_status(f"  Working: {p}")
-                    if len(working) >= 3:
-                        break
-                self.proxies = working if working else []
-                if self.proxies:
-                    self.update_status(f"Using {len(self.proxies)} working proxies")
-                else:
-                    self.update_status("No working proxies found - using direct connection")
-            else:
-                self.update_status("No proxies found - using direct connection")
-        elif custom_proxies and isinstance(custom_proxies, list):
-            self.proxies = custom_proxies
-            self.update_status(f"Using {len(self.proxies)} custom proxies")
-        else:
-            self.proxies = []
-            self.update_status("Proxy disabled - using direct connection")
-
-        # Generate fingerprint for this session
+    def _run_single_page(self, page_number, total_pages, target_url):
+        """Run automation for a single page in its own Chrome window."""
+        # Generate unique fingerprint for this window
         fingerprint = self._get_random_fingerprint()
 
-        # Determine proxy for this session
+        # Pick proxy
         proxy = None
         if self.proxies:
-            proxy = self.proxies[0]
-            self.update_status(f"Using proxy: {proxy}")
+            proxy = self.proxies[(page_number - 1) % len(self.proxies)]
+            self.update_status(f"[Window {page_number}] Proxy: {proxy}")
 
-        # Launch ONE Chrome window
-        port = DEBUG_PORT
-        self.update_status("Launching Chrome...")
+        # Launch Chrome with unique port
+        port = DEBUG_PORT + (page_number - 1)
+        self.update_status(f"[Window {page_number}/{total_pages}] Launching...")
+
         process = self.launch_chrome_subprocess(target_url, port, fingerprint['user_agent'], fingerprint['language'], proxy)
         if process is None:
-            self.update_status("Failed to launch Chrome.")
+            self.update_status(f"[Window {page_number}] Failed to launch Chrome.")
             return
 
         time.sleep(3)
@@ -621,10 +589,10 @@ class TeraBoxAutomation:
         if self._is_stopped():
             return
 
-        # Connect Selenium to Chrome
+        # Connect Selenium
         driver = self.connect_selenium_to_chrome(port)
         if driver is None:
-            self.update_status("Could not connect to Chrome.")
+            self.update_status(f"[Window {page_number}] Selenium connection failed.")
             return
 
         self.drivers.append(driver)
@@ -635,101 +603,101 @@ Object.defineProperty(navigator, 'platform', {{get: () => '{fingerprint["platfor
 Object.defineProperty(navigator, 'hardwareConcurrency', {{get: () => {fingerprint["hardware_concurrency"]}}});
 Object.defineProperty(navigator, 'deviceMemory', {{get: () => {fingerprint["device_memory"]}}});
 Object.defineProperty(navigator, 'languages', {{get: () => ['{fingerprint["language"]}', 'en']}});
-Object.defineProperty(screen, 'width', {{get: () => {fingerprint["screen"][0]}}});
-Object.defineProperty(screen, 'height', {{get: () => {fingerprint["screen"][1]}}});
 """
         try:
             driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {'source': spoof_script})
         except Exception:
             pass
 
-        # Full screen maximize
+        # Position on RIGHT HALF of screen (all windows same position = stacked)
         try:
-            driver.maximize_window()
+            screen_width = driver.execute_script("return window.screen.availWidth")
+            screen_height = driver.execute_script("return window.screen.availHeight")
+            half_width = screen_width // 2
+            driver.set_window_size(half_width, screen_height)
+            driver.set_window_position(half_width, 0)
         except Exception:
             pass
 
-        # First tab already has URL loaded
-        self.update_status(f"[Tab 1/{num_pages}] Already open")
+        # Zoom out
+        try:
+            driver.execute_script("document.body.style.zoom='80%'")
+        except Exception:
+            pass
 
-        # Open ALL remaining tabs at once - reliable method
-        for i in range(2, num_pages + 1):
+        # Check for error pages - auto close
+        time.sleep(2)
+        try:
+            page_source = driver.page_source
+            if "ERR_" in page_source or "This site can" in page_source or "took too long" in page_source or "DNS" in page_source:
+                self.update_status(f"[Window {page_number}] Connection error - closing...")
+                driver.quit()
+                return
+        except Exception:
+            pass
+
+        if self._is_stopped():
+            return
+
+        # Run automation
+        self.update_status(f"[Window {page_number}/{total_pages}] Running automation...")
+        success = self.perform_automation(driver, page_number)
+        if success:
+            self.update_status(f"[Window {page_number}] Done!")
+        else:
+            self.update_status(f"[Window {page_number}] Completed with issues.")
+
+    def run(self, num_pages, custom_proxies=None, url=None):
+        """Run the automation for the specified number of pages as separate Chrome windows."""
+        target_url = url or TERABOX_URL
+        self.update_status(f"Starting automation for {num_pages} browser(s)...")
+
+        # Handle proxies
+        if custom_proxies == "auto":
+            self.update_status("Fetching HTTP proxies...")
+            self.proxies = self._fetch_proxies()
+            if self.proxies:
+                self.update_status(f"Testing proxies...")
+                working = []
+                for p in self.proxies[:10]:
+                    if self._is_stopped():
+                        break
+                    if self._test_proxy(p):
+                        working.append(p)
+                        if len(working) >= 3:
+                            break
+                self.proxies = working if working else []
+                if self.proxies:
+                    self.update_status(f"Using {len(self.proxies)} working proxies")
+                else:
+                    self.update_status("No working proxies - direct connection")
+            else:
+                self.update_status("No proxies found - direct connection")
+        elif custom_proxies and isinstance(custom_proxies, list):
+            self.proxies = custom_proxies
+            self.update_status(f"Using {len(self.proxies)} custom proxies")
+        else:
+            self.proxies = []
+            self.update_status("Proxy disabled - direct connection")
+
+        # Launch ALL Chrome windows simultaneously using threads
+        threads = []
+        for i in range(1, num_pages + 1):
             if self._is_stopped():
                 break
-            try:
-                # Use JavaScript to create a link click (bypasses popup blocker)
-                driver.execute_script("""
-                    var a = document.createElement('a');
-                    a.href = arguments[0];
-                    a.target = '_blank';
-                    a.rel = 'noopener';
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                """, target_url)
-                time.sleep(0.5)
-                self.update_status(f"[Tab {i}/{num_pages}] Opened")
-            except Exception:
-                try:
-                    # Fallback - window.open
-                    driver.execute_script(f"window.open('{target_url}')")
-                    time.sleep(0.5)
-                    self.update_status(f"[Tab {i}/{num_pages}] Opened (method 2)")
-                except Exception as e:
-                    self.update_status(f"[Tab {i}] Failed: {str(e)}")
+            t = threading.Thread(target=self._run_single_page, args=(i, num_pages, target_url), daemon=True)
+            threads.append(t)
 
-        # Verify tabs opened
-        total_tabs = len(driver.window_handles)
-        self.update_status(f"\nTotal tabs opened: {total_tabs}")
+        # Start ALL threads at once
+        for t in threads:
+            t.start()
 
-        if total_tabs < num_pages:
-            self.update_status(f"Only {total_tabs} tabs opened (some may have been blocked)")
-
-        # Switch back to first tab
-        try:
-            driver.switch_to.window(driver.window_handles[0])
-        except Exception:
-            pass
-
-        self.update_status(f"\nAll tabs opened! Running automation on each...")
-
-        # Now do automation on each tab one by one
-        for i, handle in enumerate(driver.window_handles, 1):
-            if self._is_stopped():
-                break
-            try:
-                driver.switch_to.window(handle)
-                time.sleep(1)
-
-                # Check for error pages - auto close
-                try:
-                    page_source = driver.page_source
-                    if "ERR_" in page_source or "This site can" in page_source or "took too long" in page_source or "connection was reset" in page_source or "DNS" in page_source:
-                        self.update_status(f"[Tab {i}] Error detected - closing tab...")
-                        driver.close()
-                        continue
-                except Exception:
-                    pass
-
-                # Zoom out
-                driver.execute_script("document.body.style.zoom='80%'")
-
-                # Run automation
-                self.update_status(f"[Tab {i}/{num_pages}] Running automation...")
-                self.perform_automation(driver, i)
-            except Exception as e:
-                self.update_status(f"[Tab {i}] Error: {str(e)}")
-                continue
-
-        # Switch to first remaining tab
-        try:
-            if driver.window_handles:
-                driver.switch_to.window(driver.window_handles[0])
-        except Exception:
-            pass
+        # Wait for all to complete
+        for t in threads:
+            t.join()
 
         if not self._is_stopped():
-            self.update_status(f"\nDone! {len(driver.window_handles)} tabs remaining.")
+            self.update_status(f"\nAll {num_pages} browser(s) launched!")
 
     def close_all(self):
         """Close all open browser instances and Chrome processes."""
@@ -1132,7 +1100,7 @@ class TeraBoxGUI:
         Run the automation in a background thread.
 
         Args:
-            num_pages: Number of tabs to process
+            num_pages: Number of browser windows to process
             custom_proxies: Optional list of user-provided proxies
             url: Optional URL to navigate to
         """
@@ -1197,7 +1165,7 @@ class TeraBoxGUI:
         self._update_status(f"(Maximum {MAX_PAGES} pages allowed)")
         self._update_status("")
         self._update_status(
-            "Method: One Chrome window with multiple tabs"
+            "Method: Separate Chrome windows (right half, stacked)"
         )
         self.root.mainloop()
 
