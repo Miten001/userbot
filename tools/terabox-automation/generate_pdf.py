@@ -174,7 +174,6 @@ def generate_guide():
 
     # FEATURES
     pdf.section_title("FEATURES")
-    pdf.bullet("Dark hacker theme GUI with @codex_here branding")
     pdf.bullet("Up to 1000 pages simultaneously")
     pdf.bullet(
         "Each browser has unique fingerprint "
