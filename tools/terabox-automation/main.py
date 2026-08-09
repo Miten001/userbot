@@ -310,7 +310,7 @@ class TeraBoxAutomation:
             self.update_status(f"ERROR launching Chrome: {str(e)}")
             return None
 
-    def connect_selenium_to_chrome(self, debug_port, max_retries=5):
+    def connect_selenium_to_chrome(self, debug_port, max_retries=3):
         """
         Connect Selenium to an already-running Chrome via remote debugging.
         """
@@ -341,7 +341,7 @@ class TeraBoxAutomation:
                     f"Connection attempt {attempt} failed: {str(e)}"
                 )
                 if attempt < max_retries:
-                    time.sleep(2)
+                    time.sleep(1)
 
         self.update_status("Could not connect Selenium to Chrome.")
         return None
@@ -643,7 +643,7 @@ class TeraBoxAutomation:
                 continue
 
             # Wait for Chrome to fully open and become the active window
-            time.sleep(2)
+            time.sleep(1)
 
             if self._is_stopped():
                 break
@@ -653,7 +653,7 @@ class TeraBoxAutomation:
                 try:
                     pyautogui.hotkey('win', 'right')
                     self.update_status(f"[Window {page_number}] Snapped to right half (Win+Right)")
-                    time.sleep(0.5)
+                    time.sleep(0.3)
                 except Exception as e:
                     self.update_status(f"[Window {page_number}] Win+Right failed: {e}")
             else:
@@ -686,7 +686,7 @@ Object.defineProperty(navigator, 'languages', {{get: () => ['{fingerprint["langu
                 pass
 
             # Check for error pages - auto close
-            time.sleep(2)
+            time.sleep(1)
             try:
                 page_source = driver.page_source
                 if "ERR_" in page_source or "This site can" in page_source or "took too long" in page_source or "DNS" in page_source:
