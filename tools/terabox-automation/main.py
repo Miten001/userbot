@@ -62,6 +62,7 @@ try:
     from selenium.webdriver.chrome.options import Options
     from selenium.webdriver.chrome.service import Service
     from selenium.webdriver.common.by import By
+    from selenium.webdriver.common.keys import Keys
     from selenium.webdriver.support.ui import WebDriverWait
     from selenium.webdriver.support import expected_conditions as EC
     from selenium.common.exceptions import (
@@ -254,6 +255,8 @@ class TeraBoxAutomation:
             "--disable-dev-shm-usage",
             "--no-first-run",
             "--no-default-browser-check",
+            "--disable-popup-blocking",
+            "--disable-notifications",
         ]
 
         if user_agent:
@@ -630,9 +633,30 @@ Object.defineProperty(screen, 'height', {{get: () => {fingerprint["screen"][1]}}
         for i in range(2, num_pages + 1):
             if self._is_stopped():
                 break
-            driver.execute_script(f"window.open('{target_url}', '_blank')")
-            time.sleep(0.3)  # small delay between tab opens
-            self.update_status(f"[Tab {i}/{num_pages}] Opened")
+            try:
+                # Method 1: Use window.open with about:blank then navigate
+                driver.execute_script("window.open('about:blank', '_blank');")
+                time.sleep(0.3)
+                # Switch to new tab and navigate
+                driver.switch_to.window(driver.window_handles[-1])
+                driver.get(target_url)
+                time.sleep(0.3)
+                self.update_status(f"[Tab {i}/{num_pages}] Opened")
+            except Exception as e:
+                # Fallback: try Keys Ctrl+T
+                try:
+                    body = driver.find_element(By.TAG_NAME, 'body')
+                    body.send_keys(Keys.CONTROL + 't')
+                    time.sleep(0.5)
+                    driver.switch_to.window(driver.window_handles[-1])
+                    driver.get(target_url)
+                    time.sleep(0.3)
+                    self.update_status(f"[Tab {i}/{num_pages}] Opened (fallback)")
+                except Exception:
+                    self.update_status(f"[Tab {i}] Failed to open tab: {str(e)}")
+
+        # Switch back to first tab
+        driver.switch_to.window(driver.window_handles[0])
 
         self.update_status(f"\nAll {num_pages} tabs opened! Running automation on each...")
 
