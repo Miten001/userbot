@@ -83,6 +83,11 @@ except ImportError:
 # Target URL
 TERABOX_URL = "https://1024terabox.com/s/1axTeTaTPATdSOQizMrGeJQ"
 
+# Supported countries for IP rotation:
+# SA = Saudi Arabia, AE = UAE, US = United States
+# KR = South Korea, JP = Japan, MX = Mexico, QA = Qatar
+PROXY_COUNTRIES = "SA,AE,US,KR,JP,MX,QA"
+
 # Remote debugging port for Chrome
 DEBUG_PORT = 9222
 
@@ -150,14 +155,17 @@ class TeraBoxAutomation:
         self.status_callback(message)
 
     def _fetch_proxies(self):
-        """Fetch free proxy list from public APIs."""
+        """Fetch free proxy list from public APIs filtered by country."""
+        self.update_status("Fetching proxies from: SA, AE, US, KR, JP, MX, QA...")
         proxies = []
         try:
             import urllib.request
             import json
-            # Try multiple free proxy APIs
+            # Try multiple free proxy APIs with country filtering
             apis = [
-                "https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=5000&country=all&ssl=all&anonymity=all",
+                f"https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=5000&country={PROXY_COUNTRIES}&ssl=all&anonymity=all",
+                f"https://api.proxyscrape.com/v2/?request=displayproxies&protocol=socks4&timeout=5000&country={PROXY_COUNTRIES}",
+                f"https://api.proxyscrape.com/v2/?request=displayproxies&protocol=socks5&timeout=5000&country={PROXY_COUNTRIES}",
             ]
             for api_url in apis:
                 try:
