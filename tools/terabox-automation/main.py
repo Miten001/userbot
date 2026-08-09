@@ -148,6 +148,7 @@ class TeraBoxAutomation:
         self.drivers = []
         self.proxies = []
         self.proxy_index = 0
+        self.screen_width, self.screen_height = 1920, 1080
 
     def _is_stopped(self):
         """Check if the stop event has been set."""
@@ -156,6 +157,19 @@ class TeraBoxAutomation:
     def update_status(self, message):
         """Send status update to callback."""
         self.status_callback(message)
+
+    def _get_screen_size(self):
+        """Get screen size using tkinter."""
+        try:
+            import tkinter as tk
+            temp = tk.Tk()
+            temp.withdraw()
+            width = temp.winfo_screenwidth()
+            height = temp.winfo_screenheight()
+            temp.destroy()
+            return width, height
+        except Exception:
+            return 1920, 1080  # default fallback
 
     def _fetch_proxies(self):
         """Fetch free HTTP proxy list from public APIs filtered by country."""
@@ -245,7 +259,7 @@ class TeraBoxAutomation:
             "device_memory": random.choice([2, 4, 8, 16, 32]),
         }
 
-    def launch_chrome_subprocess(self, url, debug_port, user_agent=None, language=None, proxy=None):
+    def launch_chrome_subprocess(self, url, debug_port, user_agent=None, language=None, proxy=None, screen_width=1920, screen_height=1080):
         """
         Launch Chrome via subprocess with remote debugging enabled.
         This is the PRIMARY method - most reliable on Windows.
@@ -266,6 +280,9 @@ class TeraBoxAutomation:
                 pass
         os.makedirs(user_data_dir, exist_ok=True)
 
+        # Calculate right half positioning
+        half_width = screen_width // 2
+
         args = [
             chrome_path,
             f"--user-data-dir={user_data_dir}",
@@ -279,6 +296,8 @@ class TeraBoxAutomation:
             "--disable-features=ChromeWhatsNewUI",
             "--no-service-autorun",
             "--password-store=basic",
+            f"--window-position={half_width},0",
+            f"--window-size={half_width},{screen_height}",
         ]
 
         if user_agent:
@@ -593,7 +612,7 @@ class TeraBoxAutomation:
         port = DEBUG_PORT + (page_number - 1)
         self.update_status(f"[Window {page_number}/{total_pages}] Launching...")
 
-        process = self.launch_chrome_subprocess(target_url, port, fingerprint['user_agent'], fingerprint['language'], proxy)
+        process = self.launch_chrome_subprocess(target_url, port, fingerprint['user_agent'], fingerprint['language'], proxy, self.screen_width, self.screen_height)
         if process is None:
             self.update_status(f"[Window {page_number}] Failed to launch Chrome.")
             return
@@ -665,6 +684,10 @@ Object.defineProperty(navigator, 'languages', {{get: () => ['{fingerprint["langu
         """Run the automation for the specified number of pages as separate Chrome windows."""
         target_url = url or TERABOX_URL
         self.update_status(f"Starting automation for {num_pages} browser(s)...")
+
+        # Detect screen size for window positioning
+        self.screen_width, self.screen_height = self._get_screen_size()
+        self.update_status(f"Screen: {self.screen_width}x{self.screen_height}")
 
         # Handle proxies
         if custom_proxies == "auto":
