@@ -158,13 +158,13 @@ class TeraBoxAutomation:
         self.status_callback(message)
 
     def _fetch_proxies(self):
-        """Fetch free HTTP proxy list from public APIs filtered by country."""
-        self.update_status("Fetching HTTP proxies from: SA, AE, US, KR, JP, MX, QA...")
+        """Fetch free HTTP proxy list."""
+        self.update_status("Fetching proxies from: SA, AE, US, KR, JP, MX, QA...")
         proxies = []
         try:
             import urllib.request
             apis = [
-                f"https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=3000&country={PROXY_COUNTRIES}&ssl=yes&anonymity=elite",
+                f"https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=3000&country={PROXY_COUNTRIES}&ssl=all&anonymity=all",
             ]
             for api_url in apis:
                 try:
@@ -183,13 +183,20 @@ class TeraBoxAutomation:
         return proxies
 
     def _test_proxy(self, proxy):
-        """Quick test if proxy is alive (2 second timeout)."""
+        """Test if proxy can reach TeraBox (2 second timeout)."""
         try:
             import urllib.request
-            proxy_handler = urllib.request.ProxyHandler({'http': f'http://{proxy}', 'https': f'http://{proxy}'})
+            proxy_handler = urllib.request.ProxyHandler({
+                'http': f'http://{proxy}',
+                'https': f'http://{proxy}'
+            })
             opener = urllib.request.build_opener(proxy_handler)
-            opener.open('http://httpbin.org/ip', timeout=2)
-            return True
+            req = urllib.request.Request(
+                'https://www.terabox.app',
+                headers={'User-Agent': 'Mozilla/5.0'}
+            )
+            response = opener.open(req, timeout=2)
+            return response.status == 200
         except Exception:
             return False
 
@@ -594,22 +601,26 @@ class TeraBoxAutomation:
             self.update_status("Fetching HTTP proxies...")
             self.proxies = self._fetch_proxies()
             if self.proxies:
-                self.update_status(f"Testing {min(20, len(self.proxies))} proxies...")
+                total_to_test = min(30, len(self.proxies))
+                self.update_status(f"Testing {total_to_test} proxies against TeraBox...")
                 working = []
-                for p in self.proxies[:20]:
+                for idx, p in enumerate(self.proxies[:30], 1):
                     if self._is_stopped():
                         break
+                    self.update_status(f"  Testing [{idx}/{total_to_test}]: {p}...")
                     if self._test_proxy(p):
                         working.append(p)
-                        self.update_status(f"  Working: {p}")
-                        if len(working) >= 5:
+                        self.update_status(f"  WORKING: {p}")
+                        if len(working) >= 10:
                             break
+                    else:
+                        self.update_status(f"  DEAD: {p}")
                 self.proxies = working if working else []
                 if self.proxies:
-                    self.update_status(f"Found {len(self.proxies)} working proxies!")
+                    self.update_status(f"\n{len(self.proxies)} working proxies found!")
                 else:
-                    self.update_status("WARNING: No working proxies found!")
-                    self.update_status("Using direct connection instead (no proxy)")
+                    self.update_status("\nNo working proxies found!")
+                    self.update_status("Continuing with direct connection (no proxy)")
             else:
                 self.update_status("No proxies found - direct connection")
         elif custom_proxies and isinstance(custom_proxies, list):
