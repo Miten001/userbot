@@ -704,9 +704,9 @@ class TeraBoxGUI:
         """Initialize the GUI."""
         self.root = tk.Tk()
         self.root.title("TeraBox Automation Tool")
-        self.root.geometry("650x650")
+        self.root.geometry("750x700")
         self.root.resizable(True, True)
-        self.root.configure(bg="#0f0f0f")
+        self.root.configure(bg="#0a0a1a")
 
         # Automation instance
         self.automation = None
@@ -735,22 +735,25 @@ class TeraBoxGUI:
             self.automation.close_all()
 
     def _setup_gui(self):
-        """Set up the GUI layout with dark hacker theme."""
-        # Dark theme colors
-        bg_dark = "#0f0f0f"
-        bg_frame = "#1a1a2e"
-        bg_entry = "#16213e"
-        fg_text = "#ffffff"
-        fg_accent = "#00fff5"
-        fg_purple = "#bf00ff"
-        fg_green = "#00ff41"
+        """Set up the GUI layout with rich colorful theme."""
+        # Rich vibrant theme colors
+        bg_dark = "#0a0a1a"
+        bg_frame = "#1a0a2e"
+        bg_entry = "#0d1b2a"
+        fg_text = "#f0f0ff"
+        fg_accent = "#00e5ff"
+        fg_purple = "#e040fb"
+        fg_green = "#76ff03"
+        fg_gold = "#ffd600"
+        fg_orange = "#ff6d00"
+        fg_pink = "#ff4081"
 
         # Branding - @codex_here
         brand_label = tk.Label(
             self.root,
             text="@codex_here",
             font=("Consolas", 11, "bold"),
-            fg=fg_accent,
+            fg=fg_gold,
             bg=bg_dark,
         )
         brand_label.pack(pady=(10, 0))
@@ -763,7 +766,7 @@ class TeraBoxGUI:
             title_frame,
             text="TeraBox Automation Tool",
             font=("Consolas", 18, "bold"),
-            fg=fg_accent,
+            fg=fg_pink,
             bg=bg_dark,
         )
         title_label.pack()
@@ -772,7 +775,7 @@ class TeraBoxGUI:
             title_frame,
             text="Log In > Sign Up > Email Selection",
             font=("Consolas", 10),
-            fg=fg_purple,
+            fg=fg_gold,
             bg=bg_dark,
         )
         subtitle_label.pack()
@@ -785,8 +788,8 @@ class TeraBoxGUI:
         url_label = tk.Label(
             input_frame,
             text="Link (URL):",
-            font=("Consolas", 11),
-            fg=fg_text,
+            font=("Consolas", 11, "bold"),
+            fg=fg_accent,
             bg=bg_frame,
         )
         url_label.pack(anchor=tk.W)
@@ -807,8 +810,8 @@ class TeraBoxGUI:
         pages_label = tk.Label(
             input_frame,
             text=f"Kitne pages open karne hain? (1-{MAX_PAGES}):",
-            font=("Consolas", 11),
-            fg=fg_text,
+            font=("Consolas", 11, "bold"),
+            fg=fg_accent,
             bg=bg_frame,
         )
         pages_label.pack(anchor=tk.W)
@@ -833,9 +836,9 @@ class TeraBoxGUI:
             input_frame,
             text="Use Proxy / IP Rotation",
             variable=self.use_proxy_var,
-            font=("Consolas", 10),
+            font=("Consolas", 10, "bold"),
             bg=bg_frame,
-            fg=fg_text,
+            fg=fg_orange,
             selectcolor="#000000",
             activebackground=bg_frame,
         )
@@ -846,7 +849,7 @@ class TeraBoxGUI:
             input_frame,
             text="Proxies (optional - one per line):",
             font=("Consolas", 11),
-            fg=fg_text,
+            fg=fg_purple,
             bg=bg_frame,
         )
         proxy_label.pack(anchor=tk.W, pady=(10, 0))
@@ -872,9 +875,9 @@ class TeraBoxGUI:
             btn_frame,
             text="Start Automation",
             font=("Consolas", 11, "bold"),
-            bg="#00c853",
+            bg="#00e676",
             fg="#000000",
-            activebackground="#00e676",
+            activebackground="#69f0ae",
             padx=15,
             pady=5,
             relief=tk.FLAT,
@@ -887,9 +890,9 @@ class TeraBoxGUI:
             btn_frame,
             text="Stop",
             font=("Consolas", 11, "bold"),
-            bg="#ff6d00",
+            bg="#ff9100",
             fg="#000000",
-            activebackground="#ff9100",
+            activebackground="#ffab40",
             padx=15,
             pady=5,
             relief=tk.FLAT,
@@ -915,6 +918,22 @@ class TeraBoxGUI:
         )
         self.close_btn.pack(side=tk.LEFT, padx=5)
 
+        # Close All Tabs button - always enabled
+        self.close_all_btn = tk.Button(
+            btn_frame,
+            text="Close All Tabs",
+            font=("Consolas", 11, "bold"),
+            bg="#aa00ff",
+            fg="#ffffff",
+            activebackground="#d500f9",
+            padx=15,
+            pady=5,
+            relief=tk.FLAT,
+            cursor="hand2",
+            command=self._close_all_tabs,
+        )
+        self.close_all_btn.pack(side=tk.LEFT, padx=5)
+
         # Status frame
         status_frame = tk.Frame(self.root, bg=bg_dark, pady=5, padx=20)
         status_frame.pack(fill=tk.BOTH, expand=True)
@@ -923,7 +942,7 @@ class TeraBoxGUI:
             status_frame,
             text="[ Terminal Output ]",
             font=("Consolas", 10, "bold"),
-            fg=fg_green,
+            fg=fg_accent,
             bg=bg_dark,
         )
         status_label.pack(anchor=tk.W)
@@ -952,14 +971,14 @@ class TeraBoxGUI:
         self.status_text.pack(fill=tk.BOTH, expand=True)
         scrollbar.config(command=self.status_text.yview)
 
-        # Progress bar with dark style
+        # Progress bar with vibrant style
         style = ttk.Style()
         style.theme_use("default")
         style.configure(
             "dark.Horizontal.TProgressbar",
             troughcolor=bg_frame,
-            background=fg_accent,
-            darkcolor=fg_accent,
+            background=fg_pink,
+            darkcolor=fg_purple,
             lightcolor=fg_accent,
         )
         self.progress = ttk.Progressbar(
@@ -1092,6 +1111,33 @@ class TeraBoxGUI:
             self.automation.close_all()
             self._update_status("All browsers closed.")
         self.close_btn.config(state=tk.DISABLED)
+
+    def _close_all_tabs(self):
+        """Close all open browser tabs/instances and kill Chrome processes."""
+        if self.automation:
+            self.automation.close_all()
+            self._update_status("All tabs/browsers closed.")
+        # Also kill any remaining Chrome processes
+        try:
+            import subprocess
+            if os.name == 'nt':
+                subprocess.run(['taskkill', '/F', '/IM', 'chrome.exe'], 
+                             capture_output=True, timeout=5)
+                subprocess.run(['taskkill', '/F', '/IM', 'chromedriver.exe'], 
+                             capture_output=True, timeout=5)
+            else:
+                subprocess.run(['pkill', '-f', 'chrome'], 
+                             capture_output=True, timeout=5)
+            self._update_status("All Chrome processes killed.")
+        except Exception:
+            pass
+        self.close_btn.config(state=tk.DISABLED)
+        if self.is_running:
+            self._stop_event.set()
+            self.is_running = False
+            self.start_btn.config(state=tk.NORMAL)
+            self.stop_btn.config(state=tk.DISABLED)
+            self.progress.stop()
 
     def run(self):
         """Start the GUI main loop."""
