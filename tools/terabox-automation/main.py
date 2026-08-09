@@ -635,39 +635,19 @@ HTMLCanvasElement.prototype.toDataURL = function(type) {{
         driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {'source': spoof_script})
         self.update_status(f"[Page {page_number}] Fingerprint: {fingerprint['user_agent'][-30:]}")
 
-        # Position browser in a grid layout on screen
+        # Split Screen - All browsers on RIGHT HALF of screen, stacked
         try:
             screen_width = driver.execute_script("return window.screen.availWidth")
             screen_height = driver.execute_script("return window.screen.availHeight")
 
-            # Calculate grid: how many columns and rows based on total pages
-            if total_pages <= 2:
-                cols = 2
-            elif total_pages <= 4:
-                cols = 2
-            elif total_pages <= 9:
-                cols = 3
-            elif total_pages <= 16:
-                cols = 4
-            else:
-                cols = 5
+            # Right half of screen
+            half_width = screen_width // 2
 
-            rows = (total_pages + cols - 1) // cols  # ceiling division
-
-            win_width = screen_width // cols
-            win_height = screen_height // rows
-
-            # Calculate position for this page number
-            col = (page_number - 1) % cols
-            row = (page_number - 1) // cols
-
-            x_pos = col * win_width
-            y_pos = row * win_height
-
-            driver.set_window_size(win_width, win_height)
-            driver.set_window_position(x_pos, y_pos)
+            # All browsers: right half position, full height
+            driver.set_window_size(half_width, screen_height)
+            driver.set_window_position(half_width, 0)
         except Exception:
-            pass  # If positioning fails, just continue with automation
+            pass  # If positioning fails, just continue
 
         # Zoom out the page to 80% for better visibility
         driver.execute_script("document.body.style.zoom='80%'")
