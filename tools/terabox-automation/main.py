@@ -164,7 +164,7 @@ class TeraBoxAutomation:
         try:
             import urllib.request
             apis = [
-                f"https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=5000&country={PROXY_COUNTRIES}&ssl=all&anonymity=all",
+                f"https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=3000&country={PROXY_COUNTRIES}&ssl=yes&anonymity=elite",
             ]
             for api_url in apis:
                 try:
@@ -183,12 +183,12 @@ class TeraBoxAutomation:
         return proxies
 
     def _test_proxy(self, proxy):
-        """Quick test if proxy is alive (3 second timeout)."""
+        """Quick test if proxy is alive (2 second timeout)."""
         try:
             import urllib.request
             proxy_handler = urllib.request.ProxyHandler({'http': f'http://{proxy}', 'https': f'http://{proxy}'})
             opener = urllib.request.build_opener(proxy_handler)
-            opener.open('http://httpbin.org/ip', timeout=3)
+            opener.open('http://httpbin.org/ip', timeout=2)
             return True
         except Exception:
             return False
@@ -594,20 +594,22 @@ class TeraBoxAutomation:
             self.update_status("Fetching HTTP proxies...")
             self.proxies = self._fetch_proxies()
             if self.proxies:
-                self.update_status(f"Testing proxies...")
+                self.update_status(f"Testing {min(20, len(self.proxies))} proxies...")
                 working = []
-                for p in self.proxies[:10]:
+                for p in self.proxies[:20]:
                     if self._is_stopped():
                         break
                     if self._test_proxy(p):
                         working.append(p)
-                        if len(working) >= 3:
+                        self.update_status(f"  Working: {p}")
+                        if len(working) >= 5:
                             break
                 self.proxies = working if working else []
                 if self.proxies:
-                    self.update_status(f"Using {len(self.proxies)} working proxies")
+                    self.update_status(f"Found {len(self.proxies)} working proxies!")
                 else:
-                    self.update_status("No working proxies - direct connection")
+                    self.update_status("WARNING: No working proxies found!")
+                    self.update_status("Using direct connection instead (no proxy)")
             else:
                 self.update_status("No proxies found - direct connection")
         elif custom_proxies and isinstance(custom_proxies, list):
@@ -683,7 +685,7 @@ Object.defineProperty(navigator, 'languages', {{get: () => ['{fingerprint["langu
             try:
                 page_source = driver.page_source
                 if "ERR_" in page_source or "This site can" in page_source or "took too long" in page_source or "DNS" in page_source:
-                    self.update_status(f"[Window {page_number}] Connection error - closing...")
+                    self.update_status(f"[Window {page_number}] Proxy failed - window closed. Remaining windows will continue.")
                     driver.quit()
                     continue
             except Exception:
