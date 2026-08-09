@@ -542,12 +542,12 @@ class TeraBoxAutomation:
             return False
 
     def run(self, num_pages, custom_proxies=None, url=None):
-        """Run the automation for the specified number of pages simultaneously."""
+        """Run the automation for the specified number of pages as tabs in ONE Chrome window."""
         target_url = url or TERABOX_URL
-        self.update_status(f"Starting automation for {num_pages} page(s) simultaneously...")
+        self.update_status(f"Starting automation for {num_pages} tab(s) in one Chrome window...")
 
+        # Handle proxies
         if custom_proxies == "auto":
-            # Fetch from API
             self.update_status("Fetching proxies from: SA, AE, US, KR, JP, MX, QA...")
             self.proxies = self._fetch_proxies()
             if self.proxies:
@@ -561,57 +561,37 @@ class TeraBoxAutomation:
             self.proxies = []
             self.update_status("Proxy disabled - using direct connection")
 
-        threads = []
-        for i in range(1, num_pages + 1):
-            if self._is_stopped():
-                break
-            t = threading.Thread(target=self._run_single_page, args=(i, num_pages, target_url), daemon=True)
-            threads.append(t)
-
-        # Start ALL threads at once
-        for t in threads:
-            t.start()
-
-        # Wait for all to complete
-        for t in threads:
-            t.join()
-
-        if not self._is_stopped():
-            self.update_status(f"\nAll {num_pages} page(s) processed.")
-
-    def _run_single_page(self, page_number, total_pages, target_url):
-        """Run automation for a single page (called in its own thread)."""
-        self.update_status(f"[Page {page_number}/{total_pages}] Launching Chrome...")
-
-        port = DEBUG_PORT + (page_number - 1)
-
+        # Generate fingerprint for this session
         fingerprint = self._get_random_fingerprint()
 
+        # Determine proxy for this session
         proxy = None
         if self.proxies:
-            proxy = self.proxies[(page_number - 1) % len(self.proxies)]
-            self.update_status(f"[Page {page_number}] Using proxy: {proxy}")
-        else:
-            self.update_status(f"[Page {page_number}] Direct connection (no proxy)")
+            proxy = self.proxies[0]
+            self.update_status(f"Using proxy: {proxy}")
 
+        # Launch ONE Chrome window
+        port = DEBUG_PORT
+        self.update_status("Launching Chrome...")
         process = self.launch_chrome_subprocess(target_url, port, fingerprint['user_agent'], fingerprint['language'], proxy)
         if process is None:
-            self.update_status(f"[Page {page_number}] Failed to launch Chrome.")
+            self.update_status("Failed to launch Chrome.")
             return
 
-        time.sleep(3)  # Wait for Chrome to start
+        time.sleep(3)
 
         if self._is_stopped():
             return
 
+        # Connect Selenium to Chrome
         driver = self.connect_selenium_to_chrome(port)
         if driver is None:
-            self.update_status(f"[Page {page_number}] Chrome open but Selenium failed.")
+            self.update_status("Could not connect to Chrome.")
             return
 
         self.drivers.append(driver)
 
-        # Inject fingerprint spoofing
+        # Inject fingerprint
         spoof_script = f"""
 Object.defineProperty(navigator, 'platform', {{get: () => '{fingerprint["platform"]}'}});
 Object.defineProperty(navigator, 'hardwareConcurrency', {{get: () => {fingerprint["hardware_concurrency"]}}});
@@ -619,47 +599,54 @@ Object.defineProperty(navigator, 'deviceMemory', {{get: () => {fingerprint["devi
 Object.defineProperty(navigator, 'languages', {{get: () => ['{fingerprint["language"]}', 'en']}});
 Object.defineProperty(screen, 'width', {{get: () => {fingerprint["screen"][0]}}});
 Object.defineProperty(screen, 'height', {{get: () => {fingerprint["screen"][1]}}});
-const getParam = WebGLRenderingContext.prototype.getParameter;
-WebGLRenderingContext.prototype.getParameter = function(p) {{
-    if (p === 37445) return '{fingerprint["webgl_vendor"]}';
-    if (p === 37446) return '{fingerprint["webgl_renderer"]}';
-    return getParam.call(this, p);
-}};
-const toDataURL = HTMLCanvasElement.prototype.toDataURL;
-HTMLCanvasElement.prototype.toDataURL = function(type) {{
-    const ctx = this.getContext('2d');
-    if (ctx) {{ ctx.fillStyle = 'rgba({random.randint(0,5)},{random.randint(0,5)},{random.randint(0,5)},0.01)'; ctx.fillRect(0,0,1,1); }}
-    return toDataURL.call(this, type);
-}};
 """
-        driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {'source': spoof_script})
-        self.update_status(f"[Page {page_number}] Fingerprint: {fingerprint['user_agent'][-30:]}")
+        try:
+            driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {'source': spoof_script})
+        except Exception:
+            pass
 
-        # Split Screen - All browsers on RIGHT HALF of screen, stacked
+        # Position on right half of screen
         try:
             screen_width = driver.execute_script("return window.screen.availWidth")
             screen_height = driver.execute_script("return window.screen.availHeight")
-
-            # Right half of screen
             half_width = screen_width // 2
-
-            # All browsers: right half position, full height
             driver.set_window_size(half_width, screen_height)
             driver.set_window_position(half_width, 0)
         except Exception:
-            pass  # If positioning fails, just continue
+            pass
 
-        # Zoom out the page to 80% for better visibility
+        # Zoom out
         driver.execute_script("document.body.style.zoom='80%'")
 
-        if self._is_stopped():
-            return
+        # First tab is already open with URL, do automation on it
+        self.update_status(f"[Tab 1/{num_pages}] Running automation...")
+        self.perform_automation(driver, 1)
 
-        success = self.perform_automation(driver, page_number)
-        if success:
-            self.update_status(f"[Page {page_number}] Done!")
-        else:
-            self.update_status(f"[Page {page_number}] Completed with issues.")
+        # Open remaining pages as NEW TABS
+        for i in range(2, num_pages + 1):
+            if self._is_stopped():
+                self.update_status("\nAutomation stopped by user.")
+                break
+
+            self.update_status(f"[Tab {i}/{num_pages}] Opening new tab...")
+
+            # Open new tab with URL
+            driver.execute_script(f"window.open('{target_url}', '_blank')")
+            time.sleep(1)
+
+            # Switch to the new tab
+            driver.switch_to.window(driver.window_handles[-1])
+
+            # Zoom out this tab too
+            time.sleep(1)
+            driver.execute_script("document.body.style.zoom='80%'")
+
+            # Do automation on this tab
+            self.update_status(f"[Tab {i}/{num_pages}] Running automation...")
+            self.perform_automation(driver, i)
+
+        if not self._is_stopped():
+            self.update_status(f"\nAll {num_pages} tab(s) processed! Browser will remain open.")
 
     def close_all(self):
         """Close all open browser instances and Chrome processes."""
@@ -1062,7 +1049,7 @@ class TeraBoxGUI:
         Run the automation in a background thread.
 
         Args:
-            num_pages: Number of pages to process
+            num_pages: Number of tabs to process
             custom_proxies: Optional list of user-provided proxies
             url: Optional URL to navigate to
         """
@@ -1071,7 +1058,6 @@ class TeraBoxGUI:
         except Exception as e:
             self._update_status(f"Error: {str(e)}")
         finally:
-            # Re-enable start button on completion
             self.root.after(0, self._on_automation_complete)
 
     def _on_automation_complete(self):
@@ -1128,7 +1114,7 @@ class TeraBoxGUI:
         self._update_status(f"(Maximum {MAX_PAGES} pages allowed)")
         self._update_status("")
         self._update_status(
-            "Method: subprocess Chrome launch + Selenium connect"
+            "Method: One Chrome window with multiple tabs"
         )
         self.root.mainloop()
 
