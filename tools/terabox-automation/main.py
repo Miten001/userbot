@@ -163,7 +163,8 @@ class TeraBoxAutomation:
             f"--remote-debugging-port={debug_port}",
             f"--user-data-dir={user_data_dir}",
             "--disable-dev-shm-usage",
-            "--start-maximized",
+            "--window-position=960,0",
+            "--window-size=960,1080",
             "--no-first-run",
             "--no-default-browser-check",
             url,
@@ -489,6 +490,9 @@ class TeraBoxAutomation:
             return
 
         self.drivers.append(driver)
+
+        # Zoom out the page to 80% for better visibility
+        driver.execute_script("document.body.style.zoom='80%'")
 
         if self._is_stopped():
             return
