@@ -1,25 +1,27 @@
-# TeraBox Automation Tool - Installation Guide
+# TeraBox Automation Tool
 
-**@codex_here**
+## Complete Installation & Usage Guide
+
+**Author: @codex_here**
 
 ---
 
 ## REQUIREMENTS
 
 - Windows 10/11
-- Python 3.7 or higher
-- Google Chrome browser (latest version)
+- Python 3.7+
+- Google Chrome browser (latest)
 - Internet connection
 
 ---
 
-## STEP 1 - PYTHON INSTALL
+## STEP 1 - INSTALL PYTHON
 
-1. Download Python from [python.org/downloads](https://python.org/downloads)
+1. Download from: https://python.org/downloads
 
-2. **IMPORTANT:** Check "Add Python to PATH" during installation
+2. **IMPORTANT:** Tick "Add Python to PATH" during installation
 
-3. Verify installation - Open CMD and type:
+3. Verify - Open CMD and type:
    ```
    python --version
    ```
@@ -28,17 +30,29 @@
 
 ## STEP 2 - DOWNLOAD TOOL
 
-Clone the repository using git:
+### Method 1 (with Git):
 ```
 git clone https://github.com/Miten001/userbot.git
 ```
 
-OR download ZIP from GitHub.
+### Method 2 (without Git):
+Open CMD and run:
+```
+curl -L -o userbot.zip https://github.com/Miten001/userbot/archive/refs/heads/uncheck.zip
+```
 
-Navigate to the tool folder:
+Extract:
 ```
-userbot/tools/terabox-automation/
+tar -xf userbot.zip
 ```
+
+Go to folder:
+```
+cd userbot-uncheck\tools\terabox-automation
+```
+
+### Method 3 (Manual):
+Download ZIP from https://github.com/Miten001/userbot browser me open karke
 
 ---
 
@@ -49,32 +63,48 @@ Open CMD in the terabox-automation folder and run:
 pip install selenium pyautogui
 ```
 
-If pip is not found, use:
+If pip not found:
 ```
 python -m pip install selenium pyautogui
 ```
 
 ---
 
-## STEP 4 - RUN THE TOOL
+## STEP 4 - RUN
 
 Open CMD in the terabox-automation folder and run:
 ```
 python main.py
 ```
 
-The GUI will open with a dark theme.
+GUI will open with dark theme.
 
 ---
 
-## HOW TO USE
+## HOW TO USE - GUI OPTIONS
 
-1. Enter number of pages (1-50)
-2. Click "Start Automation"
-3. All pages will open simultaneously in Chrome incognito
-4. Tool will automatically: Login -> Sign up -> Click Email icon
-5. Use "Stop" to cancel anytime
-6. Use "Close Browsers" to close all Chrome windows
+| Option | Description |
+|--------|-------------|
+| Link (URL) | Paste any URL you want to open (default: TeraBox link) |
+| Pages (1-1000) | How many browser windows to open simultaneously |
+| Use Proxy / IP Rotation | Check to enable proxy (OFF by default) |
+| Proxies box | Paste custom proxies (IP:PORT format, one per line) |
+| Start Automation | Opens all browsers and does Login > Sign up > Email click |
+| Stop | Cancel anytime |
+| Close Browsers | Close all Chrome windows |
+| Close All Tabs | Kill all Chrome processes |
+
+---
+
+## FEATURES
+
+- Dark hacker theme GUI with @codex_here branding
+- Up to 1000 pages simultaneously
+- Each browser has unique fingerprint (User-Agent, GPU, Screen, Canvas, etc.)
+- IP rotation support (Saudi Arabia, UAE, US, South Korea, Japan, Mexico, Qatar)
+- Grid layout - all browsers arranged neatly on screen
+- Zoom out 80% for better visibility
+- Real-time status/terminal output
 
 ---
 
@@ -82,11 +112,27 @@ The GUI will open with a dark theme.
 
 | Problem | Solution |
 |---------|----------|
-| "Chrome not found" | Install Google Chrome or check installation path |
-| "pip not found" | Use `python -m pip install ...` |
-| "tkinter not found" | Reinstall Python with tkinter option checked |
-| "Browser opens but nothing happens" | Make sure Chrome is updated to latest version |
-| Pages not opening | Check internet connection |
+| "Chrome not found" | Install Google Chrome |
+| "pip not found" | python -m pip install selenium pyautogui |
+| "tkinter not found" | Reinstall Python with tkinter checked |
+| "This page isn't working" | Uncheck proxy checkbox, use direct connection |
+| "Browser not opening" | Make sure Chrome is updated |
+| "Selenium connection failed" | Close all Chrome windows and try again |
+| Pages overlapping | Tool auto-arranges in grid, close extra windows |
+
+---
+
+## ONE-LINER INSTALL (copy paste in CMD)
+
+**With Git:**
+```
+git clone https://github.com/Miten001/userbot.git && cd userbot\tools\terabox-automation && pip install selenium pyautogui && python main.py
+```
+
+**Without Git:**
+```
+curl -L -o userbot.zip https://github.com/Miten001/userbot/archive/refs/heads/uncheck.zip && tar -xf userbot.zip && cd userbot-uncheck\tools\terabox-automation && pip install selenium pyautogui && python main.py
+```
 
 ---
 
