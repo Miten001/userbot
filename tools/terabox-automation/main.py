@@ -370,6 +370,18 @@ class TeraBoxAutomation:
             if self._is_stopped():
                 return False
 
+            # Check for connection errors (proxy issues) - auto close tab
+            try:
+                page_source = driver.page_source
+                if "ERR_" in page_source or "This site can" in page_source or "took too long" in page_source or "connection was reset" in page_source:
+                    self.update_status(f"[Tab {page_number}] Connection error detected - auto closing tab...")
+                    driver.close()
+                    if driver.window_handles:
+                        driver.switch_to.window(driver.window_handles[-1])
+                    return False
+            except Exception:
+                pass
+
             # Step 1: Click "Log In" button
             self.update_status(
                 f"[Page {page_number}] Looking for Log In button..."
@@ -605,13 +617,9 @@ Object.defineProperty(screen, 'height', {{get: () => {fingerprint["screen"][1]}}
         except Exception:
             pass
 
-        # Position on right half of screen
+        # Full screen maximize
         try:
-            screen_width = driver.execute_script("return window.screen.availWidth")
-            screen_height = driver.execute_script("return window.screen.availHeight")
-            half_width = screen_width // 2
-            driver.set_window_size(half_width, screen_height)
-            driver.set_window_position(half_width, 0)
+            driver.maximize_window()
         except Exception:
             pass
 
@@ -622,26 +630,49 @@ Object.defineProperty(screen, 'height', {{get: () => {fingerprint["screen"][1]}}
         self.update_status(f"[Tab 1/{num_pages}] Running automation...")
         self.perform_automation(driver, 1)
 
-        # Open remaining pages as NEW TABS
+        # For remaining tabs - wait for user to close current tab before opening next
         for i in range(2, num_pages + 1):
             if self._is_stopped():
                 self.update_status("\nAutomation stopped by user.")
                 break
 
-            self.update_status(f"[Tab {i}/{num_pages}] Opening new tab...")
+            self.update_status(f"[Tab {i}/{num_pages}] Waiting for you to close current tab...")
+
+            # Wait until current tab is closed by user
+            current_tabs = len(driver.window_handles)
+            while not self._is_stopped():
+                try:
+                    new_tabs = len(driver.window_handles)
+                    if new_tabs < current_tabs:
+                        # Tab was closed, open next one
+                        break
+                except Exception:
+                    break
+                time.sleep(0.5)
+
+            if self._is_stopped():
+                break
+
+            # Switch to remaining window (if any)
+            try:
+                if driver.window_handles:
+                    driver.switch_to.window(driver.window_handles[-1])
+            except Exception:
+                pass
 
             # Open new tab with URL
+            self.update_status(f"[Tab {i}/{num_pages}] Opening new tab...")
             driver.execute_script(f"window.open('{target_url}', '_blank')")
             time.sleep(1)
 
-            # Switch to the new tab
+            # Switch to new tab
             driver.switch_to.window(driver.window_handles[-1])
 
-            # Zoom out this tab too
+            # Zoom out
             time.sleep(1)
             driver.execute_script("document.body.style.zoom='80%'")
 
-            # Do automation on this tab
+            # Do automation
             self.update_status(f"[Tab {i}/{num_pages}] Running automation...")
             self.perform_automation(driver, i)
 
