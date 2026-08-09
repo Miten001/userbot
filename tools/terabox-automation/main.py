@@ -623,61 +623,56 @@ Object.defineProperty(screen, 'height', {{get: () => {fingerprint["screen"][1]}}
         except Exception:
             pass
 
-        # Zoom out
-        driver.execute_script("document.body.style.zoom='80%'")
+        # First tab already has URL loaded
+        self.update_status(f"[Tab 1/{num_pages}] Opened")
 
-        # First tab is already open with URL, do automation on it
-        self.update_status(f"[Tab 1/{num_pages}] Running automation...")
-        self.perform_automation(driver, 1)
-
-        # For remaining tabs - wait for user to close current tab before opening next
+        # Open ALL remaining tabs at once
         for i in range(2, num_pages + 1):
             if self._is_stopped():
-                self.update_status("\nAutomation stopped by user.")
                 break
+            driver.execute_script(f"window.open('{target_url}', '_blank')")
+            time.sleep(0.3)  # small delay between tab opens
+            self.update_status(f"[Tab {i}/{num_pages}] Opened")
 
-            self.update_status(f"[Tab {i}/{num_pages}] Waiting for you to close current tab...")
+        self.update_status(f"\nAll {num_pages} tabs opened! Running automation on each...")
 
-            # Wait until current tab is closed by user
-            current_tabs = len(driver.window_handles)
-            while not self._is_stopped():
-                try:
-                    new_tabs = len(driver.window_handles)
-                    if new_tabs < current_tabs:
-                        # Tab was closed, open next one
-                        break
-                except Exception:
-                    break
-                time.sleep(0.5)
-
+        # Now do automation on each tab one by one
+        for i, handle in enumerate(driver.window_handles, 1):
             if self._is_stopped():
                 break
-
-            # Switch to remaining window (if any)
             try:
-                if driver.window_handles:
-                    driver.switch_to.window(driver.window_handles[-1])
-            except Exception:
-                pass
+                driver.switch_to.window(handle)
+                time.sleep(1)
 
-            # Open new tab with URL
-            self.update_status(f"[Tab {i}/{num_pages}] Opening new tab...")
-            driver.execute_script(f"window.open('{target_url}', '_blank')")
-            time.sleep(1)
+                # Check for error pages - auto close
+                try:
+                    page_source = driver.page_source
+                    if "ERR_" in page_source or "This site can" in page_source or "took too long" in page_source or "connection was reset" in page_source or "DNS" in page_source:
+                        self.update_status(f"[Tab {i}] Error detected - closing tab...")
+                        driver.close()
+                        continue
+                except Exception:
+                    pass
 
-            # Switch to new tab
-            driver.switch_to.window(driver.window_handles[-1])
+                # Zoom out
+                driver.execute_script("document.body.style.zoom='80%'")
 
-            # Zoom out
-            time.sleep(1)
-            driver.execute_script("document.body.style.zoom='80%'")
+                # Run automation
+                self.update_status(f"[Tab {i}/{num_pages}] Running automation...")
+                self.perform_automation(driver, i)
+            except Exception as e:
+                self.update_status(f"[Tab {i}] Error: {str(e)}")
+                continue
 
-            # Do automation
-            self.update_status(f"[Tab {i}/{num_pages}] Running automation...")
-            self.perform_automation(driver, i)
+        # Switch to first remaining tab
+        try:
+            if driver.window_handles:
+                driver.switch_to.window(driver.window_handles[0])
+        except Exception:
+            pass
 
         if not self._is_stopped():
-            self.update_status(f"\nAll {num_pages} tab(s) processed! Browser will remain open.")
+            self.update_status(f"\nDone! {len(driver.window_handles)} tabs remaining.")
 
     def close_all(self):
         """Close all open browser instances and Chrome processes."""
