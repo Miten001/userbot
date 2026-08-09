@@ -546,16 +546,20 @@ class TeraBoxAutomation:
         target_url = url or TERABOX_URL
         self.update_status(f"Starting automation for {num_pages} page(s) simultaneously...")
 
-        if custom_proxies:
+        if custom_proxies == "auto":
+            # Fetch from API
+            self.update_status("Fetching proxies from: SA, AE, US, KR, JP, MX, QA...")
+            self.proxies = self._fetch_proxies()
+            if self.proxies:
+                self.update_status(f"Found {len(self.proxies)} proxies!")
+            else:
+                self.update_status("No proxies found - using direct connection")
+        elif custom_proxies and isinstance(custom_proxies, list):
             self.proxies = custom_proxies
             self.update_status(f"Using {len(self.proxies)} custom proxies")
         else:
-            self.update_status("Fetching proxy list for IP rotation...")
-            self.proxies = self._fetch_proxies()
-            if self.proxies:
-                self.update_status(f"Found {len(self.proxies)} proxies for IP rotation!")
-            else:
-                self.update_status("No proxies found - using direct connection (same IP)")
+            self.proxies = []
+            self.update_status("Proxy disabled - using direct connection")
 
         threads = []
         for i in range(1, num_pages + 1):
@@ -587,6 +591,8 @@ class TeraBoxAutomation:
         if self.proxies:
             proxy = self.proxies[(page_number - 1) % len(self.proxies)]
             self.update_status(f"[Page {page_number}] Using proxy: {proxy}")
+        else:
+            self.update_status(f"[Page {page_number}] Direct connection (no proxy)")
 
         process = self.launch_chrome_subprocess(target_url, port, fingerprint['user_agent'], fingerprint['language'], proxy)
         if process is None:
@@ -793,6 +799,20 @@ class TeraBoxGUI:
         self.pages_entry.pack(anchor=tk.W, pady=5)
         self.pages_entry.insert(0, "1")
 
+        # Proxy checkbox
+        self.use_proxy_var = tk.BooleanVar(value=False)
+        self.proxy_checkbox = tk.Checkbutton(
+            input_frame,
+            text="Use Proxy / IP Rotation",
+            variable=self.use_proxy_var,
+            font=("Consolas", 10),
+            bg=bg_frame,
+            fg=fg_text,
+            selectcolor="#000000",
+            activebackground=bg_frame,
+        )
+        self.proxy_checkbox.pack(anchor=tk.W, pady=(10, 0))
+
         # Proxy input
         proxy_label = tk.Label(
             input_frame,
@@ -965,12 +985,16 @@ class TeraBoxGUI:
             )
             return
 
-        # Read user-provided proxies
-        user_proxies = self.proxy_text.get("1.0", tk.END).strip()
-        if user_proxies:
-            custom_proxies = [p.strip() for p in user_proxies.split('\n') if p.strip()]
+        # Read user-provided proxies (only if checkbox is enabled)
+        use_proxy = self.use_proxy_var.get()
+        if use_proxy:
+            user_proxies = self.proxy_text.get("1.0", tk.END).strip()
+            if user_proxies:
+                custom_proxies = [p.strip() for p in user_proxies.split('\n') if p.strip()]
+            else:
+                custom_proxies = "auto"  # signal to fetch from API
         else:
-            custom_proxies = None
+            custom_proxies = None  # no proxy at all
 
         # Disable start button, enable stop button
         self.start_btn.config(state=tk.DISABLED)
