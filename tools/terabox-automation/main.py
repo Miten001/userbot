@@ -148,7 +148,6 @@ class TeraBoxAutomation:
         self.drivers = []
         self.proxies = []
         self.proxy_index = 0
-        self.screen_width, self.screen_height = 1920, 1080
 
     def _is_stopped(self):
         """Check if the stop event has been set."""
@@ -157,19 +156,6 @@ class TeraBoxAutomation:
     def update_status(self, message):
         """Send status update to callback."""
         self.status_callback(message)
-
-    def _get_screen_size(self):
-        """Get screen size using tkinter."""
-        try:
-            import tkinter as tk
-            temp = tk.Tk()
-            temp.withdraw()
-            width = temp.winfo_screenwidth()
-            height = temp.winfo_screenheight()
-            temp.destroy()
-            return width, height
-        except Exception:
-            return 1920, 1080  # default fallback
 
     def _fetch_proxies(self):
         """Fetch free HTTP proxy list from public APIs filtered by country."""
@@ -259,11 +245,12 @@ class TeraBoxAutomation:
             "device_memory": random.choice([2, 4, 8, 16, 32]),
         }
 
-    def launch_chrome_subprocess(self, url, debug_port, user_agent=None, language=None, proxy=None, screen_width=1920, screen_height=1080):
+    def launch_chrome_subprocess(self, url, debug_port, user_agent=None, language=None, proxy=None):
         """
         Launch Chrome via subprocess with remote debugging enabled.
         This is the PRIMARY method - most reliable on Windows.
         Uses UUID-based user-data-dir so each Chrome is truly independent.
+        Window positioning is handled externally via Win+Right hotkey.
         """
         chrome_path = find_chrome_path()
         self.update_status(f"Chrome path: {chrome_path}")
@@ -280,9 +267,6 @@ class TeraBoxAutomation:
                 pass
         os.makedirs(user_data_dir, exist_ok=True)
 
-        # Calculate right half positioning
-        half_width = screen_width // 2
-
         args = [
             chrome_path,
             f"--user-data-dir={user_data_dir}",
@@ -296,8 +280,6 @@ class TeraBoxAutomation:
             "--disable-features=ChromeWhatsNewUI",
             "--no-service-autorun",
             "--password-store=basic",
-            f"--window-position={half_width},0",
-            f"--window-size={half_width},{screen_height}",
         ]
 
         if user_agent:
@@ -597,98 +579,14 @@ class TeraBoxAutomation:
             self.update_status(f"[Page {page_number}] Error: {str(e)}")
             return False
 
-    def _run_single_page(self, page_number, total_pages, target_url):
-        """Run automation for a single page in its own Chrome window."""
-        # Generate unique fingerprint for this window
-        fingerprint = self._get_random_fingerprint()
-
-        # Pick proxy
-        proxy = None
-        if self.proxies:
-            proxy = self.proxies[(page_number - 1) % len(self.proxies)]
-            self.update_status(f"[Window {page_number}] Proxy: {proxy}")
-
-        # Launch Chrome with unique port
-        port = DEBUG_PORT + (page_number - 1)
-        self.update_status(f"[Window {page_number}/{total_pages}] Launching...")
-
-        process = self.launch_chrome_subprocess(target_url, port, fingerprint['user_agent'], fingerprint['language'], proxy, self.screen_width, self.screen_height)
-        if process is None:
-            self.update_status(f"[Window {page_number}] Failed to launch Chrome.")
-            return
-
-        time.sleep(3)
-
-        if self._is_stopped():
-            return
-
-        # Connect Selenium
-        driver = self.connect_selenium_to_chrome(port)
-        if driver is None:
-            self.update_status(f"[Window {page_number}] Selenium connection failed.")
-            return
-
-        self.drivers.append(driver)
-
-        # Inject fingerprint
-        spoof_script = f"""
-Object.defineProperty(navigator, 'platform', {{get: () => '{fingerprint["platform"]}'}});
-Object.defineProperty(navigator, 'hardwareConcurrency', {{get: () => {fingerprint["hardware_concurrency"]}}});
-Object.defineProperty(navigator, 'deviceMemory', {{get: () => {fingerprint["device_memory"]}}});
-Object.defineProperty(navigator, 'languages', {{get: () => ['{fingerprint["language"]}', 'en']}});
-"""
-        try:
-            driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {'source': spoof_script})
-        except Exception:
-            pass
-
-        # Force position on RIGHT HALF - retry multiple times to override Windows cascading
-        try:
-            half_width = self.screen_width // 2
-            # Set position multiple times to ensure it sticks
-            for _ in range(3):
-                driver.set_window_position(half_width, 0)
-                driver.set_window_size(half_width, self.screen_height)
-                time.sleep(0.2)
-        except Exception:
-            pass
-
-        # Zoom out
-        try:
-            driver.execute_script("document.body.style.zoom='80%'")
-        except Exception:
-            pass
-
-        # Check for error pages - auto close
-        time.sleep(2)
-        try:
-            page_source = driver.page_source
-            if "ERR_" in page_source or "This site can" in page_source or "took too long" in page_source or "DNS" in page_source:
-                self.update_status(f"[Window {page_number}] Connection error - closing...")
-                driver.quit()
-                return
-        except Exception:
-            pass
-
-        if self._is_stopped():
-            return
-
-        # Run automation
-        self.update_status(f"[Window {page_number}/{total_pages}] Running automation...")
-        success = self.perform_automation(driver, page_number)
-        if success:
-            self.update_status(f"[Window {page_number}] Done!")
-        else:
-            self.update_status(f"[Window {page_number}] Completed with issues.")
-
     def run(self, num_pages, custom_proxies=None, url=None):
-        """Run the automation for the specified number of pages as separate Chrome windows."""
+        """Run the automation for the specified number of pages as separate Chrome windows.
+        
+        Launches each window ONE BY ONE sequentially, using Win+Right hotkey
+        to snap each new Chrome window to the right half of the screen.
+        """
         target_url = url or TERABOX_URL
         self.update_status(f"Starting automation for {num_pages} browser(s)...")
-
-        # Detect screen size for window positioning
-        self.screen_width, self.screen_height = self._get_screen_size()
-        self.update_status(f"Screen: {self.screen_width}x{self.screen_height}")
 
         # Handle proxies
         if custom_proxies == "auto":
@@ -718,23 +616,96 @@ Object.defineProperty(navigator, 'languages', {{get: () => ['{fingerprint["langu
             self.proxies = []
             self.update_status("Proxy disabled - direct connection")
 
-        # Launch ALL Chrome windows simultaneously using threads
-        threads = []
-        for i in range(1, num_pages + 1):
+        # Launch each Chrome window ONE BY ONE sequentially
+        for page_number in range(1, num_pages + 1):
             if self._is_stopped():
                 break
-            t = threading.Thread(target=self._run_single_page, args=(i, num_pages, target_url), daemon=True)
-            threads.append(t)
 
-        # Start ALL threads with small stagger
-        # Start threads with stagger to avoid Windows cascading
-        for idx, t in enumerate(threads):
-            t.start()
-            time.sleep(1.5)  # give Chrome time to open and position
+            # Generate unique fingerprint for this window
+            fingerprint = self._get_random_fingerprint()
 
-        # Wait for all to complete
-        for t in threads:
-            t.join()
+            # Pick proxy
+            proxy = None
+            if self.proxies:
+                proxy = self.proxies[(page_number - 1) % len(self.proxies)]
+                self.update_status(f"[Window {page_number}] Proxy: {proxy}")
+
+            # Launch Chrome with unique port
+            port = DEBUG_PORT + (page_number - 1)
+            self.update_status(f"[Window {page_number}/{num_pages}] Launching...")
+
+            process = self.launch_chrome_subprocess(
+                target_url, port, fingerprint['user_agent'],
+                fingerprint['language'], proxy
+            )
+            if process is None:
+                self.update_status(f"[Window {page_number}] Failed to launch Chrome.")
+                continue
+
+            # Wait for Chrome to fully open and become the active window
+            time.sleep(2)
+
+            if self._is_stopped():
+                break
+
+            # Snap the active window to right half using Win+Right hotkey
+            if HAS_PYAUTOGUI:
+                try:
+                    pyautogui.hotkey('win', 'right')
+                    self.update_status(f"[Window {page_number}] Snapped to right half (Win+Right)")
+                    time.sleep(0.5)
+                except Exception as e:
+                    self.update_status(f"[Window {page_number}] Win+Right failed: {e}")
+            else:
+                self.update_status(f"[Window {page_number}] pyautogui not available, skipping snap")
+
+            # Connect Selenium
+            driver = self.connect_selenium_to_chrome(port)
+            if driver is None:
+                self.update_status(f"[Window {page_number}] Selenium connection failed.")
+                continue
+
+            self.drivers.append(driver)
+
+            # Inject fingerprint
+            spoof_script = f"""
+Object.defineProperty(navigator, 'platform', {{get: () => '{fingerprint["platform"]}'}});
+Object.defineProperty(navigator, 'hardwareConcurrency', {{get: () => {fingerprint["hardware_concurrency"]}}});
+Object.defineProperty(navigator, 'deviceMemory', {{get: () => {fingerprint["device_memory"]}}});
+Object.defineProperty(navigator, 'languages', {{get: () => ['{fingerprint["language"]}', 'en']}});
+"""
+            try:
+                driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {'source': spoof_script})
+            except Exception:
+                pass
+
+            # Zoom out
+            try:
+                driver.execute_script("document.body.style.zoom='80%'")
+            except Exception:
+                pass
+
+            # Check for error pages - auto close
+            time.sleep(2)
+            try:
+                page_source = driver.page_source
+                if "ERR_" in page_source or "This site can" in page_source or "took too long" in page_source or "DNS" in page_source:
+                    self.update_status(f"[Window {page_number}] Connection error - closing...")
+                    driver.quit()
+                    continue
+            except Exception:
+                pass
+
+            if self._is_stopped():
+                break
+
+            # Run automation
+            self.update_status(f"[Window {page_number}/{num_pages}] Running automation...")
+            success = self.perform_automation(driver, page_number)
+            if success:
+                self.update_status(f"[Window {page_number}] Done!")
+            else:
+                self.update_status(f"[Window {page_number}] Completed with issues.")
 
         if not self._is_stopped():
             self.update_status(f"\nAll {num_pages} browser(s) launched!")
