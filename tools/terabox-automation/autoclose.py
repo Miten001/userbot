@@ -141,9 +141,10 @@ def find_chrome_path():
 class TeraBoxAutoClose:
     """Handles browser auto-close automation for TeraBox."""
 
-    def __init__(self, status_callback=None, stop_event=None):
+    def __init__(self, status_callback=None, stop_event=None, counter_callback=None):
         self.status_callback = status_callback or print
         self.stop_event = stop_event or threading.Event()
+        self.counter_callback = counter_callback
         self.chrome_processes = []
         self.drivers = []
         self.active_windows = []
@@ -336,7 +337,7 @@ class TeraBoxAutoClose:
             self.update_status(f"ERROR launching Chrome: {str(e)}")
             return None, user_data_dir
 
-    def connect_selenium_to_chrome(self, debug_port, max_retries=3):
+    def connect_selenium_to_chrome(self, debug_port, max_retries=2):
         """Connect Selenium to running Chrome via remote debugging."""
         if not HAS_SELENIUM:
             self.update_status("Selenium not installed.")
@@ -554,7 +555,7 @@ class TeraBoxAutoClose:
 
         # Check if page loaded properly (wait max 10 seconds)
         try:
-            time.sleep(5)  # wait for page to load
+            time.sleep(2)  # wait for page to load
             current_url = driver.current_url
             page_source = driver.page_source
 
@@ -717,26 +718,7 @@ Object.defineProperty(navigator, 'connection', {{
             pass
 
         # Handle CAPTCHA/Cloudflare challenge before continuing
-        if not self._handle_captcha(driver, page_number):
-            self.fail_count += 1
-            try:
-                driver.quit()
-            except Exception:
-                pass
-            try:
-                process.terminate()
-            except Exception:
-                pass
-            return None
-
-        # Accept cookie banners
-        self._accept_cookies(driver, page_number)
-
-        # Simulate ad engagement (scroll, mouse events, visibility triggers)
-        self._simulate_ad_engagement(driver, page_number)
-
-        # Simulate human behavior before timer starts
-        self._simulate_human_behavior(driver, page_number)
+        # NOTE: Behavior simulation moved to Phase 2 for faster window opening
 
         # Check for error page immediately
         if self._check_error_page(driver):
@@ -853,11 +835,37 @@ Object.defineProperty(navigator, 'connection', {{
             window_info = self._open_single_window(target_url, processed, proxy)
             if window_info:
                 self.active_windows.append(window_info)
+                if self.counter_callback:
+                    self.counter_callback(self.success_count, len(self.active_windows), self.fail_count)
+            else:
+                if self.counter_callback:
+                    self.counter_callback(self.success_count, len(self.active_windows), self.fail_count)
             # Stagger between opening windows to avoid triggering anti-bot
             if i < min(open_at_once, total_pages) - 1 and not self._is_stopped():
-                stagger_time = random.uniform(1, 2)
-                self.update_status(f"  Waiting {stagger_time:.1f}s before next window...")
-                time.sleep(stagger_time)
+                time.sleep(0.5)
+
+        # Run behavior simulation on all opened windows after Phase 1
+        self.update_status(f"\n--- Behavior simulation on {len(self.active_windows)} windows ---")
+        for window_info in self.active_windows:
+            if self._is_stopped():
+                break
+            page_number = window_info["page_number"]
+            driver = window_info["driver"]
+            try:
+                if not self._handle_captcha(driver, page_number):
+                    self.update_status(f"[Window {page_number}] CAPTCHA failed - closing...")
+                    self.fail_count += 1
+                    self.success_count -= 1
+                    self._close_window(window_info)
+                    self.active_windows.remove(window_info)
+                    if self.counter_callback:
+                        self.counter_callback(self.success_count, len(self.active_windows), self.fail_count)
+                    continue
+                self._accept_cookies(driver, page_number)
+                self._simulate_ad_engagement(driver, page_number)
+                self._simulate_human_behavior(driver, page_number)
+            except Exception:
+                pass
 
         self.update_status(f"\n--- Phase 2: Monitor loop (closing and replacing) ---")
         self.update_status(f"Active: {len(self.active_windows)} | Success: {self.success_count} | Failed: {self.fail_count} | Total: {processed}/{total_pages}")
@@ -890,6 +898,8 @@ Object.defineProperty(navigator, 'connection', {{
                 self.update_status(f"[Window {window_info['page_number']}] Timer expired ({window_info['close_seconds']}s) - closing...")
                 self._close_window(window_info)
                 self.active_windows.remove(window_info)
+                if self.counter_callback:
+                    self.counter_callback(self.success_count, len(self.active_windows), self.fail_count)
 
                 # Open replacement if we still have pages to process
                 if processed < total_pages and not self._is_stopped():
@@ -902,9 +912,13 @@ Object.defineProperty(navigator, 'connection', {{
                     window_info = self._open_single_window(target_url, processed, proxy)
                     if window_info:
                         self.active_windows.append(window_info)
+                        if self.counter_callback:
+                            self.counter_callback(self.success_count, len(self.active_windows), self.fail_count)
                         self.update_status(f"Active: {len(self.active_windows)} | Success: {self.success_count} | Failed: {self.fail_count} | Total: {processed}/{total_pages}")
                     else:
                         self.update_status(f"[Window {processed}] Failed to open, skipping...")
+                        if self.counter_callback:
+                            self.counter_callback(self.success_count, len(self.active_windows), self.fail_count)
                         self.update_status(f"Active: {len(self.active_windows)} | Success: {self.success_count} | Failed: {self.fail_count} | Total: {processed}/{total_pages}")
                 else:
                     self.update_status(f"Active: {len(self.active_windows)} | Success: {self.success_count} | Failed: {self.fail_count} | Total: {processed}/{total_pages}")
@@ -1179,6 +1193,16 @@ class AutoCloseGUI:
         status_frame = tk.Frame(self.root, bg="#0f0f0f", pady=5, padx=20)
         status_frame.pack(fill=tk.BOTH, expand=True)
 
+        # Live counter label
+        self.counter_label = tk.Label(
+            status_frame,
+            text="Opened: 0 | Active: 0 | Failed: 0",
+            font=("Consolas", 12, "bold"),
+            fg="#00ff41",
+            bg="#0f0f0f",
+        )
+        self.counter_label.pack(anchor=tk.W, pady=(0, 5))
+
         status_label = tk.Label(
             status_frame,
             text="[ Terminal Output ]",
@@ -1218,6 +1242,14 @@ class AutoCloseGUI:
             self.status_text.insert(tk.END, message + "\n")
             self.status_text.see(tk.END)
             self.status_text.config(state=tk.DISABLED)
+        self.root.after(0, _update)
+
+    def _update_counter(self, opened, active, failed):
+        """Update the live counter label (thread-safe)."""
+        def _update():
+            self.counter_label.config(
+                text=f"Opened: {opened} | Active: {active} | Failed: {failed}"
+            )
         self.root.after(0, _update)
 
     def _start_automation(self):
@@ -1269,6 +1301,7 @@ class AutoCloseGUI:
         self.automation = TeraBoxAutoClose(
             status_callback=self._update_status,
             stop_event=self._stop_event,
+            counter_callback=self._update_counter,
         )
 
         # Parse proxy format if custom proxies provided
