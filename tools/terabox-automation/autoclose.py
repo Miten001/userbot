@@ -303,11 +303,7 @@ class TeraBoxAutoClose:
             "--disable-automation",
             "--disable-extensions",
             "--disable-features=IsolateOrigins,site-per-process",
-            "--disable-web-security",
-            "--allow-running-insecure-content",
-            "--disable-site-isolation-trials",
-            "--ignore-certificate-errors",
-            "--ignore-ssl-errors",
+            "--disable-ipc-flooding-protection",
         ]
 
         if user_agent:
