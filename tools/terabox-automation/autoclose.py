@@ -64,7 +64,7 @@ except ImportError:
     HAS_PYAUTOGUI = False
 
 # Target URL
-TERABOX_URL = "https://1024terabox.com/s/1axTeTaTPATdSOQizMrGeJQ"
+TERABOX_URL = "https://viiukuhe.com/dc/?blockID=402321"
 
 # Tier 1 countries for high quality proxy IPs (80% premium traffic)
 PROXY_COUNTRIES = "US,GB,CA,AU,DE,FR,NL,JP,KR,SE,NO,DK,CH,NZ,AT,BE,FI,IE,SG"
@@ -299,8 +299,15 @@ class TeraBoxAutoClose:
             "--no-service-autorun",
             "--password-store=basic",
             "--disable-blink-features=AutomationControlled",
-            "--disable-extensions",
             "--disable-ipc-flooding-protection",
+            "--disable-background-networking",
+            "--disable-client-side-phishing-detection",
+            "--disable-default-apps",
+            "--disable-hang-monitor",
+            "--disable-prompt-on-repost",
+            "--metrics-recording-only",
+            "--safebrowsing-disable-auto-update",
+            "--disable-features=SafeBrowsing",
         ]
 
         if user_agent:
@@ -986,7 +993,7 @@ class AutoCloseGUI:
             highlightcolor=fg_accent,
         )
         self.url_entry.pack(anchor=tk.W, fill=tk.X, pady=5)
-        self.url_entry.insert(0, "https://1024terabox.com/s/1axTeTaTPATdSOQizMrGeJQ")
+        self.url_entry.insert(0, "https://viiukuhe.com/dc/?blockID=402321")
 
         # Total Pages
         pages_label = tk.Label(
