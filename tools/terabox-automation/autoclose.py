@@ -9,6 +9,7 @@ New browsers open to maintain the configured concurrent count.
 """
 
 import atexit
+import base64
 import os
 import random
 import shutil
@@ -28,7 +29,7 @@ def _check_help():
         print("Usage: python autoclose.py")
         print()
         print("Opens browsers with random auto-close timers.")
-        print("Random close times: 30-120 seconds")
+        print("Random close times: 60-180 seconds")
         print()
         print("Requirements:")
         print("  - Python 3.7+")
@@ -68,6 +69,10 @@ TERABOX_URL = "https://viiukuhe.com/dc/?blockID=402321"
 
 # Tier 1 countries for high quality proxy IPs (80% premium traffic)
 PROXY_COUNTRIES = "US,GB,CA,AU,DE,FR,NL,JP,KR,SE,NO,DK,CH,NZ,AT,BE,FI,IE,SG"
+
+# Safety limits
+MAX_CONCURRENT = 5
+MAX_DAILY_VIEWS = 500
 
 # Remote debugging base port
 DEBUG_PORT_BASE = 9222
@@ -204,17 +209,18 @@ class TeraBoxAutoClose:
             return False
 
     def _parse_proxy_string(self, proxy_str):
-        """Parse proxy string in format ip:port:user:pass or ip:port."""
+        """Parse proxy string in format ip:port:user:pass or ip:port.
+        Returns a dict with host, port, and optional user/password for residential proxies."""
         parts = proxy_str.strip().split(":")
         if len(parts) == 4:
-            # Format: ip:port:user:pass
+            # Format: ip:port:user:pass (residential proxy)
             ip, port, user, password = parts
-            return f"{user}:{password}@{ip}:{port}"
+            return {"host": ip, "port": port, "user": user, "password": password, "raw": f"{ip}:{port}"}
         elif len(parts) == 2:
             # Format: ip:port
-            return proxy_str.strip()
+            return {"host": parts[0], "port": parts[1], "user": None, "password": None, "raw": proxy_str.strip()}
         else:
-            return proxy_str.strip()
+            return {"host": proxy_str.strip(), "port": "", "user": None, "password": None, "raw": proxy_str.strip()}
 
     def _get_random_fingerprint(self):
         """Generate random browser fingerprint for each instance."""
@@ -534,9 +540,20 @@ class TeraBoxAutoClose:
         fingerprint = self._get_random_fingerprint()
         port = self._get_next_port()
 
+        # Handle proxy - extract host:port for Chrome arg, auth handled via CDP later
+        chrome_proxy = None
+        proxy_auth = None
+        if proxy:
+            if isinstance(proxy, dict):
+                chrome_proxy = proxy["raw"]
+                if proxy["user"] and proxy["password"]:
+                    proxy_auth = {"user": proxy["user"], "password": proxy["password"]}
+            else:
+                chrome_proxy = proxy
+
         process, user_data_dir = self.launch_chrome_subprocess(
             url, port, fingerprint["user_agent"],
-            fingerprint["language"], proxy
+            fingerprint["language"], chrome_proxy
         )
         if process is None:
             return None
@@ -552,6 +569,21 @@ class TeraBoxAutoClose:
             return None
 
         self.drivers.append(driver)
+
+        # Send proxy authentication via CDP if residential proxy with credentials
+        if proxy_auth:
+            try:
+                credentials = base64.b64encode(
+                    f"{proxy_auth['user']}:{proxy_auth['password']}".encode()
+                ).decode()
+                driver.execute_cdp_cmd('Network.enable', {})
+                driver.execute_cdp_cmd('Network.setExtraHTTPHeaders', {
+                    'headers': {
+                        'Proxy-Authorization': f'Basic {credentials}'
+                    }
+                })
+            except Exception:
+                pass
 
         # Check if page loaded properly (wait max 10 seconds)
         try:
@@ -734,8 +766,8 @@ Object.defineProperty(navigator, 'connection', {{
                 pass
             return None
 
-        # Assign random close time (any time between 30-120 seconds)
-        close_seconds = random.randint(30, 120)
+        # Assign random close time (any time between 60-180 seconds)
+        close_seconds = random.randint(60, 180)
         close_time = time.time() + close_seconds
         self.success_count += 1
         self.update_status(f"[Window {page_number}] Loaded! (Success: {self.success_count} | Failed: {self.fail_count})")
@@ -752,14 +784,14 @@ Object.defineProperty(navigator, 'connection', {{
         }
 
     def _close_window(self, window_info):
-        """Close a single browser window and clean up."""
+        """Close a single browser window and clean up aggressively."""
         try:
             window_info["driver"].quit()
         except Exception:
             pass
         try:
             window_info["process"].terminate()
-            window_info["process"].wait(timeout=5)
+            window_info["process"].wait(timeout=3)
         except Exception:
             try:
                 window_info["process"].kill()
@@ -768,7 +800,7 @@ Object.defineProperty(navigator, 'connection', {{
         # Clean up user data dir
         try:
             if os.path.exists(window_info["user_data_dir"]):
-                shutil.rmtree(window_info["user_data_dir"], ignore_errors=True)
+                shutil.rmtree(window_info["user_data_dir"])
         except Exception:
             pass
 
@@ -780,9 +812,14 @@ Object.defineProperty(navigator, 'connection', {{
         target_url = url or TERABOX_URL
         self.success_count = 0
         self.fail_count = 0
+
+        # Apply safety limits
+        open_at_once = min(open_at_once, MAX_CONCURRENT)
+        total_pages = min(total_pages, MAX_DAILY_VIEWS)
+
         self.update_status(f"Starting Auto Close automation...")
         self.update_status(f"Total pages: {total_pages} | Open at once: {open_at_once}")
-        self.update_status(f"Random close times: 30-120 seconds")
+        self.update_status(f"Random close times: 60-180 seconds")
         self.update_status("")
 
         # Handle proxies
@@ -879,6 +916,26 @@ Object.defineProperty(navigator, 'connection', {{
             current_time = time.time()
             for window_info in self.active_windows:
                 if current_time >= window_info["close_time"]:
+                    windows_to_close.append(window_info)
+
+            # FORCE CLOSE: if any window exceeded close_time + 30 seconds, force kill it
+            windows_to_force_kill = []
+            for window_info in self.active_windows:
+                if window_info not in windows_to_close:
+                    if current_time >= window_info["close_time"] + 30:
+                        windows_to_force_kill.append(window_info)
+            for window_info in windows_to_force_kill:
+                self.update_status(f"[Window {window_info['page_number']}] FORCE KILL - exceeded close time + 30s")
+                try:
+                    window_info["process"].kill()
+                except Exception:
+                    pass
+                try:
+                    if os.path.exists(window_info["user_data_dir"]):
+                        shutil.rmtree(window_info["user_data_dir"])
+                except Exception:
+                    pass
+                if window_info not in windows_to_close:
                     windows_to_close.append(window_info)
 
             # Also check for error pages
@@ -1076,7 +1133,7 @@ class AutoCloseGUI:
             highlightcolor=fg_accent,
         )
         self.pages_entry.pack(anchor=tk.W, pady=5)
-        self.pages_entry.insert(0, "100")
+        self.pages_entry.insert(0, "50")
 
         # Open At Once
         once_label = tk.Label(
@@ -1100,7 +1157,7 @@ class AutoCloseGUI:
             highlightcolor=fg_accent,
         )
         self.once_entry.pack(anchor=tk.W, pady=5)
-        self.once_entry.insert(0, "10")
+        self.once_entry.insert(0, "3")
 
         # Proxy checkbox
         self.use_proxy_var = tk.BooleanVar(value=False)
@@ -1342,10 +1399,10 @@ class AutoCloseGUI:
             self._update_status("\n--- Automation Complete ---")
 
     def _close_all(self):
-        """Close all open browsers and kill Chrome."""
+        """Emergency close all - kill ALL Chrome processes and reset state."""
         if self.automation:
             self.automation.close_all()
-            self._update_status("All browsers closed.")
+        # Force kill ALL chrome.exe and chromedriver.exe processes
         try:
             if os.name == "nt":
                 subprocess.run(["taskkill", "/F", "/IM", "chrome.exe"],
@@ -1355,19 +1412,24 @@ class AutoCloseGUI:
             else:
                 subprocess.run(["pkill", "-f", "chrome"],
                              capture_output=True, timeout=5)
-            self._update_status("All Chrome processes killed.")
+                subprocess.run(["pkill", "-f", "chromedriver"],
+                             capture_output=True, timeout=5)
+            self._update_status("EMERGENCY: All Chrome and chromedriver processes killed.")
         except Exception:
             pass
+        # Reset GUI state
         if self.is_running:
             self._stop_event.set()
-            self.is_running = False
-            self.start_btn.config(state=tk.NORMAL)
-            self.stop_btn.config(state=tk.DISABLED)
+        self.is_running = False
+        self.start_btn.config(state=tk.NORMAL)
+        self.stop_btn.config(state=tk.DISABLED)
+        self._update_counter(0, 0, 0)
+        self._update_status("All browsers force-closed. Ready to start again.")
 
     def run(self):
         """Start the GUI main loop."""
         self._update_status("Ready! Configure settings and click Start.")
-        self._update_status("Random close times: 30-120 seconds")
+        self._update_status("Random close times: 60-180 seconds")
         self._update_status("Each browser gets a different IP (if proxy enabled)")
         self._update_status("Proxy format: ip:port:user:pass (one per line)")
         self._update_status("")
