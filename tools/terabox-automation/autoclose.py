@@ -74,8 +74,8 @@ except ImportError:
 # Target URL
 TERABOX_URL = "https://1024terabox.com/s/1axTeTaTPATdSOQizMrGeJQ"
 
-# Supported countries for IP rotation
-PROXY_COUNTRIES = "SA,AE,US,KR,JP,MX,QA"
+# Tier 1 countries for high quality proxy IPs (80% premium traffic)
+PROXY_COUNTRIES = "US,GB,CA,AU,DE,FR,NL,JP,KR,SE,NO,DK,CH,NZ,AT,BE,FI,IE,SG"
 
 # Remote debugging base port
 DEBUG_PORT_BASE = 9222
@@ -144,7 +144,7 @@ class TeraBoxAutoClose:
 
     def _fetch_proxies(self):
         """Fetch free HTTP proxy list."""
-        self.update_status("Fetching proxies from: SA, AE, US, KR, JP, MX, QA...")
+        self.update_status("Fetching Tier 1 country proxies (US,GB,CA,AU,DE,FR,NL,JP,KR...)...")
         proxies = []
         try:
             import urllib.request
