@@ -34,7 +34,6 @@ def _check_help():
         print("  - Python 3.7+")
         print("  - Google Chrome browser installed")
         print("  - selenium (pip install selenium)")
-        print("  - pyautogui (pip install pyautogui)")
         print("  - tkinter (usually included with Python)")
         sys.exit(0)
 
@@ -52,24 +51,10 @@ try:
     from selenium import webdriver
     from selenium.webdriver.chrome.options import Options
     from selenium.webdriver.chrome.service import Service
-    from selenium.webdriver.common.by import By
-    from selenium.webdriver.support.ui import WebDriverWait
-    from selenium.webdriver.support import expected_conditions as EC
-    from selenium.common.exceptions import (
-        TimeoutException,
-        NoSuchElementException,
-        WebDriverException,
-    )
+    from selenium.common.exceptions import WebDriverException
     HAS_SELENIUM = True
 except ImportError:
     HAS_SELENIUM = False
-
-try:
-    import pyautogui
-    HAS_PYAUTOGUI = True
-except ImportError:
-    HAS_PYAUTOGUI = False
-
 
 # Target URL
 TERABOX_URL = "https://1024terabox.com/s/1axTeTaTPATdSOQizMrGeJQ"
@@ -81,9 +66,7 @@ PROXY_COUNTRIES = "US,GB,CA,AU,DE,FR,NL,JP,KR,SE,NO,DK,CH,NZ,AT,BE,FI,IE,SG"
 DEBUG_PORT_BASE = 9222
 
 # Timeouts
-SELECTOR_TIMEOUT = 3
 PAGE_LOAD_TIMEOUT = 30
-ACTION_DELAY = 0.5
 
 # Random close times in seconds
 RANDOM_CLOSE_TIMES = [10, 15, 25, 30, 60]
@@ -342,186 +325,6 @@ class TeraBoxAutoClose:
             return True
         return False
 
-    def _find_element(self, driver, selectors, step_name, page_number):
-        """Try each selector with a short timeout to find a clickable element."""
-        for by, selector in selectors:
-            if self._is_stopped():
-                return None
-            try:
-                element = WebDriverWait(driver, SELECTOR_TIMEOUT).until(
-                    EC.element_to_be_clickable((by, selector))
-                )
-                if element:
-                    return element
-            except (TimeoutException, NoSuchElementException):
-                continue
-        return None
-
-    def perform_automation(self, driver, page_number):
-        """
-        Perform the automation flow: Click Log In -> Sign Up -> Email
-        """
-        try:
-            if self._is_stopped():
-                return False
-
-            time.sleep(2)
-
-            # Check for error page
-            if self._check_error_page(driver):
-                self.update_status(f"[Window {page_number}] Error page detected - closing immediately")
-                return False
-
-            if self._is_stopped():
-                return False
-
-            # Step 1: Click "Login" button
-            self.update_status(f"[Window {page_number}] Looking for Login button...")
-            time.sleep(ACTION_DELAY)
-
-            selectors_sign_in = [
-                (By.XPATH, "//button[contains(text(),'Login')]"),
-                (By.XPATH, "//a[contains(text(),'Login')]"),
-                (By.XPATH, "//*[contains(text(),'Login')]"),
-                (By.XPATH, "//button[text()='Login']"),
-                (By.XPATH, "//a[text()='Login']"),
-                (By.CSS_SELECTOR, "button.login"),
-                (By.CSS_SELECTOR, "a.login"),
-                (By.CSS_SELECTOR, ".download-guide-login-btn"),
-                (By.CSS_SELECTOR, "[class*='guide-login']"),
-                (By.CSS_SELECTOR, "[class*='login-btn']"),
-                (By.CSS_SELECTOR, "[class*='header-login']"),
-                (By.CSS_SELECTOR, ".header-login-btn"),
-                (By.XPATH, "//span[contains(text(),'Log In')]"),
-                (By.XPATH, "//span[contains(text(),'Log in')]"),
-                (By.XPATH, "//div[contains(@class,'login')]//span"),
-                (By.XPATH, "//*[@id='login-btn']"),
-                (By.CSS_SELECTOR, "[class*='download-guide-btn']"),
-                (By.CSS_SELECTOR, ".btn-login"),
-                (By.XPATH, "//div[contains(@class,'login')]"),
-                (By.XPATH, "//span[contains(text(),'Sign in')]"),
-                (By.XPATH, "//span[contains(text(),'Sign In')]"),
-                (By.XPATH, "//button[contains(text(),'Sign in')]"),
-                (By.XPATH, "//button[contains(text(),'Sign In')]"),
-                (By.XPATH, "//a[contains(text(),'Sign in')]"),
-                (By.XPATH, "//a[contains(text(),'Sign In')]"),
-                (By.XPATH, "//*[contains(text(),'Log in')]"),
-                (By.XPATH, "//*[contains(text(),'Log In')]"),
-                (By.CSS_SELECTOR, "[class*='sign-in']"),
-                (By.CSS_SELECTOR, "[class*='signin']"),
-                (By.CSS_SELECTOR, "[class*='login']"),
-                (By.CSS_SELECTOR, ".btn-sign-in"),
-            ]
-
-            sign_in_btn = self._find_element(driver, selectors_sign_in, "Login", page_number)
-            if self._is_stopped():
-                return False
-
-            if sign_in_btn:
-                sign_in_btn.click()
-                self.update_status(f"[Window {page_number}] Clicked Login!")
-                time.sleep(1)
-            else:
-                self.update_status(f"[Window {page_number}] Login button not found.")
-                return False
-
-            if self._is_stopped():
-                return False
-
-            # Step 2: Click "Sign up" tab
-            self.update_status(f"[Window {page_number}] Looking for Sign up tab...")
-            time.sleep(ACTION_DELAY)
-
-            selectors_sign_up = [
-                (By.XPATH, "//*[text()='Sign up']"),
-                (By.XPATH, "//div[text()='Sign up']"),
-                (By.XPATH, "//span[text()='Sign up']"),
-                (By.XPATH, "//p[text()='Sign up']"),
-                (By.XPATH, "//a[text()='Sign up']"),
-                (By.XPATH, "//li[text()='Sign up']"),
-                (By.XPATH, "//*[contains(@class,'tab')]//*[text()='Sign up']"),
-                (By.XPATH, "//*[contains(@class,'tab')]//*[contains(text(),'Sign up')]"),
-                (By.XPATH, "//*[contains(@class,'switch')]//*[contains(text(),'Sign up')]"),
-                (By.XPATH, "//*[contains(@class,'register-tab')]"),
-                (By.CSS_SELECTOR, "[class*='signup']"),
-                (By.CSS_SELECTOR, "[class*='sign-up']"),
-                (By.CSS_SELECTOR, ".register-link"),
-                (By.CSS_SELECTOR, "[class*='register']"),
-                (By.XPATH, "//a[contains(text(),'Sign up')]"),
-                (By.XPATH, "//a[contains(text(),'Sign Up')]"),
-                (By.XPATH, "//span[contains(text(),'Sign up')]"),
-                (By.XPATH, "//span[contains(text(),'Sign Up')]"),
-                (By.XPATH, "//div[contains(@class,'tab')]//span[contains(text(),'Sign')]"),
-                (By.XPATH, "//button[contains(text(),'Sign up')]"),
-                (By.XPATH, "//button[contains(text(),'Sign Up')]"),
-                (By.XPATH, "//*[contains(text(),'Create account')]"),
-                (By.XPATH, "//*[contains(text(),'Register')]"),
-            ]
-
-            sign_up_btn = self._find_element(driver, selectors_sign_up, "Sign Up", page_number)
-            if self._is_stopped():
-                return False
-
-            if sign_up_btn:
-                sign_up_btn.click()
-                self.update_status(f"[Window {page_number}] Clicked Sign Up!")
-                time.sleep(1)
-            else:
-                self.update_status(f"[Window {page_number}] Sign Up button not found.")
-                return False
-
-            if self._is_stopped():
-                return False
-
-            # Step 3: Click Email icon
-            self.update_status(f"[Window {page_number}] Looking for Email icon...")
-            time.sleep(ACTION_DELAY)
-
-            selectors_email = [
-                (By.XPATH, "//*[contains(@class,'other-login')]//*[contains(@class,'mail')]"),
-                (By.XPATH, "//*[contains(@class,'other')]//*[contains(@class,'mail')]"),
-                (By.XPATH, "//*[contains(@class,'third')]//*[contains(@class,'mail')]"),
-                (By.XPATH, "//*[contains(@class,'social')]//*[contains(@class,'mail')]"),
-                (By.XPATH, "//*[contains(@class,'login-type')]//*[contains(@class,'mail')]"),
-                (By.CSS_SELECTOR, ".other-login-way [class*='mail']"),
-                (By.CSS_SELECTOR, "[class*='other-login'] [class*='mail']"),
-                (By.CSS_SELECTOR, "[class*='third-party'] [class*='mail']"),
-                (By.CSS_SELECTOR, "[class*='email-btn']"),
-                (By.CSS_SELECTOR, "[class*='email-login']"),
-                (By.CSS_SELECTOR, "[class*='login-email']"),
-                (By.CSS_SELECTOR, "[data-type='email']"),
-                (By.CSS_SELECTOR, "[class*='mail']"),
-                (By.XPATH, "//div[contains(@class,'email')]"),
-                (By.XPATH, "//a[contains(@class,'email')]"),
-                (By.XPATH, "//span[contains(text(),'Email')]"),
-                (By.XPATH, "//span[contains(text(),'email')]"),
-                (By.XPATH, "//*[contains(@class,'mail')]"),
-                (By.XPATH, "//img[contains(@src,'mail')]/.."),
-                (By.XPATH, "//img[contains(@alt,'mail')]/.."),
-                (By.XPATH, "//img[contains(@alt,'Mail')]/.."),
-                (By.XPATH, "//svg[contains(@class,'mail')]/.."),
-                (By.CSS_SELECTOR, "[class*='icon-email']"),
-                (By.CSS_SELECTOR, "[class*='icon-mail']"),
-            ]
-
-            email_btn = self._find_element(driver, selectors_email, "Email", page_number)
-            if self._is_stopped():
-                return False
-
-            if email_btn:
-                email_btn.click()
-                self.update_status(f"[Window {page_number}] Clicked Email option! Done.")
-                time.sleep(ACTION_DELAY)
-            else:
-                self.update_status(f"[Window {page_number}] Email option not found.")
-                return False
-
-            return True
-
-        except Exception as e:
-            self.update_status(f"[Window {page_number}] Error: {str(e)}")
-            return False
-
     def _open_single_window(self, url, page_number, proxy=None):
         """Open a single browser window and return window info."""
         fingerprint = self._get_random_fingerprint()
@@ -533,12 +336,6 @@ class TeraBoxAutoClose:
         )
         if process is None:
             return None
-
-        # Snap to right half
-        time.sleep(1)
-        if HAS_PYAUTOGUI:
-            pyautogui.hotkey("win", "right")
-            time.sleep(0.3)
 
         # Connect selenium
         driver = self.connect_selenium_to_chrome(port)
@@ -582,9 +379,6 @@ Object.defineProperty(navigator, 'languages', {{get: () => ['{fingerprint['langu
             except Exception:
                 pass
             return None
-
-        # Run automation (Login > Sign Up > Email)
-        self.perform_automation(driver, page_number)
 
         # Assign random close time
         close_seconds = random.choice(RANDOM_CLOSE_TIMES)
