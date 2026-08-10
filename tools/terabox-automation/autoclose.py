@@ -552,6 +552,44 @@ class TeraBoxAutoClose:
 
         self.drivers.append(driver)
 
+        # Check if page loaded properly (wait max 10 seconds)
+        try:
+            time.sleep(5)  # wait for page to load
+            current_url = driver.current_url
+            page_source = driver.page_source
+
+            # If page is blank or has error
+            if current_url in ("data:,", "about:blank", "chrome-error://"):
+                self.update_status(f"[Window {page_number}] Page not loaded - closing...")
+                self.fail_count += 1
+                driver.quit()
+                process.terminate()
+                return None
+
+            if "ERR_" in page_source or "This site can" in page_source or "took too long" in page_source or "DNS" in page_source or "refused" in page_source:
+                self.update_status(f"[Window {page_number}] Load error - closing...")
+                self.fail_count += 1
+                driver.quit()
+                process.terminate()
+                return None
+
+            if len(page_source) < 100:
+                self.update_status(f"[Window {page_number}] Empty page - closing...")
+                self.fail_count += 1
+                driver.quit()
+                process.terminate()
+                return None
+
+        except Exception as e:
+            self.update_status(f"[Window {page_number}] Error checking page - closing...")
+            self.fail_count += 1
+            try:
+                driver.quit()
+                process.terminate()
+            except Exception:
+                pass
+            return None
+
         # Inject fingerprint spoof
         spoof_script = f"""
 Object.defineProperty(navigator, 'webdriver', {{get: () => false}});
@@ -680,6 +718,7 @@ Object.defineProperty(navigator, 'connection', {{
 
         # Handle CAPTCHA/Cloudflare challenge before continuing
         if not self._handle_captcha(driver, page_number):
+            self.fail_count += 1
             try:
                 driver.quit()
             except Exception:
@@ -702,6 +741,7 @@ Object.defineProperty(navigator, 'connection', {{
         # Check for error page immediately
         if self._check_error_page(driver):
             self.update_status(f"[Window {page_number}] Error page detected - closing immediately")
+            self.fail_count += 1
             try:
                 driver.quit()
             except Exception:
@@ -715,7 +755,9 @@ Object.defineProperty(navigator, 'connection', {{
         # Assign random close time (any time between 30-120 seconds)
         close_seconds = random.randint(30, 120)
         close_time = time.time() + close_seconds
-        self.update_status(f"[Window {page_number}] Opened - will close in {close_seconds} seconds")
+        self.success_count += 1
+        self.update_status(f"[Window {page_number}] Loaded! (Success: {self.success_count} | Failed: {self.fail_count})")
+        self.update_status(f"[Window {page_number}] Will close in {close_seconds} seconds")
 
         return {
             "driver": driver,
@@ -754,6 +796,8 @@ Object.defineProperty(navigator, 'connection', {{
         Opens browsers, keeps them for random time, closes, opens new ones.
         """
         target_url = url or TERABOX_URL
+        self.success_count = 0
+        self.fail_count = 0
         self.update_status(f"Starting Auto Close automation...")
         self.update_status(f"Total pages: {total_pages} | Open at once: {open_at_once}")
         self.update_status(f"Random close times: 30-120 seconds")
@@ -816,7 +860,7 @@ Object.defineProperty(navigator, 'connection', {{
                 time.sleep(stagger_time)
 
         self.update_status(f"\n--- Phase 2: Monitor loop (closing and replacing) ---")
-        self.update_status(f"Active: {len(self.active_windows)} | Processed: {processed}/{total_pages} | Remaining: {total_pages - processed}")
+        self.update_status(f"Active: {len(self.active_windows)} | Success: {self.success_count} | Failed: {self.fail_count} | Total: {processed}/{total_pages}")
         self.update_status("")
 
         # Phase 2: Monitor loop
@@ -849,20 +893,21 @@ Object.defineProperty(navigator, 'connection', {{
 
                 # Open replacement if we still have pages to process
                 if processed < total_pages and not self._is_stopped():
-                    # Stagger between opening windows to avoid triggering anti-bot
                     stagger_time = random.uniform(1, 2)
-                    self.update_status(f"  Waiting {stagger_time:.1f}s before opening replacement...")
                     time.sleep(stagger_time)
                     processed += 1
                     proxy = None
                     if self.proxies:
                         proxy = self.proxies[(processed - 1) % len(self.proxies)]
-                    self.update_status(f"[Window {processed}] Opening replacement...")
-                    new_window = self._open_single_window(target_url, processed, proxy)
-                    if new_window:
-                        self.active_windows.append(new_window)
-
-                self.update_status(f"Active: {len(self.active_windows)} | Processed: {processed}/{total_pages} | Remaining: {total_pages - processed}")
+                    window_info = self._open_single_window(target_url, processed, proxy)
+                    if window_info:
+                        self.active_windows.append(window_info)
+                        self.update_status(f"Active: {len(self.active_windows)} | Success: {self.success_count} | Failed: {self.fail_count} | Total: {processed}/{total_pages}")
+                    else:
+                        self.update_status(f"[Window {processed}] Failed to open, skipping...")
+                        self.update_status(f"Active: {len(self.active_windows)} | Success: {self.success_count} | Failed: {self.fail_count} | Total: {processed}/{total_pages}")
+                else:
+                    self.update_status(f"Active: {len(self.active_windows)} | Success: {self.success_count} | Failed: {self.fail_count} | Total: {processed}/{total_pages}")
 
             time.sleep(1)
 
