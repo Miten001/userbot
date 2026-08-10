@@ -28,7 +28,7 @@ def _check_help():
         print("Usage: python autoclose.py")
         print()
         print("Opens browsers with random auto-close timers.")
-        print("Random close times: 10s, 15s, 25s, 30s, or 60s")
+        print("Random close times: 10-90 seconds")
         print()
         print("Requirements:")
         print("  - Python 3.7+")
@@ -51,10 +51,17 @@ try:
     from selenium import webdriver
     from selenium.webdriver.chrome.options import Options
     from selenium.webdriver.chrome.service import Service
+    from selenium.webdriver.common.by import By
     from selenium.common.exceptions import WebDriverException
     HAS_SELENIUM = True
 except ImportError:
     HAS_SELENIUM = False
+
+try:
+    import pyautogui
+    HAS_PYAUTOGUI = True
+except ImportError:
+    HAS_PYAUTOGUI = False
 
 # Target URL
 TERABOX_URL = "https://1024terabox.com/s/1axTeTaTPATdSOQizMrGeJQ"
@@ -68,8 +75,19 @@ DEBUG_PORT_BASE = 9222
 # Timeouts
 PAGE_LOAD_TIMEOUT = 30
 
-# Random close times in seconds
-RANDOM_CLOSE_TIMES = [10, 15, 25, 30, 60]
+# Referrer URLs for spoofing (makes traffic look like it comes from real sources)
+REFERRER_URLS = [
+    "https://www.google.com/",
+    "https://www.google.com/search?q=terabox+download",
+    "https://www.facebook.com/",
+    "https://t.co/redirect",
+    "https://www.youtube.com/",
+    "https://www.instagram.com/",
+    "https://www.tiktok.com/",
+    "https://www.reddit.com/",
+    "",
+    "",
+]
 
 
 def find_chrome_path():
@@ -265,6 +283,9 @@ class TeraBoxAutoClose:
             "--disable-features=ChromeWhatsNewUI",
             "--no-service-autorun",
             "--password-store=basic",
+            "--disable-blink-features=AutomationControlled",
+            "--disable-automation",
+            "--disable-extensions",
         ]
 
         if user_agent:
@@ -325,6 +346,48 @@ class TeraBoxAutoClose:
             return True
         return False
 
+    def _simulate_human_behavior(self, driver, page_number):
+        """Simulate real human behavior on the page."""
+        try:
+            # Random initial wait (humans don't interact instantly)
+            time.sleep(random.uniform(1, 3))
+
+            # Random scroll down slowly (like reading)
+            scroll_times = random.randint(2, 5)
+            for _ in range(scroll_times):
+                scroll_amount = random.randint(100, 400)
+                driver.execute_script(f"window.scrollBy(0, {scroll_amount})")
+                time.sleep(random.uniform(0.5, 2))
+
+            # Sometimes scroll back up
+            if random.random() > 0.5:
+                driver.execute_script(f"window.scrollBy(0, -{random.randint(100, 300)})")
+                time.sleep(random.uniform(0.5, 1.5))
+
+            # Random mouse movements (if pyautogui available)
+            if HAS_PYAUTOGUI:
+                try:
+                    for _ in range(random.randint(1, 3)):
+                        x = random.randint(400, 1200)
+                        y = random.randint(200, 700)
+                        pyautogui.moveTo(x, y, duration=random.uniform(0.3, 1.0))
+                        time.sleep(random.uniform(0.3, 1.0))
+                except Exception:
+                    pass
+
+            # Sometimes hover over random elements
+            try:
+                elements = driver.find_elements(By.TAG_NAME, "a")
+                if elements:
+                    random_element = random.choice(elements[:10])
+                    driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", random_element)
+                    time.sleep(random.uniform(0.5, 1.5))
+            except Exception:
+                pass
+
+        except Exception:
+            pass
+
     def _open_single_window(self, url, page_number, proxy=None):
         """Open a single browser window and return window info."""
         fingerprint = self._get_random_fingerprint()
@@ -351,6 +414,11 @@ class TeraBoxAutoClose:
 
         # Inject fingerprint spoof
         spoof_script = f"""
+Object.defineProperty(navigator, 'webdriver', {{get: () => false}});
+delete window.cdc_adoQpoasnfa76pfcZLmcfl_Array;
+delete window.cdc_adoQpoasnfa76pfcZLmcfl_Promise;
+delete window.cdc_adoQpoasnfa76pfcZLmcfl_Symbol;
+window.chrome = {{ runtime: {{}} }};
 Object.defineProperty(navigator, 'platform', {{get: () => '{fingerprint['platform']}'}});
 Object.defineProperty(navigator, 'hardwareConcurrency', {{get: () => {fingerprint['hardware_concurrency']}}});
 Object.defineProperty(navigator, 'deviceMemory', {{get: () => {fingerprint['device_memory']}}});
@@ -361,11 +429,29 @@ Object.defineProperty(navigator, 'languages', {{get: () => ['{fingerprint['langu
         except Exception:
             pass
 
+        # Referrer spoofing and Accept-Language headers
+        referrer = random.choice(REFERRER_URLS)
+        try:
+            driver.execute_cdp_cmd('Network.enable', {})
+            headers = {
+                'Accept-Language': f'{fingerprint["language"]},en;q=0.9',
+            }
+            if referrer:
+                headers['Referer'] = referrer
+            driver.execute_cdp_cmd('Network.setExtraHTTPHeaders', {
+                'headers': headers
+            })
+        except Exception:
+            pass
+
         # Zoom out 80%
         try:
             driver.execute_script("document.body.style.zoom='80%'")
         except Exception:
             pass
+
+        # Simulate human behavior before timer starts
+        self._simulate_human_behavior(driver, page_number)
 
         # Check for error page immediately
         if self._check_error_page(driver):
@@ -380,8 +466,8 @@ Object.defineProperty(navigator, 'languages', {{get: () => ['{fingerprint['langu
                 pass
             return None
 
-        # Assign random close time
-        close_seconds = random.choice(RANDOM_CLOSE_TIMES)
+        # Assign random close time (any time between 10-90 seconds)
+        close_seconds = random.randint(10, 90)
         close_time = time.time() + close_seconds
         self.update_status(f"[Window {page_number}] Opened - will close in {close_seconds} seconds")
 
@@ -424,7 +510,7 @@ Object.defineProperty(navigator, 'languages', {{get: () => ['{fingerprint['langu
         target_url = url or TERABOX_URL
         self.update_status(f"Starting Auto Close automation...")
         self.update_status(f"Total pages: {total_pages} | Open at once: {open_at_once}")
-        self.update_status(f"Random close times: {RANDOM_CLOSE_TIMES} seconds")
+        self.update_status(f"Random close times: 10-90 seconds")
         self.update_status("")
 
         # Handle proxies
@@ -948,7 +1034,7 @@ class AutoCloseGUI:
     def run(self):
         """Start the GUI main loop."""
         self._update_status("Ready! Configure settings and click Start.")
-        self._update_status("Random close times: 10s, 15s, 25s, 30s, or 60s")
+        self._update_status("Random close times: 10-90 seconds")
         self._update_status("Each browser gets a different IP (if proxy enabled)")
         self._update_status("Proxy format: ip:port:user:pass (one per line)")
         self._update_status("")
