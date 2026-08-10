@@ -296,13 +296,10 @@ class TeraBoxAutoClose:
             "--disable-notifications",
             "--disable-session-crashed-bubble",
             "--disable-infobars",
-            "--disable-features=ChromeWhatsNewUI",
             "--no-service-autorun",
             "--password-store=basic",
             "--disable-blink-features=AutomationControlled",
-            "--disable-automation",
             "--disable-extensions",
-            "--disable-features=IsolateOrigins,site-per-process",
             "--disable-ipc-flooding-protection",
         ]
 
@@ -807,7 +804,7 @@ Object.defineProperty(navigator, 'connection', {{
                 self.active_windows.append(window_info)
             # Stagger between opening windows to avoid triggering anti-bot
             if i < min(open_at_once, total_pages) - 1 and not self._is_stopped():
-                stagger_time = random.uniform(3, 6)
+                stagger_time = random.uniform(1, 2)
                 self.update_status(f"  Waiting {stagger_time:.1f}s before next window...")
                 time.sleep(stagger_time)
 
@@ -846,7 +843,7 @@ Object.defineProperty(navigator, 'connection', {{
                 # Open replacement if we still have pages to process
                 if processed < total_pages and not self._is_stopped():
                     # Stagger between opening windows to avoid triggering anti-bot
-                    stagger_time = random.uniform(3, 6)
+                    stagger_time = random.uniform(1, 2)
                     self.update_status(f"  Waiting {stagger_time:.1f}s before opening replacement...")
                     time.sleep(stagger_time)
                     processed += 1
