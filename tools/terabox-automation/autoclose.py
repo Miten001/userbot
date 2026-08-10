@@ -286,6 +286,12 @@ class TeraBoxAutoClose:
             "--disable-blink-features=AutomationControlled",
             "--disable-automation",
             "--disable-extensions",
+            "--disable-features=IsolateOrigins,site-per-process",
+            "--disable-web-security",
+            "--allow-running-insecure-content",
+            "--disable-site-isolation-trials",
+            "--ignore-certificate-errors",
+            "--ignore-ssl-errors",
         ]
 
         if user_agent:
@@ -345,6 +351,33 @@ class TeraBoxAutoClose:
         except Exception:
             return True
         return False
+
+    def _handle_captcha(self, driver, page_number):
+        """Check for CAPTCHA/Cloudflare challenge and wait for auto-resolve."""
+        try:
+            page_source = driver.page_source.lower()
+            captcha_keywords = ["captcha", "cloudflare", "turnstile", "hcaptcha", "challenge-platform", "cf-browser-verification", "ray id"]
+            detected = any(keyword in page_source for keyword in captcha_keywords)
+            if detected:
+                self.update_status(f"[Window {page_number}] CAPTCHA/Cloudflare challenge detected - waiting up to 30s for auto-resolve...")
+                # Wait up to 30 seconds for CAPTCHA to auto-resolve
+                for _ in range(30):
+                    time.sleep(1)
+                    if self._is_stopped():
+                        return False
+                    try:
+                        page_source = driver.page_source.lower()
+                        if not any(keyword in page_source for keyword in captcha_keywords):
+                            self.update_status(f"[Window {page_number}] CAPTCHA resolved successfully!")
+                            return True
+                    except Exception:
+                        return False
+                # CAPTCHA not resolved after 30 seconds
+                self.update_status(f"[Window {page_number}] CAPTCHA not resolved after 30s - closing window")
+                return False
+        except Exception:
+            return True
+        return True
 
     def _simulate_human_behavior(self, driver, page_number):
         """Simulate real human behavior on the page."""
@@ -418,11 +451,70 @@ Object.defineProperty(navigator, 'webdriver', {{get: () => false}});
 delete window.cdc_adoQpoasnfa76pfcZLmcfl_Array;
 delete window.cdc_adoQpoasnfa76pfcZLmcfl_Promise;
 delete window.cdc_adoQpoasnfa76pfcZLmcfl_Symbol;
-window.chrome = {{ runtime: {{}} }};
+window.chrome = {{
+    runtime: {{}},
+    loadTimes: function() {{
+        return {{
+            commitLoadTime: Date.now() / 1000 - Math.random() * 2,
+            connectionInfo: "h2",
+            finishDocumentLoadTime: Date.now() / 1000 - Math.random(),
+            finishLoadTime: Date.now() / 1000 - Math.random() * 0.5,
+            firstPaintAfterLoadTime: 0,
+            firstPaintTime: Date.now() / 1000 - Math.random() * 1.5,
+            navigationType: "Other",
+            npnNegotiatedProtocol: "h2",
+            requestTime: Date.now() / 1000 - Math.random() * 3,
+            startLoadTime: Date.now() / 1000 - Math.random() * 2.5,
+            wasAlternateProtocolAvailable: false,
+            wasFetchedViaSpdy: true,
+            wasNpnNegotiated: true
+        }};
+    }},
+    csi: function() {{
+        return {{
+            onloadT: Date.now(),
+            startE: Date.now() - Math.floor(Math.random() * 1000),
+            pageT: Math.floor(Math.random() * 5000) + 1000,
+            tran: 15
+        }};
+    }}
+}};
 Object.defineProperty(navigator, 'platform', {{get: () => '{fingerprint['platform']}'}});
 Object.defineProperty(navigator, 'hardwareConcurrency', {{get: () => {fingerprint['hardware_concurrency']}}});
 Object.defineProperty(navigator, 'deviceMemory', {{get: () => {fingerprint['device_memory']}}});
 Object.defineProperty(navigator, 'languages', {{get: () => ['{fingerprint['language']}', 'en']}});
+
+// Spoof navigator.plugins
+Object.defineProperty(navigator, 'plugins', {{
+    get: () => {{
+        const pluginData = [
+            {{name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format'}},
+            {{name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: ''}},
+            {{name: 'Native Client', filename: 'internal-nacl-plugin', description: ''}}
+        ];
+        const plugins = pluginData.map(p => {{
+            const plugin = Object.create(Plugin.prototype);
+            Object.defineProperties(plugin, {{
+                name: {{value: p.name, enumerable: true}},
+                filename: {{value: p.filename, enumerable: true}},
+                description: {{value: p.description, enumerable: true}},
+                length: {{value: 1, enumerable: true}}
+            }});
+            return plugin;
+        }});
+        Object.setPrototypeOf(plugins, PluginArray.prototype);
+        Object.defineProperty(plugins, 'length', {{value: pluginData.length}});
+        return plugins;
+    }}
+}});
+
+// Override Permissions API
+const originalQuery = window.navigator.permissions.query;
+window.navigator.permissions.query = (parameters) => (
+    parameters.name === 'notifications' ?
+        Promise.resolve({{state: Notification.permission}}) :
+        originalQuery(parameters)
+);
 """
         try:
             driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {'source': spoof_script})
@@ -449,6 +541,18 @@ Object.defineProperty(navigator, 'languages', {{get: () => ['{fingerprint['langu
             driver.execute_script("document.body.style.zoom='80%'")
         except Exception:
             pass
+
+        # Handle CAPTCHA/Cloudflare challenge before continuing
+        if not self._handle_captcha(driver, page_number):
+            try:
+                driver.quit()
+            except Exception:
+                pass
+            try:
+                process.terminate()
+            except Exception:
+                pass
+            return None
 
         # Simulate human behavior before timer starts
         self._simulate_human_behavior(driver, page_number)
@@ -563,6 +667,11 @@ Object.defineProperty(navigator, 'languages', {{get: () => ['{fingerprint['langu
             window_info = self._open_single_window(target_url, processed, proxy)
             if window_info:
                 self.active_windows.append(window_info)
+            # Stagger between opening windows to avoid triggering anti-bot
+            if i < min(open_at_once, total_pages) - 1 and not self._is_stopped():
+                stagger_time = random.uniform(3, 6)
+                self.update_status(f"  Waiting {stagger_time:.1f}s before next window...")
+                time.sleep(stagger_time)
 
         self.update_status(f"\n--- Phase 2: Monitor loop (closing and replacing) ---")
         self.update_status(f"Active: {len(self.active_windows)} | Processed: {processed}/{total_pages} | Remaining: {total_pages - processed}")
@@ -598,6 +707,10 @@ Object.defineProperty(navigator, 'languages', {{get: () => ['{fingerprint['langu
 
                 # Open replacement if we still have pages to process
                 if processed < total_pages and not self._is_stopped():
+                    # Stagger between opening windows to avoid triggering anti-bot
+                    stagger_time = random.uniform(3, 6)
+                    self.update_status(f"  Waiting {stagger_time:.1f}s before opening replacement...")
+                    time.sleep(stagger_time)
                     processed += 1
                     proxy = None
                     if self.proxies:
