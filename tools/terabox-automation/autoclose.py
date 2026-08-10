@@ -28,7 +28,7 @@ def _check_help():
         print("Usage: python autoclose.py")
         print()
         print("Opens browsers with random auto-close timers.")
-        print("Random close times: 10-90 seconds")
+        print("Random close times: 30-120 seconds")
         print()
         print("Requirements:")
         print("  - Python 3.7+")
@@ -77,14 +77,30 @@ PAGE_LOAD_TIMEOUT = 30
 
 # Referrer URLs for spoofing (makes traffic look like it comes from real sources)
 REFERRER_URLS = [
-    "https://www.google.com/",
+    # Google search queries (organic)
     "https://www.google.com/search?q=terabox+download",
+    "https://www.google.com/search?q=free+cloud+storage",
+    "https://www.google.com/search?q=file+sharing+online",
+    "https://www.google.com/search?q=terabox+free+1tb",
+    "https://www.google.com/search?q=download+large+files+free",
+    "https://www.google.com/",
+    # Bing search
+    "https://www.bing.com/search?q=terabox+download",
+    "https://www.bing.com/search?q=free+cloud+storage+1tb",
+    # Yahoo search
+    "https://search.yahoo.com/search?p=terabox+file+sharing",
+    "https://search.yahoo.com/search?p=free+cloud+storage",
+    # Social media
     "https://www.facebook.com/",
-    "https://t.co/redirect",
-    "https://www.youtube.com/",
-    "https://www.instagram.com/",
+    "https://www.youtube.com/redirect?q=terabox",
+    "https://www.reddit.com/r/DataHoarder/",
+    "https://www.reddit.com/r/CloudStorage/",
     "https://www.tiktok.com/",
-    "https://www.reddit.com/",
+    "https://www.instagram.com/",
+    "https://t.me/",
+    "https://www.pinterest.com/",
+    # Direct traffic (empty referrers)
+    "",
     "",
     "",
 ]
@@ -379,6 +395,97 @@ class TeraBoxAutoClose:
             return True
         return True
 
+    def _accept_cookies(self, driver, page_number):
+        """Click cookie accept buttons to dismiss cookie banners."""
+        try:
+            cookie_selectors = [
+                "//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'accept')]",
+                "//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'i agree')]",
+                "//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'got it')]",
+                "//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'ok')]",
+                "//a[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'accept')]",
+                "//a[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'i agree')]",
+                "//a[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'got it')]",
+            ]
+            for xpath in cookie_selectors:
+                try:
+                    elements = driver.find_elements(By.XPATH, xpath)
+                    for el in elements:
+                        if el.is_displayed():
+                            el.click()
+                            self.update_status(f"[Window {page_number}] Cookie banner accepted")
+                            time.sleep(random.uniform(0.5, 1.5))
+                            return
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+    def _simulate_ad_engagement(self, driver, page_number):
+        """Simulate real ad interaction to make traffic look genuine to Adsterra."""
+        try:
+            # Wait 3-6 seconds for ads to load
+            time.sleep(random.uniform(3, 6))
+
+            # Smooth scroll 3-7 times with random amounts (150-350px)
+            scroll_times = random.randint(3, 7)
+            for _ in range(scroll_times):
+                scroll_amount = random.randint(150, 350)
+                driver.execute_script(
+                    f"window.scrollBy({{top: {scroll_amount}, behavior: 'smooth'}})"
+                )
+                time.sleep(random.uniform(0.8, 1.5))
+
+            # Pause 2-5 seconds to "read"
+            time.sleep(random.uniform(2, 5))
+
+            # Scroll back up sometimes (40% chance)
+            if random.random() < 0.4:
+                scroll_back = random.randint(150, 350)
+                driver.execute_script(
+                    f"window.scrollBy({{top: -{scroll_back}, behavior: 'smooth'}})"
+                )
+                time.sleep(random.uniform(1, 2))
+
+            # Dispatch mousemove events on the page
+            for _ in range(random.randint(3, 6)):
+                x = random.randint(100, 1200)
+                y = random.randint(100, 700)
+                driver.execute_script(f"""
+                    var evt = new MouseEvent('mousemove', {{
+                        clientX: {x},
+                        clientY: {y},
+                        bubbles: true
+                    }});
+                    document.dispatchEvent(evt);
+                """)
+                time.sleep(random.uniform(0.3, 0.8))
+
+            # Trigger visibilitychange, mousemove, touchstart events
+            driver.execute_script("""
+                document.dispatchEvent(new Event('visibilitychange'));
+                document.dispatchEvent(new MouseEvent('mousemove', {
+                    clientX: Math.random() * window.innerWidth,
+                    clientY: Math.random() * window.innerHeight,
+                    bubbles: true
+                }));
+                document.dispatchEvent(new TouchEvent('touchstart', {
+                    bubbles: true,
+                    cancelable: true
+                }));
+            """)
+            time.sleep(random.uniform(0.5, 1.0))
+
+            # Final scroll to 80% of page
+            driver.execute_script(
+                "window.scrollTo({top: document.body.scrollHeight * 0.8, behavior: 'smooth'})"
+            )
+            time.sleep(random.uniform(1, 2))
+
+            self.update_status(f"[Window {page_number}] Ad engagement simulation complete")
+        except Exception:
+            pass
+
     def _simulate_human_behavior(self, driver, page_number):
         """Simulate real human behavior on the page."""
         try:
@@ -515,6 +622,35 @@ window.navigator.permissions.query = (parameters) => (
         Promise.resolve({{state: Notification.permission}}) :
         originalQuery(parameters)
 );
+
+// Spoof Notification.requestPermission
+Notification.requestPermission = function() {{
+    return Promise.resolve('default');
+}};
+
+// Spoof navigator.getBattery
+navigator.getBattery = function() {{
+    return Promise.resolve({{
+        charging: true,
+        chargingTime: 0,
+        dischargingTime: Infinity,
+        level: 0.85 + Math.random() * 0.15,
+        addEventListener: function() {{}},
+        removeEventListener: function() {{}}
+    }});
+}};
+
+// Spoof navigator.connection (4g with random downlink/rtt)
+Object.defineProperty(navigator, 'connection', {{
+    get: () => ({{
+        effectiveType: '4g',
+        downlink: {round(random.uniform(5.0, 30.0), 1)},
+        rtt: {random.randint(20, 100)},
+        saveData: false,
+        addEventListener: function() {{}},
+        removeEventListener: function() {{}}
+    }})
+}});
 """
         try:
             driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {'source': spoof_script})
@@ -554,6 +690,12 @@ window.navigator.permissions.query = (parameters) => (
                 pass
             return None
 
+        # Accept cookie banners
+        self._accept_cookies(driver, page_number)
+
+        # Simulate ad engagement (scroll, mouse events, visibility triggers)
+        self._simulate_ad_engagement(driver, page_number)
+
         # Simulate human behavior before timer starts
         self._simulate_human_behavior(driver, page_number)
 
@@ -570,8 +712,8 @@ window.navigator.permissions.query = (parameters) => (
                 pass
             return None
 
-        # Assign random close time (any time between 10-90 seconds)
-        close_seconds = random.randint(10, 90)
+        # Assign random close time (any time between 30-120 seconds)
+        close_seconds = random.randint(30, 120)
         close_time = time.time() + close_seconds
         self.update_status(f"[Window {page_number}] Opened - will close in {close_seconds} seconds")
 
@@ -614,7 +756,7 @@ window.navigator.permissions.query = (parameters) => (
         target_url = url or TERABOX_URL
         self.update_status(f"Starting Auto Close automation...")
         self.update_status(f"Total pages: {total_pages} | Open at once: {open_at_once}")
-        self.update_status(f"Random close times: 10-90 seconds")
+        self.update_status(f"Random close times: 30-120 seconds")
         self.update_status("")
 
         # Handle proxies
@@ -1147,7 +1289,7 @@ class AutoCloseGUI:
     def run(self):
         """Start the GUI main loop."""
         self._update_status("Ready! Configure settings and click Start.")
-        self._update_status("Random close times: 10-90 seconds")
+        self._update_status("Random close times: 30-120 seconds")
         self._update_status("Each browser gets a different IP (if proxy enabled)")
         self._update_status("Proxy format: ip:port:user:pass (one per line)")
         self._update_status("")
