@@ -176,16 +176,15 @@ class TeraBoxAutomation:
             return "??"
 
     def _fetch_proxies(self):
-        """Fetch free HTTP proxy list from multiple sources."""
-        self.update_status("Fetching proxies from multiple sources...")
+        """Fetch HTTP proxies ONLY from SA, AE, US, KR, JP, MX, QA."""
+        self.update_status("Fetching proxies from: SA, AE, US, KR, JP, MX, QA only...")
         proxies = []
         try:
             import urllib.request
             apis = [
-                f"https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=3000&country={PROXY_COUNTRIES}&ssl=all&anonymity=all",
-                "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt",
-                "https://raw.githubusercontent.com/ShiftyTR/Proxy-List/master/http.txt",
-                "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt",
+                f"https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=5000&country={PROXY_COUNTRIES}&ssl=all&anonymity=all",
+                f"https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=10000&country={PROXY_COUNTRIES}&ssl=all&anonymity=anonymous",
+                f"https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=10000&country={PROXY_COUNTRIES}&ssl=all&anonymity=elite",
             ]
             for api_url in apis:
                 try:
@@ -202,7 +201,7 @@ class TeraBoxAutomation:
             pass
         proxies = list(set(proxies))
         random.shuffle(proxies)
-        self.update_status(f"Found {len(proxies)} total proxies")
+        self.update_status(f"Found {len(proxies)} proxies from target countries")
         return proxies
 
     def _get_random_fingerprint(self):
