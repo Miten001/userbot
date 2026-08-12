@@ -78,6 +78,8 @@ except ImportError:
 
 try:
     import pyautogui
+    pyautogui.FAILSAFE = False
+    pyautogui.PAUSE = 0.1
     HAS_PYAUTOGUI = True
 except ImportError:
     HAS_PYAUTOGUI = False
