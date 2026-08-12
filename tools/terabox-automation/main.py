@@ -157,6 +157,22 @@ class TeraBoxAutomation:
         """Send status update to callback."""
         self.status_callback(message)
 
+    def _get_proxy_country(self, proxy):
+        """Get country of proxy IP using free API."""
+        try:
+            import urllib.request
+            import json
+            ip = proxy.split(":")[0]
+            req = urllib.request.Request(
+                f"http://ip-api.com/json/{ip}?fields=country,countryCode",
+                headers={'User-Agent': 'Mozilla/5.0'}
+            )
+            response = urllib.request.urlopen(req, timeout=2)
+            data = json.loads(response.read().decode('utf-8'))
+            return data.get("countryCode", "??")
+        except Exception:
+            return "??"
+
     def _fetch_proxies(self):
         """Fetch free HTTP proxy list from multiple sources."""
         self.update_status("Fetching proxies from multiple sources...")
@@ -668,6 +684,10 @@ class TeraBoxAutomation:
             if process is None:
                 continue
 
+            # Show IP and country after successful launch
+            country = self._get_proxy_country(proxy) if proxy else "LOCAL"
+            self.update_status(f"[{page_number}/{num_pages}] IP: {proxy if proxy else 'direct'} | Country: {country}")
+
             # Verify Chrome actually started as new process
             time.sleep(0.5)
             if process.poll() is not None:
@@ -759,8 +779,9 @@ class TeraBoxGUI:
         """Initialize the GUI."""
         self.root = tk.Tk()
         self.root.title("TeraBox Automation Tool")
-        self.root.geometry("750x700")
+        self.root.geometry("800x700")
         self.root.resizable(True, True)
+        self.root.minsize(800, 600)
         self.root.configure(bg="#0a0a1a")
 
         # Automation instance
@@ -1025,11 +1046,14 @@ class TeraBoxGUI:
         scrollbar = tk.Scrollbar(text_frame, bg=bg_dark, troughcolor=bg_dark)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
+        h_scrollbar = tk.Scrollbar(text_frame, orient=tk.HORIZONTAL, bg=bg_dark, troughcolor=bg_dark)
+        h_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
+
         self.status_text = tk.Text(
             text_frame,
-            height=12,
+            height=18,
             font=("Consolas", 9),
-            wrap=tk.WORD,
+            wrap=tk.NONE,
             state=tk.DISABLED,
             bg="#000000",
             fg=fg_green,
@@ -1038,9 +1062,11 @@ class TeraBoxGUI:
             highlightthickness=1,
             highlightcolor=fg_accent,
             yscrollcommand=scrollbar.set,
+            xscrollcommand=h_scrollbar.set,
         )
         self.status_text.pack(fill=tk.BOTH, expand=True)
         scrollbar.config(command=self.status_text.yview)
+        h_scrollbar.config(command=self.status_text.xview)
 
         # Progress bar with vibrant style
         style = ttk.Style()
