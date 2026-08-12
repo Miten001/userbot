@@ -94,6 +94,9 @@ TERABOX_URL = "https://1024terabox.com/s/1axTeTaTPATdSOQizMrGeJQ"
 PROXY_COUNTRIES = "SA,AE,US,KR,JP,MX,QA"
 ALLOWED_COUNTRIES = ["SA", "AE", "US", "KR", "JP", "MX", "QA"]
 
+# Track used proxies across all sessions to prevent repeats
+USED_PROXIES = set()
+
 # Remote debugging port for Chrome
 DEBUG_PORT = 9222
 
@@ -225,24 +228,20 @@ class TeraBoxAutomation:
         return proxies
 
     def _get_random_fingerprint(self):
-        """Generate random browser fingerprint for each instance."""
-        user_agents = [
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Windows NT 11.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-        ]
+        """Generate random browser fingerprint for each instance.
+        
+        Uses dynamic Chrome version/build numbers for THOUSANDS of unique
+        user agents instead of a static list.
+        """
+        # Dynamic user agent generation with random build numbers
+        chrome_version = random.randint(115, 125)
+        build = random.randint(5000, 6999)
+        patch = random.randint(0, 999)
+        user_agent = f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{chrome_version}.0.{build}.{patch} Safari/537.36"
 
-        screen_resolutions = [
-            (1920, 1080), (1366, 768), (1536, 864), (1440, 900),
-            (1280, 720), (1600, 900), (2560, 1440), (1280, 1024),
-        ]
+        # More random screen resolutions
+        screen_width = random.choice([1920, 1366, 1536, 1440, 1280, 1600, 2560, 1680, 1360, 1024])
+        screen_height = random.choice([1080, 768, 864, 900, 720, 1024, 1440, 1050, 800])
 
         webgl_vendors = [
             "Google Inc. (NVIDIA)",
@@ -264,9 +263,17 @@ class TeraBoxAutomation:
         platforms = ["Win32", "Win64", "MacIntel", "Linux x86_64"]
         timezones = ["Asia/Kolkata", "America/New_York", "Europe/London", "Asia/Dubai", "America/Los_Angeles", "Europe/Berlin"]
 
+        # Random screen color depth
+        color_depth = random.choice([24, 30, 32])
+        # Random timezone offset in minutes
+        timezone_offset = random.choice([-480, -420, -360, -300, -240, 0, 60, 120, 180, 210, 270, 330, 345, 480, 540])
+
         return {
-            "user_agent": random.choice(user_agents),
-            "screen": random.choice(screen_resolutions),
+            "user_agent": user_agent,
+            "chrome_version": chrome_version,
+            "screen": (screen_width, screen_height),
+            "color_depth": color_depth,
+            "timezone_offset": timezone_offset,
             "webgl_vendor": random.choice(webgl_vendors),
             "webgl_renderer": random.choice(webgl_renderers),
             "language": random.choice(languages),
@@ -647,8 +654,12 @@ class TeraBoxAutomation:
                         break
                     country = self._verify_proxy_country(p)
                     if country:
-                        self.proxies.append(p)
-                        self.update_status(f"  [{idx}] {p} -> {country} OK")
+                        if p not in USED_PROXIES:
+                            self.proxies.append(p)
+                            USED_PROXIES.add(p)
+                            self.update_status(f"  [{idx}] {p} -> {country} OK (NEW)")
+                        else:
+                            self.update_status(f"  [{idx}] {p} -> {country} SKIP (already used)")
                     if len(self.proxies) >= 30:
                         break
                 if self.proxies:
@@ -722,12 +733,32 @@ class TeraBoxAutomation:
 
             self.drivers.append(driver)
 
-            # Inject fingerprint
+            # Show fingerprint summary per window
+            self.update_status(f"[Window {page_number}] Fingerprint: Chrome/{fingerprint['chrome_version']} | {fingerprint['platform']} | {fingerprint['screen'][0]}x{fingerprint['screen'][1]}")
+
+            # Inject fingerprint with unique canvas noise per window
+            canvas_noise = random.uniform(0.001, 0.01)
             spoof_script = f"""
 Object.defineProperty(navigator, 'platform', {{get: () => '{fingerprint["platform"]}'}});
 Object.defineProperty(navigator, 'hardwareConcurrency', {{get: () => {fingerprint["hardware_concurrency"]}}});
 Object.defineProperty(navigator, 'deviceMemory', {{get: () => {fingerprint["device_memory"]}}});
 Object.defineProperty(navigator, 'languages', {{get: () => ['{fingerprint["language"]}', 'en']}});
+Object.defineProperty(screen, 'width', {{get: () => {fingerprint["screen"][0]}}});
+Object.defineProperty(screen, 'height', {{get: () => {fingerprint["screen"][1]}}});
+Object.defineProperty(screen, 'colorDepth', {{get: () => {fingerprint["color_depth"]}}});
+const noise = {canvas_noise};
+const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
+HTMLCanvasElement.prototype.toDataURL = function(type) {{
+    const ctx = this.getContext('2d');
+    if (ctx) {{
+        const imageData = ctx.getImageData(0, 0, this.width, this.height);
+        for (let i = 0; i < imageData.data.length; i += 4) {{
+            imageData.data[i] = imageData.data[i] + (noise * (Math.random() - 0.5) * 2) | 0;
+        }}
+        ctx.putImageData(imageData, 0, 0);
+    }}
+    return originalToDataURL.apply(this, arguments);
+}};
 """
             try:
                 driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {'source': spoof_script})
