@@ -92,6 +92,7 @@ TERABOX_URL = "https://1024terabox.com/s/1axTeTaTPATdSOQizMrGeJQ"
 # SA = Saudi Arabia, AE = UAE, US = United States
 # KR = South Korea, JP = Japan, MX = Mexico, QA = Qatar
 PROXY_COUNTRIES = "SA,AE,US,KR,JP,MX,QA"
+ALLOWED_COUNTRIES = ["SA", "AE", "US", "KR", "JP", "MX", "QA"]
 
 # Remote debugging port for Chrome
 DEBUG_PORT = 9222
@@ -174,6 +175,25 @@ class TeraBoxAutomation:
             return data.get("countryCode", "??")
         except Exception:
             return "??"
+
+    def _verify_proxy_country(self, proxy):
+        """Check if proxy IP belongs to allowed country. Returns country code or None."""
+        try:
+            import urllib.request
+            import json
+            ip = proxy.split(":")[0]
+            req = urllib.request.Request(
+                f"http://ip-api.com/json/{ip}?fields=countryCode",
+                headers={'User-Agent': 'Mozilla/5.0'}
+            )
+            response = urllib.request.urlopen(req, timeout=2)
+            data = json.loads(response.read().decode('utf-8'))
+            country = data.get("countryCode", "")
+            if country in ALLOWED_COUNTRIES:
+                return country
+            return None
+        except Exception:
+            return None
 
     def _fetch_proxies(self):
         """Fetch HTTP proxies ONLY from SA, AE, US, KR, JP, MX, QA."""
@@ -618,12 +638,26 @@ class TeraBoxAutomation:
         # Handle proxies
         if custom_proxies == "auto":
             self.update_status("Fetching proxies...")
-            self.proxies = self._fetch_proxies()
-            if self.proxies:
-                self.update_status(f"Got {len(self.proxies)} proxies! Using without testing for speed.")
+            raw_proxies = self._fetch_proxies()
+            if raw_proxies:
+                self.update_status(f"Got {len(raw_proxies)} raw proxies. Verifying countries...")
+                self.proxies = []
+                for idx, p in enumerate(raw_proxies[:100], 1):
+                    if self._is_stopped():
+                        break
+                    country = self._verify_proxy_country(p)
+                    if country:
+                        self.proxies.append(p)
+                        self.update_status(f"  [{idx}] {p} -> {country} OK")
+                    if len(self.proxies) >= 30:
+                        break
+                if self.proxies:
+                    self.update_status(f"\n{len(self.proxies)} verified proxies (SA,AE,US,KR,JP,MX,QA only)!")
+                else:
+                    self.update_status("\nNo verified proxies found - direct connection")
             else:
-                self.update_status("No proxies found - using direct connection")
-                self.update_status("WARNING: All browsers will have SAME IP!")
+                self.proxies = []
+                self.update_status("No proxies found - direct connection")
         elif custom_proxies and isinstance(custom_proxies, list):
             self.proxies = custom_proxies
             self.update_status(f"Using {len(self.proxies)} custom proxies")
