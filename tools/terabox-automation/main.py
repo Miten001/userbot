@@ -274,6 +274,20 @@ class TeraBoxAutomation:
                 pass
         os.makedirs(user_data_dir, exist_ok=True)
 
+        # Write First Run file to prevent singleton detection
+        first_run_file = os.path.join(user_data_dir, "First Run")
+        with open(first_run_file, 'w') as f:
+            f.write('')
+
+        # Remove any lock files that might exist
+        for lock_name in ["SingletonLock", "SingletonSocket", "SingletonCookie"]:
+            lock_file = os.path.join(user_data_dir, lock_name)
+            if os.path.exists(lock_file):
+                try:
+                    os.remove(lock_file)
+                except Exception:
+                    pass
+
         args = [
             chrome_path,
             f"--user-data-dir={user_data_dir}",
@@ -287,6 +301,7 @@ class TeraBoxAutomation:
             "--disable-features=ChromeWhatsNewUI",
             "--no-service-autorun",
             "--password-store=basic",
+            "--force-renderer-accessibility",
         ]
 
         if user_agent:
@@ -649,6 +664,12 @@ class TeraBoxAutomation:
                 fingerprint['language'], proxy
             )
             if process is None:
+                continue
+
+            # Verify Chrome actually started as new process
+            time.sleep(0.5)
+            if process.poll() is not None:
+                self.update_status(f"[{page_number}] Chrome merged with existing - skipping")
                 continue
 
             launched_ports.append((port, fingerprint, page_number))
