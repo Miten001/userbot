@@ -158,13 +158,16 @@ class TeraBoxAutomation:
         self.status_callback(message)
 
     def _fetch_proxies(self):
-        """Fetch free HTTP proxy list."""
-        self.update_status("Fetching proxies from: SA, AE, US, KR, JP, MX, QA...")
+        """Fetch free HTTP proxy list from multiple sources."""
+        self.update_status("Fetching proxies from multiple sources...")
         proxies = []
         try:
             import urllib.request
             apis = [
                 f"https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=3000&country={PROXY_COUNTRIES}&ssl=all&anonymity=all",
+                "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt",
+                "https://raw.githubusercontent.com/ShiftyTR/Proxy-List/master/http.txt",
+                "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt",
             ]
             for api_url in apis:
                 try:
@@ -173,17 +176,19 @@ class TeraBoxAutomation:
                     data = response.read().decode('utf-8')
                     for line in data.strip().split('\n'):
                         line = line.strip()
-                        if ':' in line and line[0].isdigit():
+                        if ':' in line and line[0].isdigit() and len(line) < 25:
                             proxies.append(line)
                 except Exception:
                     continue
         except Exception:
             pass
+        proxies = list(set(proxies))
         random.shuffle(proxies)
+        self.update_status(f"Found {len(proxies)} total proxies")
         return proxies
 
     def _test_proxy(self, proxy):
-        """Test if proxy can reach TeraBox (2 second timeout)."""
+        """Test if proxy can reach TeraBox (3 second timeout)."""
         try:
             import urllib.request
             proxy_handler = urllib.request.ProxyHandler({
@@ -192,11 +197,11 @@ class TeraBoxAutomation:
             })
             opener = urllib.request.build_opener(proxy_handler)
             req = urllib.request.Request(
-                'https://www.terabox.app',
+                'https://1024terabox.com',
                 headers={'User-Agent': 'Mozilla/5.0'}
             )
-            response = opener.open(req, timeout=2)
-            return response.status == 200
+            response = opener.open(req, timeout=3)
+            return True
         except Exception:
             return False
 
@@ -616,26 +621,23 @@ class TeraBoxAutomation:
             self.update_status("Fetching HTTP proxies...")
             self.proxies = self._fetch_proxies()
             if self.proxies:
-                total_to_test = min(30, len(self.proxies))
-                self.update_status(f"Testing {total_to_test} proxies against TeraBox...")
+                total_to_test = min(50, len(self.proxies))
+                self.update_status(f"Testing {total_to_test} proxies...")
                 working = []
-                for idx, p in enumerate(self.proxies[:30], 1):
+                for idx, p in enumerate(self.proxies[:50], 1):
                     if self._is_stopped():
                         break
-                    self.update_status(f"  Testing [{idx}/{total_to_test}]: {p}...")
                     if self._test_proxy(p):
                         working.append(p)
-                        self.update_status(f"  WORKING: {p}")
-                        if len(working) >= 10:
+                        self.update_status(f"  [{idx}] WORKING: {p}")
+                        if len(working) >= 20:
                             break
-                    else:
-                        self.update_status(f"  DEAD: {p}")
                 self.proxies = working if working else []
                 if self.proxies:
-                    self.update_status(f"\n{len(self.proxies)} working proxies found!")
+                    self.update_status(f"\n{len(self.proxies)} working proxies! Each browser = different IP")
                 else:
-                    self.update_status("\nNo working proxies found!")
-                    self.update_status("Continuing with direct connection (no proxy)")
+                    self.update_status("\nNo working proxies - using direct connection")
+                    self.update_status("WARNING: All browsers will have SAME IP!")
             else:
                 self.update_status("No proxies found - direct connection")
         elif custom_proxies and isinstance(custom_proxies, list):
@@ -657,7 +659,7 @@ class TeraBoxAutomation:
                 proxy = self.proxies[(page_number - 1) % len(self.proxies)]
 
             port = DEBUG_PORT + (page_number - 1)
-            self.update_status(f"[{page_number}/{num_pages}] Opening browser...")
+            self.update_status(f"[{page_number}/{num_pages}] Opening browser... IP: {proxy if proxy else 'direct'}")
 
             process = self.launch_chrome_subprocess(
                 target_url, port, fingerprint['user_agent'],
@@ -884,7 +886,7 @@ class TeraBoxGUI:
         self.pages_entry.insert(0, "1")
 
         # Proxy checkbox
-        self.use_proxy_var = tk.BooleanVar(value=False)
+        self.use_proxy_var = tk.BooleanVar(value=True)
         self.proxy_checkbox = tk.Checkbutton(
             input_frame,
             text="Use Proxy / IP Rotation",
