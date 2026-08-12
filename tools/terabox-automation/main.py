@@ -697,7 +697,8 @@ class TeraBoxAutomation:
                 self.update_status("No proxies found - direct connection")
         elif custom_proxies and isinstance(custom_proxies, list):
             self.proxies = custom_proxies
-            self.update_status(f"Using {len(self.proxies)} custom proxies")
+            random.shuffle(self.proxies)  # RANDOMIZE order
+            self.update_status(f"Using {len(self.proxies)} custom proxies (randomized)")
         else:
             self.proxies = []
             self.update_status("Proxy disabled - direct connection")
@@ -711,10 +712,10 @@ class TeraBoxAutomation:
             fingerprint = self._get_random_fingerprint()
             proxy = None
             if self.proxies:
-                proxy = self.proxies.pop(0)  # Take first and remove from list
-                self.update_status(f"[{page_number}/{num_pages}] Using IP: {proxy}")
+                proxy = random.choice(self.proxies)
+                self.update_status(f"[{page_number}/{num_pages}] Using IP: {proxy.split(':')[0]}")
             else:
-                self.update_status(f"[{page_number}/{num_pages}] No more proxies - direct connection")
+                self.update_status(f"[{page_number}/{num_pages}] No proxy - direct connection")
 
             port = DEBUG_PORT + (page_number - 1)
             self.update_status(f"[{page_number}/{num_pages}] Opening browser... IP: {proxy if proxy else 'direct'}")
