@@ -9,6 +9,7 @@ then connects Selenium for Log In -> Sign Up -> Email selection flow.
 """
 
 import atexit
+import base64
 import os
 import random
 import shutil
@@ -283,6 +284,30 @@ class TeraBoxAutomation:
             "device_memory": random.choice([2, 4, 8, 16, 32]),
         }
 
+    def _parse_proxy(self, proxy_string):
+        """Parse proxy string. Supports IP:PORT and IP:PORT:USER:PASS formats."""
+        parts = proxy_string.strip().split(":")
+        if len(parts) == 4:
+            return {
+                "host": parts[0],
+                "port": parts[1],
+                "user": parts[2],
+                "password": parts[3],
+                "server": f"{parts[0]}:{parts[1]}",
+                "has_auth": True,
+            }
+        elif len(parts) == 2:
+            return {
+                "host": parts[0],
+                "port": parts[1],
+                "user": None,
+                "password": None,
+                "server": f"{parts[0]}:{parts[1]}",
+                "has_auth": False,
+            }
+        else:
+            return {"server": proxy_string, "has_auth": False, "user": None, "password": None}
+
     def launch_chrome_subprocess(self, url, debug_port, user_agent=None, language=None, proxy=None):
         """
         Launch Chrome via subprocess with remote debugging enabled.
@@ -340,7 +365,8 @@ class TeraBoxAutomation:
         if language:
             args.append(f"--lang={language}")
         if proxy:
-            args.append(f"--proxy-server={proxy}")
+            proxy_info = self._parse_proxy(proxy)
+            args.append(f"--proxy-server=http://{proxy_info['server']}")
 
         args.append(url)
 
@@ -710,7 +736,7 @@ class TeraBoxAutomation:
                 self.update_status(f"[{page_number}] Chrome merged with existing - skipping")
                 continue
 
-            launched_ports.append((port, fingerprint, page_number))
+            launched_ports.append((port, fingerprint, page_number, proxy))
 
             # Quick wait + snap to right half
             time.sleep(1)
@@ -722,7 +748,7 @@ class TeraBoxAutomation:
         self.update_status("Now running automation on each...")
 
         # PHASE 2: Connect selenium and automate each window
-        for port, fingerprint, page_number in launched_ports:
+        for port, fingerprint, page_number, proxy in launched_ports:
             if self._is_stopped():
                 break
 
@@ -732,6 +758,22 @@ class TeraBoxAutomation:
                 continue
 
             self.drivers.append(driver)
+
+            # Authenticate proxy if it has username/password
+            if proxy:
+                proxy_info = self._parse_proxy(proxy)
+                if proxy_info.get("has_auth"):
+                    try:
+                        credentials = base64.b64encode(
+                            f"{proxy_info['user']}:{proxy_info['password']}".encode()
+                        ).decode()
+                        driver.execute_cdp_cmd('Network.enable', {})
+                        driver.execute_cdp_cmd('Network.setExtraHTTPHeaders', {
+                            'headers': {'Proxy-Authorization': f'Basic {credentials}'}
+                        })
+                        self.update_status(f"[Window {page_number}] Proxy authenticated!")
+                    except Exception as e:
+                        self.update_status(f"[Window {page_number}] Proxy auth failed: {e}")
 
             # Show fingerprint summary per window
             self.update_status(f"[Window {page_number}] Fingerprint: Chrome/{fingerprint['chrome_version']} | {fingerprint['platform']} | {fingerprint['screen'][0]}x{fingerprint['screen'][1]}")
