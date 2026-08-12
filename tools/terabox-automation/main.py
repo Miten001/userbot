@@ -205,24 +205,6 @@ class TeraBoxAutomation:
         self.update_status(f"Found {len(proxies)} total proxies")
         return proxies
 
-    def _test_proxy(self, proxy):
-        """Test if proxy can reach TeraBox (3 second timeout)."""
-        try:
-            import urllib.request
-            proxy_handler = urllib.request.ProxyHandler({
-                'http': f'http://{proxy}',
-                'https': f'http://{proxy}'
-            })
-            opener = urllib.request.build_opener(proxy_handler)
-            req = urllib.request.Request(
-                'https://1024terabox.com',
-                headers={'User-Agent': 'Mozilla/5.0'}
-            )
-            response = opener.open(req, timeout=3)
-            return True
-        except Exception:
-            return False
-
     def _get_random_fingerprint(self):
         """Generate random browser fingerprint for each instance."""
         user_agents = [
@@ -636,28 +618,13 @@ class TeraBoxAutomation:
 
         # Handle proxies
         if custom_proxies == "auto":
-            self.update_status("Fetching HTTP proxies...")
+            self.update_status("Fetching proxies...")
             self.proxies = self._fetch_proxies()
             if self.proxies:
-                total_to_test = min(50, len(self.proxies))
-                self.update_status(f"Testing {total_to_test} proxies...")
-                working = []
-                for idx, p in enumerate(self.proxies[:50], 1):
-                    if self._is_stopped():
-                        break
-                    if self._test_proxy(p):
-                        working.append(p)
-                        self.update_status(f"  [{idx}] WORKING: {p}")
-                        if len(working) >= 20:
-                            break
-                self.proxies = working if working else []
-                if self.proxies:
-                    self.update_status(f"\n{len(self.proxies)} working proxies! Each browser = different IP")
-                else:
-                    self.update_status("\nNo working proxies - using direct connection")
-                    self.update_status("WARNING: All browsers will have SAME IP!")
+                self.update_status(f"Got {len(self.proxies)} proxies! Using without testing for speed.")
             else:
-                self.update_status("No proxies found - direct connection")
+                self.update_status("No proxies found - using direct connection")
+                self.update_status("WARNING: All browsers will have SAME IP!")
         elif custom_proxies and isinstance(custom_proxies, list):
             self.proxies = custom_proxies
             self.update_status(f"Using {len(self.proxies)} custom proxies")
@@ -674,7 +641,10 @@ class TeraBoxAutomation:
             fingerprint = self._get_random_fingerprint()
             proxy = None
             if self.proxies:
-                proxy = self.proxies[(page_number - 1) % len(self.proxies)]
+                proxy = self.proxies.pop(0)  # Take first and remove from list
+                self.update_status(f"[{page_number}/{num_pages}] Using IP: {proxy}")
+            else:
+                self.update_status(f"[{page_number}/{num_pages}] No more proxies - direct connection")
 
             port = DEBUG_PORT + (page_number - 1)
             self.update_status(f"[{page_number}/{num_pages}] Opening browser... IP: {proxy if proxy else 'direct'}")
