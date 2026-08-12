@@ -155,6 +155,7 @@ class TeraBoxAutomation:
         self.drivers = []
         self.proxies = []
         self.proxy_index = 0
+        self.rotate_minutes = 5
 
     def _is_stopped(self):
         """Check if the stop event has been set."""
@@ -703,6 +704,9 @@ class TeraBoxAutomation:
             self.proxies = []
             self.update_status("Proxy disabled - direct connection")
 
+        self.original_proxies = list(self.proxies) if self.proxies else []
+        custom_proxies_backup = custom_proxies
+
         # PHASE 1: Launch ALL Chrome windows fast
         launched_ports = []
         for page_number in range(1, num_pages + 1):
@@ -830,6 +834,30 @@ HTMLCanvasElement.prototype.toDataURL = function(type) {{
 
         if not self._is_stopped():
             self.update_status(f"\n--- Done! All browsers processed. ---")
+
+        # AUTO ROTATE LOOP
+        if not self._is_stopped():
+            self.update_status(f"\n--- Auto rotating in {self.rotate_minutes} minutes ---")
+            self.update_status("Proxies will refresh and new windows will open...")
+
+            wait_seconds = self.rotate_minutes * 60
+            for i in range(wait_seconds):
+                if self._is_stopped():
+                    break
+                time.sleep(1)
+
+            if not self._is_stopped():
+                self.update_status("\n--- ROTATING: Closing all windows ---")
+                self.close_all()
+                time.sleep(2)
+
+                if self.original_proxies:
+                    random.shuffle(self.original_proxies)
+                    self.proxies = list(self.original_proxies)
+                    self.update_status(f"Proxies reshuffled! New random order.")
+
+                self.update_status("\n--- ROTATING: Opening new windows with fresh proxy order ---")
+                self.run(num_pages, custom_proxies_backup, url)
 
     def close_all(self):
         """Close all open browser instances and Chrome processes."""
@@ -984,6 +1012,29 @@ class TeraBoxGUI:
         )
         self.pages_entry.pack(anchor=tk.W, pady=5)
         self.pages_entry.insert(0, "20")
+
+        rotate_label = tk.Label(
+            input_frame,
+            text="Auto Rotate (minutes):",
+            font=("Consolas", 11),
+            fg=fg_text,
+            bg=bg_frame,
+        )
+        rotate_label.pack(anchor=tk.W, pady=(5, 0))
+
+        self.rotate_entry = tk.Entry(
+            input_frame,
+            font=("Consolas", 12),
+            width=10,
+            bg=bg_entry,
+            fg=fg_accent,
+            insertbackground=fg_accent,
+            relief=tk.FLAT,
+            highlightthickness=1,
+            highlightcolor=fg_accent,
+        )
+        self.rotate_entry.pack(anchor=tk.W, pady=2)
+        self.rotate_entry.insert(0, "5")
 
         # Proxy checkbox
         self.use_proxy_var = tk.BooleanVar(value=True)
@@ -1208,6 +1259,14 @@ class TeraBoxGUI:
             )
             return
 
+        # Read auto rotate time
+        try:
+            self.rotate_minutes = int(self.rotate_entry.get().strip())
+            if self.rotate_minutes < 1:
+                self.rotate_minutes = 5
+        except ValueError:
+            self.rotate_minutes = 5
+
         # Read user-provided proxies (only if checkbox is enabled)
         use_proxy = self.use_proxy_var.get()
         if use_proxy:
@@ -1264,6 +1323,7 @@ class TeraBoxGUI:
             url: Optional URL to navigate to
         """
         try:
+            self.automation.rotate_minutes = self.rotate_minutes
             self.automation.run(num_pages, custom_proxies, url)
         except Exception as e:
             self._update_status(f"Error: {str(e)}")
