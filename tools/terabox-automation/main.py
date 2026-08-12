@@ -883,7 +883,7 @@ class TeraBoxGUI:
             highlightcolor=fg_accent,
         )
         self.pages_entry.pack(anchor=tk.W, pady=5)
-        self.pages_entry.insert(0, "1")
+        self.pages_entry.insert(0, "20")
 
         # Proxy checkbox
         self.use_proxy_var = tk.BooleanVar(value=True)
@@ -972,6 +972,22 @@ class TeraBoxGUI:
             state=tk.DISABLED,
         )
         self.close_btn.pack(side=tk.LEFT, padx=5)
+
+        self.restart_btn = tk.Button(
+            btn_frame,
+            text="Restart (New IPs)",
+            font=("Consolas", 11, "bold"),
+            bg="#9c27b0",
+            fg="#ffffff",
+            activebackground="#ab47bc",
+            padx=15,
+            pady=5,
+            relief=tk.FLAT,
+            cursor="hand2",
+            command=self._restart_automation,
+            state=tk.DISABLED,
+        )
+        self.restart_btn.pack(side=tk.LEFT, padx=5)
 
         # Close All Tabs button - always enabled
         self.close_all_btn = tk.Button(
@@ -1102,6 +1118,7 @@ class TeraBoxGUI:
         self.start_btn.config(state=tk.DISABLED)
         self.stop_btn.config(state=tk.NORMAL)
         self.close_btn.config(state=tk.NORMAL)
+        self.restart_btn.config(state=tk.NORMAL)
         self.is_running = True
         self._stop_event.clear()
         self.progress.start(10)
@@ -1152,12 +1169,51 @@ class TeraBoxGUI:
         """Called when automation completes."""
         self.start_btn.config(state=tk.NORMAL)
         self.stop_btn.config(state=tk.DISABLED)
+        self.restart_btn.config(state=tk.DISABLED)
         self.is_running = False
         self.progress.stop()
         if self._stop_event.is_set():
             self._update_status("\n--- Automation Stopped ---")
         else:
             self._update_status("\n--- Automation Complete ---")
+
+    def _restart_automation(self):
+        """Restart: close all browsers, fetch new proxies, start again."""
+        self._update_status("\n--- RESTARTING ---")
+        self._update_status("Closing all browsers...")
+
+        # Stop current automation
+        if self.is_running:
+            self._stop_event.set()
+            time.sleep(1)
+
+        # Close all browsers
+        if self.automation:
+            self.automation.close_all()
+
+        # Kill all Chrome processes
+        try:
+            import subprocess as sp
+            if os.name == 'nt':
+                sp.run(['taskkill', '/F', '/IM', 'chrome.exe'],
+                             capture_output=True, timeout=5)
+                sp.run(['taskkill', '/F', '/IM', 'chromedriver.exe'],
+                             capture_output=True, timeout=5)
+        except Exception:
+            pass
+
+        self._update_status("All browsers closed!")
+        self._update_status("Waiting 2 seconds... then starting with NEW IPs")
+
+        # Reset state
+        self.is_running = False
+        self._stop_event.clear()
+        self.start_btn.config(state=tk.NORMAL)
+        self.stop_btn.config(state=tk.DISABLED)
+        self.progress.stop()
+
+        # Wait then auto-start
+        self.root.after(2000, self._start_automation)
 
     def _close_browsers(self):
         """Close all open browser instances."""
