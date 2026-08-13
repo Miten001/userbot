@@ -360,6 +360,70 @@ class TeraBoxAutomation:
         else:
             return {"server": proxy_string, "has_auth": False, "user": None, "password": None}
 
+    def _create_proxy_auth_extension(self, user_data_dir, proxy_info):
+        """Create a Chrome extension that auto-fills proxy credentials."""
+        ext_dir = os.path.join(user_data_dir, "proxy_auth_ext")
+        os.makedirs(ext_dir, exist_ok=True)
+
+        manifest = '''
+{
+    "version": "1.0.0",
+    "manifest_version": 2,
+    "name": "Proxy Auth",
+    "permissions": [
+        "proxy",
+        "tabs",
+        "unlimitedStorage",
+        "storage",
+        "<all_urls>",
+        "webRequest",
+        "webRequestBlocking"
+    ],
+    "background": {
+        "scripts": ["background.js"]
+    },
+    "minimum_chrome_version": "22.0.0"
+}
+'''
+
+        background = '''
+var config = {
+    mode: "fixed_servers",
+    rules: {
+        singleProxy: {
+            scheme: "http",
+            host: "%s",
+            port: parseInt(%s)
+        },
+        bypassList: ["localhost"]
+    }
+};
+
+chrome.proxy.settings.set({value: config, scope: "regular"}, function() {});
+
+function callbackFn(details) {
+    return {
+        authCredentials: {
+            username: "%s",
+            password: "%s"
+        }
+    };
+}
+
+chrome.webRequest.onAuthRequired.addListener(
+    callbackFn,
+    {urls: ["<all_urls>"]},
+    ['blocking']
+);
+''' % (proxy_info["host"], proxy_info["port"], proxy_info["user"], proxy_info["password"])
+
+        with open(os.path.join(ext_dir, "manifest.json"), "w") as f:
+            f.write(manifest)
+        with open(os.path.join(ext_dir, "background.js"), "w") as f:
+            f.write(background)
+
+        return ext_dir
+
     def launch_chrome_subprocess(self, url, debug_port, user_agent=None, language=None, proxy=None):
         """
         Launch Chrome via subprocess with remote debugging enabled.
@@ -418,7 +482,12 @@ class TeraBoxAutomation:
             args.append(f"--lang={language}")
         if proxy:
             proxy_info = self._parse_proxy(proxy)
-            args.append(f"--proxy-server=http://{proxy_info['server']}")
+            if proxy_info.get("has_auth"):
+                # Use extension for authenticated proxy (avoids username/password popup)
+                ext_dir = self._create_proxy_auth_extension(user_data_dir, proxy_info)
+                args.append(f"--load-extension={ext_dir}")
+            else:
+                args.append(f"--proxy-server=http://{proxy_info['server']}")
 
         args.append(url)
 
@@ -827,21 +896,11 @@ class TeraBoxAutomation:
 
             self.drivers.append(driver)
 
-            # Authenticate proxy if it has username/password
+            # Proxy auth is handled by the Chrome extension loaded at launch
             if proxy:
                 proxy_info = self._parse_proxy(proxy)
                 if proxy_info.get("has_auth"):
-                    try:
-                        credentials = base64.b64encode(
-                            f"{proxy_info['user']}:{proxy_info['password']}".encode()
-                        ).decode()
-                        driver.execute_cdp_cmd('Network.enable', {})
-                        driver.execute_cdp_cmd('Network.setExtraHTTPHeaders', {
-                            'headers': {'Proxy-Authorization': f'Basic {credentials}'}
-                        })
-                        self.update_status(f"[Window {page_number}] Proxy authenticated!")
-                    except Exception as e:
-                        self.update_status(f"[Window {page_number}] Proxy auth failed: {e}")
+                    self.update_status(f"[Window {page_number}] Proxy auth handled via extension.")
 
             # Show fingerprint summary per window
             self.update_status(f"[Window {page_number}] Fingerprint: Chrome/{fingerprint['chrome_version']} | {fingerprint['platform']} | {fingerprint['screen'][0]}x{fingerprint['screen'][1]}")
@@ -973,21 +1032,11 @@ HTMLCanvasElement.prototype.toDataURL = function(type) {{
 
         self.drivers.append(driver)
 
-        # Authenticate proxy if it has username/password
+        # Proxy auth is handled by the Chrome extension loaded at launch
         if proxy:
             proxy_info = self._parse_proxy(proxy)
             if proxy_info.get("has_auth"):
-                try:
-                    credentials = base64.b64encode(
-                        f"{proxy_info['user']}:{proxy_info['password']}".encode()
-                    ).decode()
-                    driver.execute_cdp_cmd('Network.enable', {})
-                    driver.execute_cdp_cmd('Network.setExtraHTTPHeaders', {
-                        'headers': {'Proxy-Authorization': f'Basic {credentials}'}
-                    })
-                    self.update_status(f"[Replacement {original_number}] Proxy authenticated!")
-                except Exception as e:
-                    self.update_status(f"[Replacement {original_number}] Proxy auth failed: {e}")
+                self.update_status(f"[Replacement {original_number}] Proxy auth handled via extension.")
 
         # Zoom out to 80%
         try:
