@@ -156,6 +156,14 @@ class TeraBoxAutomation:
         self.proxies = []
         self.proxy_index = 0
         self.rotate_minutes = 5
+        self.success_count = 0
+        self.fail_count = 0
+        self.counter_callback = None
+
+    def _update_counter(self):
+        """Notify the GUI of the current success/fail counts (if a callback is set)."""
+        if self.counter_callback:
+            self.counter_callback(self.success_count, self.fail_count)
 
     def _is_stopped(self):
         """Check if the stop event has been set."""
@@ -284,6 +292,25 @@ class TeraBoxAutomation:
             "hardware_concurrency": random.choice([2, 4, 6, 8, 12, 16]),
             "device_memory": random.choice([2, 4, 8, 16, 32]),
         }
+
+    def _page_has_error(self, driver):
+        """Return True if the page failed to load properly (error text or empty body)."""
+        try:
+            page_source = driver.page_source
+        except Exception:
+            return True
+        error_indicators = [
+            "ERR_",
+            "This site can",
+            "took too long",
+            "DNS",
+            "refused",
+        ]
+        if any(indicator in page_source for indicator in error_indicators):
+            return True
+        if len(page_source) < 100:
+            return True
+        return False
 
     def _parse_proxy(self, proxy_string):
         """Parse proxy string. Supports IP:PORT and IP:PORT:USER:PASS formats."""
@@ -667,6 +694,9 @@ class TeraBoxAutomation:
         Phase 2: Connect selenium to each and do automation
         """
         target_url = url or TERABOX_URL
+        self.success_count = 0
+        self.fail_count = 0
+        self._update_counter()
         self.update_status(f"Starting automation for {num_pages} browser(s)...")
 
         # Handle proxies
@@ -818,15 +848,33 @@ HTMLCanvasElement.prototype.toDataURL = function(type) {{
             except Exception:
                 pass
 
-            # Check for error pages - auto close
-            try:
-                page_source = driver.page_source
-                if "ERR_" in page_source or "This site can" in page_source or "took too long" in page_source or "DNS" in page_source:
-                    self.update_status(f"[Window {page_number}] Proxy failed - window closed. Remaining windows will continue.")
-                    driver.quit()
+            # Check for error pages - refresh ONCE, then close + replace if still failing
+            if self._page_has_error(driver):
+                self.update_status(f"[Window {page_number}] Page failed to load - refreshing once...")
+                try:
+                    driver.refresh()
+                except Exception:
+                    pass
+                time.sleep(3)
+
+                if self._page_has_error(driver):
+                    # Still failing after one refresh - close this window and open a replacement
+                    self.update_status(f"[Window {page_number}] Still failing after refresh - closing and opening replacement...")
+                    try:
+                        driver.quit()
+                    except Exception:
+                        pass
+                    self.fail_count += 1
+                    self._update_counter()
+                    self._open_replacement_window(target_url, page_number)
                     continue
-            except Exception:
-                pass
+                else:
+                    self.update_status(f"[Window {page_number}] Recovered after refresh!")
+                    self.success_count += 1
+                    self._update_counter()
+            else:
+                self.success_count += 1
+                self._update_counter()
 
             # Run automation
             self.update_status(f"[Window {page_number}] Automating...")
@@ -858,6 +906,73 @@ HTMLCanvasElement.prototype.toDataURL = function(type) {{
 
                 self.update_status("\n--- ROTATING: Opening new windows with fresh proxy order ---")
                 self.run(num_pages, custom_proxies_backup, url)
+
+    def _open_replacement_window(self, target_url, original_number):
+        """Open a replacement browser window with a new random proxy after a failure."""
+        if self._is_stopped():
+            return
+
+        # Pick a new random proxy
+        proxy = None
+        if self.proxies:
+            proxy = random.choice(self.proxies)
+            self.update_status(f"[Replacement {original_number}] Using new IP: {proxy.split(':')[0]}")
+        else:
+            self.update_status(f"[Replacement {original_number}] No proxy - direct connection")
+
+        fingerprint = self._get_random_fingerprint()
+        port = DEBUG_PORT + 500 + original_number
+
+        process = self.launch_chrome_subprocess(
+            target_url, port, fingerprint['user_agent'],
+            fingerprint['language'], proxy
+        )
+        if process is None:
+            self.update_status(f"[Replacement {original_number}] Failed to launch Chrome.")
+            return
+
+        time.sleep(1)
+
+        driver = self.connect_selenium_to_chrome(port)
+        if driver is None:
+            self.update_status(f"[Replacement {original_number}] Selenium failed to connect.")
+            return
+
+        self.drivers.append(driver)
+
+        # Authenticate proxy if it has username/password
+        if proxy:
+            proxy_info = self._parse_proxy(proxy)
+            if proxy_info.get("has_auth"):
+                try:
+                    credentials = base64.b64encode(
+                        f"{proxy_info['user']}:{proxy_info['password']}".encode()
+                    ).decode()
+                    driver.execute_cdp_cmd('Network.enable', {})
+                    driver.execute_cdp_cmd('Network.setExtraHTTPHeaders', {
+                        'headers': {'Proxy-Authorization': f'Basic {credentials}'}
+                    })
+                    self.update_status(f"[Replacement {original_number}] Proxy authenticated!")
+                except Exception as e:
+                    self.update_status(f"[Replacement {original_number}] Proxy auth failed: {e}")
+
+        # Zoom out to 80%
+        try:
+            driver.execute_script("document.body.style.zoom='80%'")
+        except Exception:
+            pass
+
+        # Snap window to the right half
+        if HAS_PYAUTOGUI:
+            try:
+                pyautogui.hotkey('win', 'right')
+                time.sleep(0.3)
+            except Exception:
+                pass
+
+        self.success_count += 1
+        self._update_counter()
+        self.update_status(f"[Replacement {original_number}] Replacement window opened successfully!")
 
     def close_all(self):
         """Close all open browser instances and Chrome processes."""
@@ -1169,6 +1284,16 @@ class TeraBoxGUI:
         )
         status_label.pack(anchor=tk.W)
 
+        # Live counter showing opened/failed windows
+        self.counter_label = tk.Label(
+            status_frame,
+            text="Opened: 0 | Failed: 0",
+            font=("Consolas", 14, "bold"),
+            fg="#00ff41",
+            bg="#0f0f0f",
+        )
+        self.counter_label.pack(anchor=tk.W, pady=(2, 0))
+
         # Text widget with scrollbar for status messages
         text_frame = tk.Frame(status_frame, bg=bg_dark)
         text_frame.pack(fill=tk.BOTH, expand=True, pady=5)
@@ -1228,6 +1353,13 @@ class TeraBoxGUI:
             self.status_text.insert(tk.END, message + "\n")
             self.status_text.see(tk.END)
             self.status_text.config(state=tk.DISABLED)
+
+        self.root.after(0, _update)
+
+    def _update_counter(self, success, failed):
+        """Update the live counter label (thread-safe)."""
+        def _update():
+            self.counter_label.config(text=f"Opened: {success} | Failed: {failed}")
 
         self.root.after(0, _update)
 
@@ -1324,6 +1456,7 @@ class TeraBoxGUI:
         """
         try:
             self.automation.rotate_minutes = self.rotate_minutes
+            self.automation.counter_callback = self._update_counter
             self.automation.run(num_pages, custom_proxies, url)
         except Exception as e:
             self._update_status(f"Error: {str(e)}")
