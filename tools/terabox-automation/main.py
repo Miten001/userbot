@@ -763,6 +763,9 @@ class TeraBoxAutomation:
 
         # PHASE 1: Launch ALL Chrome windows fast
         launched_ports = []
+        # Create a shuffled pool for unique assignment
+        available_proxies = list(self.proxies)
+        random.shuffle(available_proxies)
         for page_number in range(1, num_pages + 1):
             if self._is_stopped():
                 break
@@ -770,7 +773,13 @@ class TeraBoxAutomation:
             fingerprint = self._get_random_fingerprint()
             proxy = None
             if self.proxies:
-                proxy = random.choice(self.proxies)
+                if available_proxies:
+                    proxy = available_proxies.pop(0)  # unique proxy, removed from pool
+                else:
+                    # Pool exhausted - reshuffle and recycle
+                    available_proxies = list(self.proxies)
+                    random.shuffle(available_proxies)
+                    proxy = available_proxies.pop(0)
                 self.update_status(f"[{page_number}/{num_pages}] Using IP: {self._parse_proxy(proxy)['host']}")
             else:
                 self.update_status(f"[{page_number}/{num_pages}] No proxy - direct connection")
