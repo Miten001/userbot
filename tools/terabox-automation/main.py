@@ -178,7 +178,7 @@ class TeraBoxAutomation:
         try:
             import urllib.request
             import json
-            ip = proxy.split(":")[0]
+            ip = self._parse_proxy(proxy)["host"]
             req = urllib.request.Request(
                 f"http://ip-api.com/json/{ip}?fields=country,countryCode",
                 headers={'User-Agent': 'Mozilla/5.0'}
@@ -194,7 +194,7 @@ class TeraBoxAutomation:
         try:
             import urllib.request
             import json
-            ip = proxy.split(":")[0]
+            ip = self._parse_proxy(proxy)["host"]
             req = urllib.request.Request(
                 f"http://ip-api.com/json/{ip}?fields=countryCode",
                 headers={'User-Agent': 'Mozilla/5.0'}
@@ -313,8 +313,32 @@ class TeraBoxAutomation:
         return False
 
     def _parse_proxy(self, proxy_string):
-        """Parse proxy string. Supports IP:PORT and IP:PORT:USER:PASS formats."""
-        parts = proxy_string.strip().split(":")
+        """Parse proxy string. Supports multiple formats:
+        - IP:PORT
+        - IP:PORT:USER:PASS
+        - USER:PASS@IP:PORT
+        """
+        proxy_string = proxy_string.strip()
+
+        # Format: USER:PASS@IP:PORT
+        if "@" in proxy_string:
+            try:
+                auth_part, server_part = proxy_string.split("@")
+                user, password = auth_part.split(":")
+                host, port = server_part.split(":")
+                return {
+                    "host": host,
+                    "port": port,
+                    "user": user,
+                    "password": password,
+                    "server": f"{host}:{port}",
+                    "has_auth": True,
+                }
+            except Exception:
+                pass
+
+        # Format: IP:PORT:USER:PASS or IP:PORT
+        parts = proxy_string.split(":")
         if len(parts) == 4:
             return {
                 "host": parts[0],
@@ -747,7 +771,7 @@ class TeraBoxAutomation:
             proxy = None
             if self.proxies:
                 proxy = random.choice(self.proxies)
-                self.update_status(f"[{page_number}/{num_pages}] Using IP: {proxy.split(':')[0]}")
+                self.update_status(f"[{page_number}/{num_pages}] Using IP: {self._parse_proxy(proxy)['host']}")
             else:
                 self.update_status(f"[{page_number}/{num_pages}] No proxy - direct connection")
 
@@ -916,7 +940,7 @@ HTMLCanvasElement.prototype.toDataURL = function(type) {{
         proxy = None
         if self.proxies:
             proxy = random.choice(self.proxies)
-            self.update_status(f"[Replacement {original_number}] Using new IP: {proxy.split(':')[0]}")
+            self.update_status(f"[Replacement {original_number}] Using new IP: {self._parse_proxy(proxy)['host']}")
         else:
             self.update_status(f"[Replacement {original_number}] No proxy - direct connection")
 
