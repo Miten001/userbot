@@ -875,6 +875,8 @@ chrome.webRequest.onAuthRequired.addListener(
         # PHASE 1: Launch ALL Chrome windows fast
         launched_ports = []
         # Create a shuffled pool for unique assignment - only IPs used less than MAX_IP_USES times
+        # Track IP hosts used in THIS run to prevent same-run duplicates
+        used_hosts_this_run = set()
         available_proxies = [p for p in self.proxies if self._get_ip_use_count(p) < MAX_IP_USES]
         random.shuffle(available_proxies)
         for page_number in range(1, num_pages + 1):
@@ -884,17 +886,28 @@ chrome.webRequest.onAuthRequired.addListener(
             fingerprint = self._get_random_fingerprint()
             proxy = None
             if self.proxies:
+                # Rebuild pool if empty, excluding IPs already used this run and those over the global limit
                 if not available_proxies:
-                    # Rebuild pool with IPs still under the use limit
-                    available_proxies = [p for p in self.proxies if self._get_ip_use_count(p) < MAX_IP_USES]
+                    available_proxies = [
+                        p for p in self.proxies
+                        if self._get_ip_use_count(p) < MAX_IP_USES
+                        and self._parse_proxy(p)["host"] not in used_hosts_this_run
+                    ]
                     random.shuffle(available_proxies)
-                if available_proxies:
-                    proxy = available_proxies.pop(0)
+                # Pop until we find one whose host wasn't used this run
+                while available_proxies:
+                    candidate = available_proxies.pop(0)
+                    chost = self._parse_proxy(candidate)["host"]
+                    if chost not in used_hosts_this_run:
+                        proxy = candidate
+                        break
+                if proxy:
+                    used_hosts_this_run.add(self._parse_proxy(proxy)["host"])
                     self._mark_ip_used(proxy)
                     used_count = self._get_ip_use_count(proxy)
                     self.update_status(f"[{page_number}/{num_pages}] Using IP: {self._parse_proxy(proxy)['host']} (use #{used_count}/{MAX_IP_USES})")
                 else:
-                    self.update_status(f"[{page_number}/{num_pages}] All IPs used {MAX_IP_USES}x - add more proxies! Using direct.")
+                    self.update_status(f"[{page_number}/{num_pages}] No more unique IPs available - add more proxies! Using direct.")
             else:
                 self.update_status(f"[{page_number}/{num_pages}] No proxy - direct connection")
 
