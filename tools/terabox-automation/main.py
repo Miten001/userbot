@@ -98,6 +98,10 @@ ALLOWED_COUNTRIES = ["SA", "AE", "US", "KR", "JP", "MX", "QA"]
 # Track used proxies across all sessions to prevent repeats
 USED_PROXIES = set()
 
+# Track how many times each IP host has been used (across all sessions/restarts)
+IP_USAGE_COUNT = {}
+MAX_IP_USES = 2
+
 # Remote debugging port for Chrome
 DEBUG_PORT = 9222
 
@@ -311,6 +315,22 @@ class TeraBoxAutomation:
         if len(page_source) < 100:
             return True
         return False
+
+    def _get_ip_use_count(self, proxy):
+        """Get how many times this proxy's IP has been used."""
+        try:
+            host = self._parse_proxy(proxy)["host"]
+            return IP_USAGE_COUNT.get(host, 0)
+        except Exception:
+            return 0
+
+    def _mark_ip_used(self, proxy):
+        """Increment the usage count for this proxy's IP."""
+        try:
+            host = self._parse_proxy(proxy)["host"]
+            IP_USAGE_COUNT[host] = IP_USAGE_COUNT.get(host, 0) + 1
+        except Exception:
+            pass
 
     def _parse_proxy(self, proxy_string):
         """Parse proxy string. Supports multiple formats:
@@ -832,8 +852,8 @@ chrome.webRequest.onAuthRequired.addListener(
 
         # PHASE 1: Launch ALL Chrome windows fast
         launched_ports = []
-        # Create a shuffled pool for unique assignment
-        available_proxies = list(self.proxies)
+        # Create a shuffled pool for unique assignment - only IPs used less than MAX_IP_USES times
+        available_proxies = [p for p in self.proxies if self._get_ip_use_count(p) < MAX_IP_USES]
         random.shuffle(available_proxies)
         for page_number in range(1, num_pages + 1):
             if self._is_stopped():
@@ -842,14 +862,17 @@ chrome.webRequest.onAuthRequired.addListener(
             fingerprint = self._get_random_fingerprint()
             proxy = None
             if self.proxies:
-                if available_proxies:
-                    proxy = available_proxies.pop(0)  # unique proxy, removed from pool
-                else:
-                    # Pool exhausted - reshuffle and recycle
-                    available_proxies = list(self.proxies)
+                if not available_proxies:
+                    # Rebuild pool with IPs still under the use limit
+                    available_proxies = [p for p in self.proxies if self._get_ip_use_count(p) < MAX_IP_USES]
                     random.shuffle(available_proxies)
+                if available_proxies:
                     proxy = available_proxies.pop(0)
-                self.update_status(f"[{page_number}/{num_pages}] Using IP: {self._parse_proxy(proxy)['host']}")
+                    self._mark_ip_used(proxy)
+                    used_count = self._get_ip_use_count(proxy)
+                    self.update_status(f"[{page_number}/{num_pages}] Using IP: {self._parse_proxy(proxy)['host']} (use #{used_count}/{MAX_IP_USES})")
+                else:
+                    self.update_status(f"[{page_number}/{num_pages}] All IPs used {MAX_IP_USES}x - add more proxies! Using direct.")
             else:
                 self.update_status(f"[{page_number}/{num_pages}] No proxy - direct connection")
 
@@ -1007,8 +1030,13 @@ HTMLCanvasElement.prototype.toDataURL = function(type) {{
         # Pick a new random proxy
         proxy = None
         if self.proxies:
-            proxy = random.choice(self.proxies)
-            self.update_status(f"[Replacement {original_number}] Using new IP: {self._parse_proxy(proxy)['host']}")
+            candidates = [p for p in self.proxies if self._get_ip_use_count(p) < MAX_IP_USES]
+            if candidates:
+                proxy = random.choice(candidates)
+                self._mark_ip_used(proxy)
+                self.update_status(f"[Replacement {original_number}] Using new IP: {self._parse_proxy(proxy)['host']}")
+            else:
+                self.update_status(f"[Replacement {original_number}] All IPs used up - direct connection")
         else:
             self.update_status(f"[Replacement {original_number}] No proxy - direct connection")
 
