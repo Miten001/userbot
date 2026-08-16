@@ -1305,70 +1305,6 @@ class TeraBoxGUI:
         )
         self.start_btn.pack(side=tk.LEFT, padx=5)
 
-        self.stop_btn = tk.Button(
-            btn_frame,
-            text="Stop",
-            font=("Consolas", 11, "bold"),
-            bg="#ff9100",
-            fg="#000000",
-            activebackground="#ffab40",
-            padx=15,
-            pady=5,
-            relief=tk.FLAT,
-            cursor="hand2",
-            command=self._stop_automation,
-            state=tk.DISABLED,
-        )
-        self.stop_btn.pack(side=tk.LEFT, padx=5)
-
-        self.close_btn = tk.Button(
-            btn_frame,
-            text="Close Browsers",
-            font=("Consolas", 11, "bold"),
-            bg="#d50000",
-            fg="#ffffff",
-            activebackground="#ff1744",
-            padx=15,
-            pady=5,
-            relief=tk.FLAT,
-            cursor="hand2",
-            command=self._close_browsers,
-            state=tk.DISABLED,
-        )
-        self.close_btn.pack(side=tk.LEFT, padx=5)
-
-        self.restart_btn = tk.Button(
-            btn_frame,
-            text="Restart (New IPs)",
-            font=("Consolas", 11, "bold"),
-            bg="#9c27b0",
-            fg="#ffffff",
-            activebackground="#ab47bc",
-            padx=15,
-            pady=5,
-            relief=tk.FLAT,
-            cursor="hand2",
-            command=self._restart_automation,
-            state=tk.DISABLED,
-        )
-        self.restart_btn.pack(side=tk.LEFT, padx=5)
-
-        # Close All Tabs button - always enabled
-        self.close_all_btn = tk.Button(
-            btn_frame,
-            text="Close All Tabs",
-            font=("Consolas", 11, "bold"),
-            bg="#aa00ff",
-            fg="#ffffff",
-            activebackground="#d500f9",
-            padx=15,
-            pady=5,
-            relief=tk.FLAT,
-            cursor="hand2",
-            command=self._close_all_tabs,
-        )
-        self.close_all_btn.pack(side=tk.LEFT, padx=5)
-
         self.reset_ip_btn = tk.Button(
             btn_frame,
             text="Reset IP History",
@@ -1522,11 +1458,8 @@ class TeraBoxGUI:
         else:
             custom_proxies = None  # no proxy at all
 
-        # Disable start button, enable stop button
+        # Disable start button
         self.start_btn.config(state=tk.DISABLED)
-        self.stop_btn.config(state=tk.NORMAL)
-        self.close_btn.config(state=tk.NORMAL)
-        self.restart_btn.config(state=tk.NORMAL)
         self.is_running = True
         self._stop_event.clear()
         self.progress.start(10)
@@ -1555,7 +1488,6 @@ class TeraBoxGUI:
         if self.is_running:
             self._stop_event.set()
             self._update_status("\nStopping automation... please wait.")
-            self.stop_btn.config(state=tk.DISABLED)
 
     def _run_automation_thread(self, num_pages, custom_proxies=None, url=None):
         """
@@ -1577,8 +1509,6 @@ class TeraBoxGUI:
     def _on_automation_complete(self):
         """Called when automation completes."""
         self.start_btn.config(state=tk.NORMAL)
-        self.stop_btn.config(state=tk.DISABLED)
-        self.restart_btn.config(state=tk.DISABLED)
         self.is_running = False
         self.progress.stop()
         if self._stop_event.is_set():
@@ -1618,7 +1548,6 @@ class TeraBoxGUI:
         self.is_running = False
         self._stop_event.clear()
         self.start_btn.config(state=tk.NORMAL)
-        self.stop_btn.config(state=tk.DISABLED)
         self.progress.stop()
 
         # Wait then auto-start
@@ -1629,7 +1558,6 @@ class TeraBoxGUI:
         if self.automation:
             self.automation.close_all()
             self._update_status("All browsers closed.")
-        self.close_btn.config(state=tk.DISABLED)
 
     def _close_all_tabs(self):
         """Close all open browser tabs/instances and kill Chrome processes."""
@@ -1650,12 +1578,10 @@ class TeraBoxGUI:
             self._update_status("All Chrome processes killed.")
         except Exception:
             pass
-        self.close_btn.config(state=tk.DISABLED)
         if self.is_running:
             self._stop_event.set()
             self.is_running = False
             self.start_btn.config(state=tk.NORMAL)
-            self.stop_btn.config(state=tk.DISABLED)
             self.progress.stop()
 
     def run(self):
