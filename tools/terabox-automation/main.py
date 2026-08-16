@@ -102,6 +102,31 @@ USED_PROXIES = set()
 IP_USAGE_COUNT = {}
 MAX_IP_USES = 2
 
+import json as _json
+# File to persist IP usage counts across app restarts
+IP_USAGE_FILE = os.path.join(os.path.expanduser("~"), ".terabox_ip_usage.json")
+
+def _load_ip_usage():
+    """Load IP usage counts from file."""
+    try:
+        if os.path.exists(IP_USAGE_FILE):
+            with open(IP_USAGE_FILE, "r") as f:
+                return _json.load(f)
+    except Exception:
+        pass
+    return {}
+
+def _save_ip_usage(data):
+    """Save IP usage counts to file."""
+    try:
+        with open(IP_USAGE_FILE, "w") as f:
+            _json.dump(data, f)
+    except Exception:
+        pass
+
+# Load persisted IP usage counts (survives app restarts)
+IP_USAGE_COUNT = _load_ip_usage()
+
 # Remote debugging port for Chrome
 DEBUG_PORT = 9222
 
@@ -328,6 +353,7 @@ class TeraBoxAutomation:
         try:
             host = self._parse_proxy(proxy)["host"]
             IP_USAGE_COUNT[host] = IP_USAGE_COUNT.get(host, 0) + 1
+            _save_ip_usage(IP_USAGE_COUNT)
         except Exception:
             pass
 
@@ -1330,6 +1356,21 @@ class TeraBoxGUI:
         )
         self.close_all_btn.pack(side=tk.LEFT, padx=5)
 
+        self.reset_ip_btn = tk.Button(
+            btn_frame,
+            text="Reset IP History",
+            font=("Consolas", 11, "bold"),
+            bg="#607d8b",
+            fg="#ffffff",
+            activebackground="#78909c",
+            padx=15,
+            pady=5,
+            relief=tk.FLAT,
+            cursor="hand2",
+            command=self._reset_ip_history,
+        )
+        self.reset_ip_btn.pack(side=tk.LEFT, padx=5)
+
         # Status frame
         status_frame = tk.Frame(self.root, bg=bg_dark, pady=5, padx=20)
         status_frame.pack(fill=tk.BOTH, expand=True)
@@ -1421,6 +1462,13 @@ class TeraBoxGUI:
             self.counter_label.config(text=f"Opened: {success} | Failed: {failed}")
 
         self.root.after(0, _update)
+
+    def _reset_ip_history(self):
+        """Clear the IP usage history."""
+        global IP_USAGE_COUNT
+        IP_USAGE_COUNT.clear()
+        _save_ip_usage(IP_USAGE_COUNT)
+        self._update_status("IP usage history cleared! All IPs can be used again.")
 
     def _start_automation(self):
         """Start the automation in a separate thread."""
