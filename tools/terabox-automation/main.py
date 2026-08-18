@@ -289,34 +289,55 @@ class TeraBoxAutomation:
         patch = random.randint(0, 999)
         user_agent = f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{chrome_version}.0.{build}.{patch} Safari/537.36"
 
-        # More random screen resolutions
-        screen_width = random.choice([1920, 1366, 1536, 1440, 1280, 1600, 2560, 1680, 1360, 1024])
-        screen_height = random.choice([1080, 768, 864, 900, 720, 1024, 1440, 1050, 800])
+        # More random screen resolutions (wider pool for extra entropy)
+        screen_width = random.choice([1920, 1366, 1536, 1440, 1280, 1600, 2560, 1680, 1360, 1024, 3840, 3440, 2048, 1920, 1728])
+        screen_height = random.choice([1080, 768, 864, 900, 720, 1024, 1440, 1050, 800, 2160, 1600, 1200, 1152, 1050])
 
-        webgl_vendors = [
-            "Google Inc. (NVIDIA)",
-            "Google Inc. (AMD)",
-            "Google Inc. (Intel)",
-            "Google Inc.",
+        # Internally consistent WebGL vendor/renderer pairs so a NVIDIA vendor is
+        # always matched with an NVIDIA renderer, an AMD vendor with an AMD
+        # renderer, etc. This avoids implausible mismatched fingerprints.
+        webgl_pairs = [
+            ("Google Inc. (NVIDIA)", "ANGLE (NVIDIA, NVIDIA GeForce GTX 1650 Direct3D11 vs_5_0 ps_5_0)"),
+            ("Google Inc. (NVIDIA)", "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0)"),
+            ("Google Inc. (NVIDIA)", "ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 Direct3D11 vs_5_0 ps_5_0)"),
+            ("Google Inc. (NVIDIA)", "ANGLE (NVIDIA, NVIDIA GeForce GTX 1660 Ti Direct3D11 vs_5_0 ps_5_0)"),
+            ("Google Inc. (AMD)", "ANGLE (AMD, AMD Radeon RX 580 Direct3D11 vs_5_0 ps_5_0)"),
+            ("Google Inc. (AMD)", "ANGLE (AMD, AMD Radeon(TM) Graphics Direct3D11 vs_5_0 ps_5_0)"),
+            ("Google Inc. (AMD)", "ANGLE (AMD, AMD Radeon RX 6600 Direct3D11 vs_5_0 ps_5_0)"),
+            ("Google Inc. (AMD)", "ANGLE (AMD, AMD Radeon RX 7800 XT Direct3D11 vs_5_0 ps_5_0)"),
+            ("Google Inc. (Intel)", "ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0)"),
+            ("Google Inc. (Intel)", "ANGLE (Intel, Intel(R) Iris(R) Xe Graphics Direct3D11 vs_5_0 ps_5_0)"),
+            ("Google Inc. (Intel)", "ANGLE (Intel, Intel(R) HD Graphics 620 Direct3D11 vs_5_0 ps_5_0)"),
+            ("Google Inc. (Intel)", "ANGLE (Intel, Intel(R) Arc(TM) A770 Graphics Direct3D11 vs_5_0 ps_5_0)"),
         ]
+        webgl_vendor, webgl_renderer = random.choice(webgl_pairs)
 
-        webgl_renderers = [
-            "ANGLE (NVIDIA, NVIDIA GeForce GTX 1650 Direct3D11 vs_5_0 ps_5_0)",
-            "ANGLE (AMD, AMD Radeon RX 580 Direct3D11 vs_5_0 ps_5_0)",
-            "ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0)",
-            "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0)",
-            "ANGLE (AMD, AMD Radeon(TM) Graphics Direct3D11 vs_5_0 ps_5_0)",
-            "ANGLE (Intel, Intel(R) Iris(R) Xe Graphics Direct3D11 vs_5_0 ps_5_0)",
-        ]
-
-        languages = ["en-US", "en-GB", "en-IN", "en-AU", "en-CA"]
+        languages = ["en-US", "en-GB", "en-IN", "en-AU", "en-CA", "en-NZ", "en-IE", "en-ZA", "en-SG", "en-PH"]
         platforms = ["Win32", "Win64", "MacIntel", "Linux x86_64"]
-        timezones = ["Asia/Kolkata", "America/New_York", "Europe/London", "Asia/Dubai", "America/Los_Angeles", "Europe/Berlin"]
+
+        # Timezone name paired with its matching JS getTimezoneOffset() value (in
+        # minutes, using the JS convention where positive means behind UTC). Picking
+        # the pair together keeps timezone and offset internally consistent.
+        timezone_pairs = [
+            ("Asia/Kolkata", -330),
+            ("America/New_York", 300),
+            ("Europe/London", 0),
+            ("Asia/Dubai", -240),
+            ("America/Los_Angeles", 480),
+            ("Europe/Berlin", -60),
+            ("Asia/Singapore", -480),
+            ("Australia/Sydney", -600),
+            ("America/Chicago", 360),
+            ("Europe/Paris", -60),
+            ("Asia/Tokyo", -540),
+            ("America/Toronto", 300),
+            ("Asia/Hong_Kong", -480),
+            ("America/Sao_Paulo", 180),
+        ]
+        timezone, timezone_offset = random.choice(timezone_pairs)
 
         # Random screen color depth
         color_depth = random.choice([24, 30, 32])
-        # Random timezone offset in minutes
-        timezone_offset = random.choice([-480, -420, -360, -300, -240, 0, 60, 120, 180, 210, 270, 330, 345, 480, 540])
 
         return {
             "user_agent": user_agent,
@@ -324,14 +345,92 @@ class TeraBoxAutomation:
             "screen": (screen_width, screen_height),
             "color_depth": color_depth,
             "timezone_offset": timezone_offset,
-            "webgl_vendor": random.choice(webgl_vendors),
-            "webgl_renderer": random.choice(webgl_renderers),
+            "webgl_vendor": webgl_vendor,
+            "webgl_renderer": webgl_renderer,
             "language": random.choice(languages),
             "platform": random.choice(platforms),
-            "timezone": random.choice(timezones),
-            "hardware_concurrency": random.choice([2, 4, 6, 8, 12, 16]),
+            "timezone": timezone,
+            "hardware_concurrency": random.choice([2, 4, 6, 8, 10, 12, 16, 20, 24]),
             "device_memory": random.choice([2, 4, 8, 16, 32]),
         }
+
+    def _build_spoof_script(self, fingerprint, canvas_noise):
+        """Build the JS fingerprint spoofing script for a given fingerprint.
+
+        Shared by the primary launch path (``run``) and the failure-recovery
+        path (``_open_replacement_window``) so every window applies the full,
+        internally-consistent fingerprint: navigator/screen fields, canvas
+        noise, WebGL vendor/renderer, and timezone.
+
+        NOTE: this is an f-string, so literal JS braces must be doubled ({{ }}).
+        """
+        return f"""
+Object.defineProperty(navigator, 'platform', {{get: () => '{fingerprint["platform"]}'}});
+Object.defineProperty(navigator, 'hardwareConcurrency', {{get: () => {fingerprint["hardware_concurrency"]}}});
+Object.defineProperty(navigator, 'deviceMemory', {{get: () => {fingerprint["device_memory"]}}});
+Object.defineProperty(navigator, 'languages', {{get: () => ['{fingerprint["language"]}', 'en']}});
+Object.defineProperty(screen, 'width', {{get: () => {fingerprint["screen"][0]}}});
+Object.defineProperty(screen, 'height', {{get: () => {fingerprint["screen"][1]}}});
+Object.defineProperty(screen, 'colorDepth', {{get: () => {fingerprint["color_depth"]}}});
+const noise = {canvas_noise};
+const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
+HTMLCanvasElement.prototype.toDataURL = function(type) {{
+    const ctx = this.getContext('2d');
+    if (ctx) {{
+        const imageData = ctx.getImageData(0, 0, this.width, this.height);
+        for (let i = 0; i < imageData.data.length; i += 4) {{
+            imageData.data[i] = imageData.data[i] + (noise * (Math.random() - 0.5) * 2) | 0;
+        }}
+        ctx.putImageData(imageData, 0, 0);
+    }}
+    return originalToDataURL.apply(this, arguments);
+}};
+// --- WebGL vendor/renderer spoofing (UNMASKED_VENDOR_WEBGL / UNMASKED_RENDERER_WEBGL) ---
+(function() {{
+    const spoofVendor = '{fingerprint["webgl_vendor"]}';
+    const spoofRenderer = '{fingerprint["webgl_renderer"]}';
+    function patchGetParameter(proto) {{
+        if (!proto || !proto.getParameter) return;
+        const original = proto.getParameter;
+        proto.getParameter = function(parameter) {{
+            if (parameter === 37445) {{ return spoofVendor; }}    // UNMASKED_VENDOR_WEBGL
+            if (parameter === 37446) {{ return spoofRenderer; }}  // UNMASKED_RENDERER_WEBGL
+            return original.apply(this, arguments);
+        }};
+    }}
+    if (typeof WebGLRenderingContext !== 'undefined') {{
+        patchGetParameter(WebGLRenderingContext.prototype);
+    }}
+    if (typeof WebGL2RenderingContext !== 'undefined') {{
+        patchGetParameter(WebGL2RenderingContext.prototype);
+    }}
+}})();
+// --- Timezone spoofing ---
+(function() {{
+    const spoofOffset = {fingerprint["timezone_offset"]};
+    const spoofTimeZone = '{fingerprint["timezone"]}';
+    Date.prototype.getTimezoneOffset = function() {{ return spoofOffset; }};
+    try {{
+        const OriginalDTF = Intl.DateTimeFormat;
+        const patchedResolved = function(target) {{
+            const original = target.resolvedOptions.bind(target);
+            target.resolvedOptions = function() {{
+                const opts = original();
+                opts.timeZone = spoofTimeZone;
+                return opts;
+            }};
+            return target;
+        }};
+        const DTFProxy = function(...args) {{
+            const instance = new OriginalDTF(...args);
+            return patchedResolved(instance);
+        }};
+        DTFProxy.prototype = OriginalDTF.prototype;
+        DTFProxy.supportedLocalesOf = OriginalDTF.supportedLocalesOf;
+        Intl.DateTimeFormat = DTFProxy;
+    }} catch (e) {{}}
+}})();
+"""
 
     def _page_has_error(self, driver):
         """Return True if the page failed to load properly (error text or empty body)."""
@@ -992,28 +1091,7 @@ class TeraBoxAutomation:
 
             # Inject fingerprint with unique canvas noise per window
             canvas_noise = random.uniform(0.001, 0.01)
-            spoof_script = f"""
-Object.defineProperty(navigator, 'platform', {{get: () => '{fingerprint["platform"]}'}});
-Object.defineProperty(navigator, 'hardwareConcurrency', {{get: () => {fingerprint["hardware_concurrency"]}}});
-Object.defineProperty(navigator, 'deviceMemory', {{get: () => {fingerprint["device_memory"]}}});
-Object.defineProperty(navigator, 'languages', {{get: () => ['{fingerprint["language"]}', 'en']}});
-Object.defineProperty(screen, 'width', {{get: () => {fingerprint["screen"][0]}}});
-Object.defineProperty(screen, 'height', {{get: () => {fingerprint["screen"][1]}}});
-Object.defineProperty(screen, 'colorDepth', {{get: () => {fingerprint["color_depth"]}}});
-const noise = {canvas_noise};
-const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
-HTMLCanvasElement.prototype.toDataURL = function(type) {{
-    const ctx = this.getContext('2d');
-    if (ctx) {{
-        const imageData = ctx.getImageData(0, 0, this.width, this.height);
-        for (let i = 0; i < imageData.data.length; i += 4) {{
-            imageData.data[i] = imageData.data[i] + (noise * (Math.random() - 0.5) * 2) | 0;
-        }}
-        ctx.putImageData(imageData, 0, 0);
-    }}
-    return originalToDataURL.apply(this, arguments);
-}};
-"""
+            spoof_script = self._build_spoof_script(fingerprint, canvas_noise)
             try:
                 driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {'source': spoof_script})
             except Exception:
@@ -1097,6 +1175,15 @@ HTMLCanvasElement.prototype.toDataURL = function(type) {{
             return
 
         self.drivers.append(driver)
+
+        # Inject the same enriched fingerprint spoofing used on the primary path
+        # so replacement windows are just as unique (WebGL + timezone included).
+        canvas_noise = random.uniform(0.001, 0.01)
+        spoof_script = self._build_spoof_script(fingerprint, canvas_noise)
+        try:
+            driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {'source': spoof_script})
+        except Exception:
+            pass
 
         # Authenticated proxy: arm CDP Fetch auth, then navigate to the target.
         if proxy:
