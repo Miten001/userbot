@@ -926,9 +926,22 @@ class TeraBoxAutomation:
             if raw_proxies:
                 self.update_status(f"Got {len(raw_proxies)} raw proxies. Verifying countries...")
                 self.proxies = []
+                skipped_prev_day_auto = 0
                 for idx, p in enumerate(raw_proxies[:100], 1):
                     if self._is_stopped():
                         break
+                    # Enforce the "no IP reuse across different days" rule at
+                    # collection time. Do these cheap local checks BEFORE the
+                    # country-API call so previously-used / over-limit IPs don't
+                    # consume the 30 collection slots (which would later be
+                    # filtered out in PHASE 1, leaving few fresh IPs).
+                    if self._ip_used_on_earlier_day(p):
+                        skipped_prev_day_auto += 1
+                        self.update_status(f"  [{idx}] {p} -> SKIP (used on previous day)")
+                        continue
+                    if self._get_ip_use_count(p) >= MAX_IP_USES:
+                        self.update_status(f"  [{idx}] {p} -> SKIP (reuse limit reached)")
+                        continue
                     country = self._verify_proxy_country(p)
                     if country:
                         if p not in USED_PROXIES:
@@ -939,6 +952,8 @@ class TeraBoxAutomation:
                             self.update_status(f"  [{idx}] {p} -> {country} SKIP (already used)")
                     if len(self.proxies) >= 30:
                         break
+                if skipped_prev_day_auto:
+                    self.update_status(f"Skipped {skipped_prev_day_auto} auto proxies already used on previous days")
                 if self.proxies:
                     self.update_status(f"\n{len(self.proxies)} verified proxies (SA,AE,US,KR,JP,MX,QA only)!")
                 else:
