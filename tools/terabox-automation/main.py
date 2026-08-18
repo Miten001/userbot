@@ -10,6 +10,7 @@ then connects Selenium for Log In -> Sign Up -> Email selection flow.
 
 import atexit
 import base64
+import datetime
 import os
 import random
 import shutil
@@ -135,6 +136,32 @@ def _save_ip_usage(data):
 
 # Load persisted IP usage counts (survives app restarts)
 IP_USAGE_COUNT = _load_ip_usage()
+
+# Track the dates each IP host has been used on (host -> list of ISO date strings).
+# This is stored in a SEPARATE file so the existing usage-count file/logic stays
+# fully backward compatible. It powers the "no IP reuse across different days" rule.
+IP_DATE_FILE = os.path.join(os.path.expanduser("~"), ".terabox_ip_dates.json")
+
+def _load_ip_dates():
+    """Load per-host used-date history from file."""
+    try:
+        if os.path.exists(IP_DATE_FILE):
+            with open(IP_DATE_FILE, "r") as f:
+                return _json.load(f)
+    except Exception:
+        pass
+    return {}
+
+def _save_ip_dates(data):
+    """Save per-host used-date history to file."""
+    try:
+        with open(IP_DATE_FILE, "w") as f:
+            _json.dump(data, f)
+    except Exception:
+        pass
+
+# Load persisted per-host used-date history (survives app restarts)
+IP_LAST_USED_DATE = _load_ip_dates()
 
 # Remote debugging port for Chrome
 DEBUG_PORT = 9222
@@ -360,12 +387,47 @@ class TeraBoxAutomation:
         except Exception:
             return 0
 
+    def _ip_used_on_earlier_day(self, proxy):
+        """Return True if this proxy's IP host was used on a date other than today.
+
+        Used to enforce the "no IP reuse across different days" rule: any host
+        with a recorded use on a previous day is excluded from selection.
+        """
+        try:
+            host = self._parse_proxy(proxy)["host"]
+            today = datetime.date.today().isoformat()
+            recorded = IP_LAST_USED_DATE.get(host)
+            if not recorded:
+                return False
+            # Support both list-of-dates and single-string storage shapes.
+            if isinstance(recorded, str):
+                dates = [recorded]
+            else:
+                dates = list(recorded)
+            return any(d != today for d in dates)
+        except Exception:
+            return False
+
     def _mark_ip_used(self, proxy):
-        """Increment the usage count for this proxy's IP."""
+        """Increment the usage count for this proxy's IP and record today's date."""
         try:
             host = self._parse_proxy(proxy)["host"]
             IP_USAGE_COUNT[host] = IP_USAGE_COUNT.get(host, 0) + 1
             _save_ip_usage(IP_USAGE_COUNT)
+            # Record today's date for this host (date-aware history for the
+            # cross-day no-reuse rule). Store a de-duplicated list of ISO dates.
+            today = datetime.date.today().isoformat()
+            existing = IP_LAST_USED_DATE.get(host)
+            if isinstance(existing, str):
+                dates = [existing]
+            elif isinstance(existing, list):
+                dates = list(existing)
+            else:
+                dates = []
+            if today not in dates:
+                dates.append(today)
+            IP_LAST_USED_DATE[host] = dates
+            _save_ip_dates(IP_LAST_USED_DATE)
         except Exception:
             pass
 
@@ -897,7 +959,16 @@ class TeraBoxAutomation:
         # Create a shuffled pool for unique assignment - only IPs used less than MAX_IP_USES times
         # Track IP hosts used in THIS run to prevent same-run duplicates
         used_hosts_this_run = set()
-        available_proxies = [p for p in self.proxies if self._get_ip_use_count(p) < MAX_IP_USES]
+        available_proxies = [
+            p for p in self.proxies
+            if self._get_ip_use_count(p) < MAX_IP_USES
+            and not self._ip_used_on_earlier_day(p)
+        ]
+        # Report how many proxies were skipped because they were used on an earlier day.
+        if self.proxies:
+            skipped_prev_day = sum(1 for p in self.proxies if self._ip_used_on_earlier_day(p))
+            if skipped_prev_day:
+                self.update_status(f"Skipped {skipped_prev_day} IP(s) used on previous days")
         random.shuffle(available_proxies)
         for page_number in range(1, num_pages + 1):
             if self._is_stopped():
@@ -911,6 +982,7 @@ class TeraBoxAutomation:
                     available_proxies = [
                         p for p in self.proxies
                         if self._get_ip_use_count(p) < MAX_IP_USES
+                        and not self._ip_used_on_earlier_day(p)
                         and self._parse_proxy(p)["host"] not in used_hosts_this_run
                     ]
                     random.shuffle(available_proxies)
@@ -1068,7 +1140,14 @@ HTMLCanvasElement.prototype.toDataURL = function(type) {{
         # Pick a new random proxy
         proxy = None
         if self.proxies:
-            candidates = [p for p in self.proxies if self._get_ip_use_count(p) < MAX_IP_USES]
+            candidates = [
+                p for p in self.proxies
+                if self._get_ip_use_count(p) < MAX_IP_USES
+                and not self._ip_used_on_earlier_day(p)
+            ]
+            skipped_prev_day = sum(1 for p in self.proxies if self._ip_used_on_earlier_day(p))
+            if skipped_prev_day:
+                self.update_status(f"[Replacement {original_number}] Skipped {skipped_prev_day} IP(s) used on previous days")
             if candidates:
                 proxy = random.choice(candidates)
                 self._mark_ip_used(proxy)
@@ -1451,11 +1530,13 @@ class TeraBoxGUI:
         self.root.after(0, _update)
 
     def _reset_ip_history(self):
-        """Clear the IP usage history."""
-        global IP_USAGE_COUNT
+        """Clear the IP usage history (both the per-run count and daily history)."""
+        global IP_USAGE_COUNT, IP_LAST_USED_DATE
         IP_USAGE_COUNT.clear()
         _save_ip_usage(IP_USAGE_COUNT)
-        self._update_status("IP usage history cleared! All IPs can be used again.")
+        IP_LAST_USED_DATE.clear()
+        _save_ip_dates(IP_LAST_USED_DATE)
+        self._update_status("IP usage history cleared (including daily history)! All IPs can be used again.")
 
     def _start_automation(self):
         """Start the automation in a separate thread."""
