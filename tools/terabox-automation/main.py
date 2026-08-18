@@ -85,6 +85,15 @@ try:
 except ImportError:
     HAS_PYAUTOGUI = False
 
+# Shared CDP Fetch-based proxy authentication helper (stdlib-only, no new deps).
+# Make sure the tool's own directory is importable when launched from elsewhere.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from proxy_auth import start_cdp_proxy_auth
+    HAS_PROXY_AUTH = True
+except Exception:
+    HAS_PROXY_AUTH = False
+
 
 # Target URL
 TERABOX_URL = "https://1024terabox.com/s/1axTeTaTPATdSOQizMrGeJQ"
@@ -187,6 +196,9 @@ class TeraBoxAutomation:
         self.success_count = 0
         self.fail_count = 0
         self.counter_callback = None
+        # Keep references to running CDP proxy-auth handlers so their background
+        # threads are not garbage-collected while windows are open.
+        self._proxy_auth_clients = []
 
     def _update_counter(self):
         """Notify the GUI of the current success/fail counts (if a callback is set)."""
@@ -358,19 +370,43 @@ class TeraBoxAutomation:
             pass
 
     def _parse_proxy(self, proxy_string):
-        """Parse proxy string. Supports multiple formats:
-        - IP:PORT
-        - IP:PORT:USER:PASS
-        - USER:PASS@IP:PORT
-        """
-        proxy_string = proxy_string.strip()
+        """Parse a proxy string into a normalized record.
 
-        # Format: USER:PASS@IP:PORT
+        Supported formats (both authenticated notations normalize identically):
+        - ``IP:PORT``                  -> has_auth = False
+        - ``IP:PORT:USER:PASS``        -> has_auth = True
+        - ``USER:PASS@IP:PORT``        -> has_auth = True
+
+        The normalized record always exposes ``host``, ``port``, ``user``,
+        ``password``, ``server`` (``host:port``) and ``has_auth``. ``has_auth``
+        is True only when BOTH a username and password are present. The
+        ``host:port`` portion is split from the right so that credentials
+        containing separators are tolerated.
+        """
+        proxy_string = (proxy_string or "").strip()
+
+        # Format: USER:PASS@IP:PORT (split on the last '@'; host:port from the right)
         if "@" in proxy_string:
-            try:
-                auth_part, server_part = proxy_string.split("@")
-                user, password = auth_part.split(":")
-                host, port = server_part.split(":")
+            auth_part, server_part = proxy_string.rsplit("@", 1)
+            if ":" in auth_part and ":" in server_part:
+                user, password = auth_part.split(":", 1)
+                host, port = server_part.rsplit(":", 1)
+                if user and password and host and port:
+                    return {
+                        "host": host,
+                        "port": port,
+                        "user": user,
+                        "password": password,
+                        "server": f"{host}:{port}",
+                        "has_auth": True,
+                    }
+
+        # Format: IP:PORT:USER:PASS (host, port, then user:pass; pass may contain ':')
+        parts = proxy_string.split(":")
+        if len(parts) >= 4:
+            host, port, user = parts[0], parts[1], parts[2]
+            password = ":".join(parts[3:])
+            if host and port and user and password:
                 return {
                     "host": host,
                     "port": port,
@@ -379,21 +415,9 @@ class TeraBoxAutomation:
                     "server": f"{host}:{port}",
                     "has_auth": True,
                 }
-            except Exception:
-                pass
 
-        # Format: IP:PORT:USER:PASS or IP:PORT
-        parts = proxy_string.split(":")
-        if len(parts) == 4:
-            return {
-                "host": parts[0],
-                "port": parts[1],
-                "user": parts[2],
-                "password": parts[3],
-                "server": f"{parts[0]}:{parts[1]}",
-                "has_auth": True,
-            }
-        elif len(parts) == 2:
+        # Format: IP:PORT (no credentials)
+        if len(parts) == 2 and parts[0] and parts[1]:
             return {
                 "host": parts[0],
                 "port": parts[1],
@@ -402,72 +426,69 @@ class TeraBoxAutomation:
                 "server": f"{parts[0]}:{parts[1]}",
                 "has_auth": False,
             }
-        else:
-            return {"server": proxy_string, "has_auth": False, "user": None, "password": None}
 
-    def _create_proxy_auth_extension(self, user_data_dir, proxy_info):
-        """Create a Chrome extension that auto-fills proxy credentials."""
-        ext_dir = os.path.join(user_data_dir, "proxy_auth_ext")
-        os.makedirs(ext_dir, exist_ok=True)
-
-        manifest = '''
-{
-    "version": "1.0.0",
-    "manifest_version": 2,
-    "name": "Proxy Auth",
-    "permissions": [
-        "proxy",
-        "tabs",
-        "unlimitedStorage",
-        "storage",
-        "<all_urls>",
-        "webRequest",
-        "webRequestBlocking"
-    ],
-    "background": {
-        "scripts": ["background.js"]
-    },
-    "minimum_chrome_version": "22.0.0"
-}
-'''
-
-        background = '''
-var config = {
-    mode: "fixed_servers",
-    rules: {
-        singleProxy: {
-            scheme: "http",
-            host: "%s",
-            port: parseInt(%s)
-        },
-        bypassList: ["localhost"]
-    }
-};
-
-chrome.proxy.settings.set({value: config, scope: "regular"}, function() {});
-
-function callbackFn(details) {
-    return {
-        authCredentials: {
-            username: "%s",
-            password: "%s"
+        # Unrecognized -> treat as a plain server string with no auth
+        return {
+            "host": proxy_string,
+            "port": "",
+            "user": None,
+            "password": None,
+            "server": proxy_string,
+            "has_auth": False,
         }
-    };
-}
 
-chrome.webRequest.onAuthRequired.addListener(
-    callbackFn,
-    {urls: ["<all_urls>"]},
-    ['blocking']
-);
-''' % (proxy_info["host"], proxy_info["port"], proxy_info["user"], proxy_info["password"])
+    def _proxy_launch_args(self, proxy):
+        """Return the Chrome command-line args that route through ``proxy``.
 
-        with open(os.path.join(ext_dir, "manifest.json"), "w") as f:
-            f.write(manifest)
-        with open(os.path.join(ext_dir, "background.js"), "w") as f:
-            f.write(background)
+        Both authenticated and plain proxies use
+        ``--proxy-server=http://{host}:{port}`` (scheme included). Credentials
+        are NOT baked into the launch: they are supplied at runtime via CDP
+        Fetch authentication (see :meth:`_arm_proxy_auth`). This replaces the
+        old Manifest V2 ``--load-extension`` path that modern Chrome ignores.
+        """
+        if not proxy:
+            return []
+        info = self._parse_proxy(proxy)
+        host = info.get("host")
+        port = info.get("port")
+        if host and port:
+            return [f"--proxy-server=http://{host}:{port}"]
+        return []
 
-        return ext_dir
+    def _proxy_start_url(self, url, proxy):
+        """Choose the initial URL Chrome launches to.
+
+        Authenticated proxies launch to ``about:blank`` so CDP Fetch auth can be
+        armed BEFORE the first credentialed navigation; plain proxies and direct
+        connections launch straight to the target URL (unchanged behavior).
+        """
+        if proxy and self._parse_proxy(proxy).get("has_auth"):
+            return "about:blank"
+        return url
+
+    def _arm_proxy_auth(self, driver, debug_port, proxy_info):
+        """Arm CDP Fetch-based authentication for an authenticated proxy.
+
+        Answers the proxy's auth challenge (HTTP 407 and HTTPS CONNECT) with the
+        parsed credentials. Safe to call for non-authenticated proxies (no-op).
+        """
+        user = proxy_info.get("user") if proxy_info else None
+        password = proxy_info.get("password") if proxy_info else None
+        if not (user and password):
+            return
+        if HAS_PROXY_AUTH:
+            try:
+                client = start_cdp_proxy_auth(debug_port, user, password)
+                if client:
+                    self._proxy_auth_clients.append(client)
+                    return
+            except Exception:
+                pass
+        # Fallback: best-effort enable via Selenium's CDP (commands only).
+        try:
+            driver.execute_cdp_cmd("Fetch.enable", {"handleAuthRequests": True})
+        except Exception:
+            pass
 
     def launch_chrome_subprocess(self, url, debug_port, user_agent=None, language=None, proxy=None):
         """
@@ -526,15 +547,14 @@ chrome.webRequest.onAuthRequired.addListener(
         if language:
             args.append(f"--lang={language}")
         if proxy:
-            proxy_info = self._parse_proxy(proxy)
-            if proxy_info.get("has_auth"):
-                # Use extension for authenticated proxy (avoids username/password popup)
-                ext_dir = self._create_proxy_auth_extension(user_data_dir, proxy_info)
-                args.append(f"--load-extension={ext_dir}")
-            else:
-                args.append(f"--proxy-server=http://{proxy_info['server']}")
+            # Route ALL proxies (authenticated or plain) through --proxy-server
+            # with an explicit http:// scheme. Authenticated credentials are
+            # delivered at runtime via CDP Fetch auth, not via an extension.
+            args.extend(self._proxy_launch_args(proxy))
 
-        args.append(url)
+        # Authenticated proxies start at about:blank so auth can be armed before
+        # the first credentialed navigation; everything else opens the URL now.
+        args.append(self._proxy_start_url(url, proxy))
 
         try:
             process = subprocess.Popen(
@@ -954,11 +974,18 @@ chrome.webRequest.onAuthRequired.addListener(
 
             self.drivers.append(driver)
 
-            # Proxy auth is handled by the Chrome extension loaded at launch
+            # Authenticated proxy: arm CDP Fetch auth, THEN navigate to the
+            # target URL (Chrome was launched to about:blank so the credential
+            # challenge is answered on the very first request).
             if proxy:
                 proxy_info = self._parse_proxy(proxy)
                 if proxy_info.get("has_auth"):
-                    self.update_status(f"[Window {page_number}] Proxy auth handled via extension.")
+                    self.update_status(f"[Window {page_number}] Arming proxy auth via CDP Fetch...")
+                    self._arm_proxy_auth(driver, port, proxy_info)
+                    try:
+                        driver.get(target_url)
+                    except Exception:
+                        pass
 
             # Show fingerprint summary per window
             self.update_status(f"[Window {page_number}] Fingerprint: Chrome/{fingerprint['chrome_version']} | {fingerprint['platform']} | {fingerprint['screen'][0]}x{fingerprint['screen'][1]}")
@@ -1071,11 +1098,16 @@ HTMLCanvasElement.prototype.toDataURL = function(type) {{
 
         self.drivers.append(driver)
 
-        # Proxy auth is handled by the Chrome extension loaded at launch
+        # Authenticated proxy: arm CDP Fetch auth, then navigate to the target.
         if proxy:
             proxy_info = self._parse_proxy(proxy)
             if proxy_info.get("has_auth"):
-                self.update_status(f"[Replacement {original_number}] Proxy auth handled via extension.")
+                self.update_status(f"[Replacement {original_number}] Arming proxy auth via CDP Fetch...")
+                self._arm_proxy_auth(driver, port, proxy_info)
+                try:
+                    driver.get(target_url)
+                except Exception:
+                    pass
 
         # Zoom out to 80%
         try:
@@ -1097,6 +1129,12 @@ HTMLCanvasElement.prototype.toDataURL = function(type) {{
 
     def close_all(self):
         """Close all open browser instances and Chrome processes."""
+        for client in self._proxy_auth_clients:
+            try:
+                client.stop()
+            except Exception:
+                pass
+        self._proxy_auth_clients = []
         for driver in self.drivers:
             try:
                 driver.quit()

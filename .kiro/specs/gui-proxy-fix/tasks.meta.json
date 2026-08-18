@@ -1,0 +1,13 @@
+{
+  "pbtResults": {
+    "1. Write bug condition exploration tests (authenticated proxy auth never delivered)": {
+      "status": "passed",
+      "lastRunTimestamp": 1787059006467
+    },
+    "2. Write preservation property tests (BEFORE implementing the fix)": {
+      "status": "passed",
+      "lastRunTimestamp": 1787059007651
+    }
+  },
+  "executionHistory": {}
+}
