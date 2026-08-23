@@ -1,0 +1,176 @@
+"""Domain service interfaces (contracts).
+
+These ``typing.Protocol`` definitions establish the contracts that the
+concrete infrastructure and domain components implement against. Declaring
+them separately keeps the layers decoupled and makes the components easy to
+substitute (real vs. mock) in tests.
+
+Design references: Components 1-6.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Awaitable, Callable, Optional, Protocol, runtime_checkable
+
+from proxy_scraper.domain.models import (
+    ExportFormat,
+    ExportOutcome,
+    GeoInfo,
+    ProxyCandidate,
+    ProxyFilter,
+    ProxyResult,
+    ScrapeOutcome,
+    ScrapeProgress,
+)
+
+
+# ---------------------------------------------------------------------------
+# Configuration value objects
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ValidationConfig:
+    """Tunable parameters for the ValidationEngine."""
+
+    judge_url: str = "http://httpbin.org/get"
+    https_judge_url: str = "https://httpbin.org/get"
+    timeout_seconds: float = 8.0
+    retries: int = 1
+    max_latency_ms: int = 5000
+
+
+@dataclass(frozen=True)
+class HttpResponse:
+    """A minimal, framework-agnostic HTTP response returned by the client."""
+
+    status: int
+    headers: dict[str, str]
+    body: str
+    latency_ms: int
+
+    @property
+    def ok(self) -> bool:
+        return 200 <= self.status < 400
+
+
+# ---------------------------------------------------------------------------
+# Infrastructure contract: HTTP client
+# ---------------------------------------------------------------------------
+
+
+@runtime_checkable
+class HttpClient(Protocol):
+    """Async HTTP client abstraction used by sources and the validator."""
+
+    async def get(
+        self,
+        url: str,
+        *,
+        proxy: Optional[ProxyCandidate] = None,
+        timeout: Optional[float] = None,
+    ) -> HttpResponse:
+        """Issue a GET request, optionally routed *through* a proxy.
+
+        Must attach no cookies/tokens/personal data (Requirement 18.2).
+        Raises on network failure so callers can time / classify it.
+        """
+        ...
+
+
+# ---------------------------------------------------------------------------
+# Domain contract: proxy sources
+# ---------------------------------------------------------------------------
+
+
+@runtime_checkable
+class ProxySource(Protocol):
+    """A pluggable adapter that fetches proxy candidates from one source."""
+
+    name: str
+
+    async def fetch(self, client: HttpClient) -> list[ProxyCandidate]:
+        """Return raw candidates parsed from this source.
+
+        MUST NOT raise: return ``[]`` on any failure (Requirement 14.3). The
+        ScraperManager records the error in the SourceReport separately.
+        """
+        ...
+
+
+# ---------------------------------------------------------------------------
+# Domain contract: scraper manager
+# ---------------------------------------------------------------------------
+
+
+@runtime_checkable
+class ScraperManager(Protocol):
+    def register(self, source: ProxySource) -> None:
+        ...
+
+    async def scrape_all(
+        self,
+        client: HttpClient,
+        *,
+        progress: Optional[Callable[[ScrapeProgress], None]] = None,
+        is_cancelled: Optional[Callable[[], bool]] = None,
+    ) -> ScrapeOutcome:
+        """Fetch from all sources concurrently, dedupe, and return candidates
+        plus a per-source report (Requirement 1)."""
+        ...
+
+
+# ---------------------------------------------------------------------------
+# Domain contract: validation engine
+# ---------------------------------------------------------------------------
+
+
+@runtime_checkable
+class ValidationEngine(Protocol):
+    async def check(
+        self,
+        candidate: ProxyCandidate,
+        cfg: ValidationConfig,
+    ) -> ProxyResult:
+        """Attempt a timed judge request through the proxy, classify anonymity,
+        measure latency, and mark alive/dead. Never raises (Requirement 14.4)."""
+        ...
+
+
+# ---------------------------------------------------------------------------
+# Domain contract: geolocation service
+# ---------------------------------------------------------------------------
+
+
+@runtime_checkable
+class GeoLocationService(Protocol):
+    async def locate(self, ip: str) -> GeoInfo:
+        """Resolve country code/name for an IP (Requirement 5). Never raises."""
+        ...
+
+
+# ---------------------------------------------------------------------------
+# Domain contract: export service
+# ---------------------------------------------------------------------------
+
+
+@runtime_checkable
+class ExportService(Protocol):
+    def export(
+        self,
+        results: list[ProxyResult],
+        fmt: ExportFormat,
+        path: str,
+    ) -> ExportOutcome:
+        """Write results to disk (Requirement 13). Never raises; failures are
+        reported via ``ExportOutcome.success == False``."""
+        ...
+
+
+# ---------------------------------------------------------------------------
+# Callback type aliases used by the application layer
+# ---------------------------------------------------------------------------
+
+ProgressCallback = Callable[[ScrapeProgress], None]
+ResultCallback = Callable[[ProxyResult], None]

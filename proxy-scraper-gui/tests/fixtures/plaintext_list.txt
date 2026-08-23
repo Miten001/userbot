@@ -1,0 +1,6 @@
+203.0.113.10:8080
+198.51.100.20:1080
+socks5://192.0.2.30:1080
+# a comment line that should be ignored
+garbage line without a port
+1.2.3.4:70000
