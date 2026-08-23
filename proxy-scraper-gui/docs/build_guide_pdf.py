@@ -156,15 +156,78 @@ class GuideBuilder:
         self.pdf.set_text_color(*COLOR_TEXT)
         self.pdf.ln(1.5)
 
+    def _wrap_code_line(self, text, inner_width, cont_indent="  "):
+        """Wrap a single command line to fit inner_width using the current font.
+
+        Breaks at spaces when possible, otherwise breaks mid-token (hard
+        character wrap) so that space-less URLs never overflow. Continuation
+        lines are visually indented with ``cont_indent`` (display-only).
+        Returns a list of physical line strings.
+        """
+        text = ascii_safe(text)
+        # Fast path: already fits on a single physical line.
+        if self.pdf.get_string_width(text) <= inner_width:
+            return [text]
+
+        physical = []
+        first = True
+        remaining = text
+        while remaining:
+            prefix = "" if first else cont_indent
+            avail = inner_width - self.pdf.get_string_width(prefix)
+            # Guard against a pathological case where even the indent is too wide.
+            if avail <= 0:
+                avail = inner_width
+                prefix = ""
+            # Greedily pack as many characters as fit.
+            take = 0
+            for i in range(1, len(remaining) + 1):
+                if self.pdf.get_string_width(remaining[:i]) <= avail:
+                    take = i
+                else:
+                    break
+            if take <= 0:
+                take = 1  # always make progress
+            chunk = remaining[:take]
+            rest = remaining[take:]
+            # Prefer breaking at a space if there is one and there is more to come.
+            if rest and " " in chunk.rstrip():
+                # Do not break on a leading space; find last space within chunk.
+                break_at = chunk.rstrip().rfind(" ")
+                if break_at > 0:
+                    # Only use the space break if it keeps reasonable line usage.
+                    chunk = remaining[:break_at]
+                    rest = remaining[break_at:].lstrip(" ")
+            physical.append(prefix + chunk)
+            remaining = rest
+            first = False
+        return physical
+
     def code_block(self, lines):
-        """Render a monospace command block in a shaded box."""
+        """Render a monospace command block in a shaded box.
+
+        Long command lines are wrapped so nothing is ever clipped at the right
+        margin. Wrapping prefers spaces but falls back to hard character breaks
+        for space-less tokens (e.g. long URLs).
+        """
         self.pdf.ln(1)
         line_h = 5.2
         pad = 3
-        font_size = 9.5
+        font_size = 8.5
         self.pdf.set_font("Courier", "", font_size)
-        # Ensure the whole block fits, else page-break first.
-        block_h = line_h * len(lines) + pad * 2
+
+        # Usable inner text width = box width - left inset (pad + accent bar
+        # allowance of 1.5) - right pad.
+        left_inset = pad + 1.5
+        inner_width = self.content_width() - left_inset - pad
+
+        # Pre-compute the wrapped physical lines for the whole block.
+        physical_lines = []
+        for ln_text in lines:
+            physical_lines.extend(self._wrap_code_line(ln_text, inner_width))
+
+        # Recompute box height from the TOTAL number of physical lines.
+        block_h = line_h * len(physical_lines) + pad * 2
         if self.pdf.get_y() + block_h > self.pdf.h - 22:
             self.pdf.add_page()
         top = self.pdf.get_y()
@@ -176,10 +239,10 @@ class GuideBuilder:
         self.pdf.set_fill_color(*COLOR_ACCENT)
         self.pdf.rect(self.pdf.l_margin, top, 1.2, block_h, style="F")
         self.pdf.set_text_color(*COLOR_CODE_TEXT)
-        self.pdf.set_xy(self.pdf.l_margin + pad + 1.5, top + pad)
-        for ln_text in lines:
-            self.pdf.set_x(self.pdf.l_margin + pad + 1.5)
-            self.pdf.cell(0, line_h, ascii_safe(ln_text))
+        self.pdf.set_xy(self.pdf.l_margin + left_inset, top + pad)
+        for ln_text in physical_lines:
+            self.pdf.set_x(self.pdf.l_margin + left_inset)
+            self.pdf.cell(0, line_h, ln_text)
             self.pdf.ln(line_h)
         self.pdf.set_y(top + block_h)
         self.pdf.ln(3)
