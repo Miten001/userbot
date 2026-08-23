@@ -13,6 +13,12 @@ from any/random country, and export the validated list as **CSV, TXT or JSON**.
 
 ---
 
+## Credits
+
+Created by **@codex_here**.
+
+---
+
 ## Features
 
 - **Multi-source scraping** — pluggable adapters for HTML tables, plaintext
@@ -159,3 +165,7 @@ export formats, and filter logic.
 ## License
 
 MIT.
+
+---
+
+_Created by @codex_here._

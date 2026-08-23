@@ -9,7 +9,7 @@ description = "Cross-platform PyQt6 desktop app that scrapes, validates, geoloca
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-authors = [{ name = "Proxy Scraper GUI" }]
+authors = [{ name = "@codex_here" }]
 dependencies = [
     "PyQt6>=6.6.0",
     "aiohttp>=3.9.0",

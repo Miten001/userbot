@@ -61,7 +61,7 @@ class MainWindow(QMainWindow):
         self._controller = controller
         self._result_buffer: list[ProxyResult] = []
 
-        self.setWindowTitle("Proxy Scraper GUI")
+        self.setWindowTitle("Proxy Scraper GUI — by @codex_here")
         self.resize(1000, 680)
 
         self._build_ui()
@@ -192,11 +192,29 @@ class MainWindow(QMainWindow):
         return self.results_stack
 
     def _build_status_bar(self) -> QWidget:
+        bar = QWidget()
+        layout = QHBoxLayout(bar)
+        layout.setContentsMargins(0, 0, 0, 0)
+
         self.status_label = QLabel("Ready.")
         self.status_label.setTextInteractionFlags(
             Qt.TextInteractionFlag.TextSelectableByMouse
         )
-        return self.status_label
+        layout.addWidget(self.status_label)
+        layout.addStretch()
+
+        # Permanent, unobtrusive attribution on the right of the status bar.
+        self.credit_label = QLabel("Created by @codex_here")
+        self.credit_label.setStyleSheet("color: gray; font-size: 11px;")
+        self.credit_label.setAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        )
+        self.credit_label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        layout.addWidget(self.credit_label)
+
+        return bar
 
     # -- controller wiring ---------------------------------------------------
 
