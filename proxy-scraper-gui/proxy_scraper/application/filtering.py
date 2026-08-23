@@ -14,6 +14,7 @@ from typing import Optional
 from proxy_scraper.domain.models import (
     ANY_COUNTRY,
     DEFAULT_MAX_LATENCY_MS,
+    AnonymityFilter,
     AnonymityLevel,
     ProxyFilter,
     ProxyProtocol,
@@ -57,16 +58,17 @@ def normalize_filter(
     country_code: Optional[str],
     protocols: frozenset[ProxyProtocol],
     max_latency_ms: Optional[int],
-    require_anonymous: bool,
+    min_anonymity: AnonymityFilter = AnonymityFilter.ELITE_ONLY,
 ) -> ProxyFilter:
     """Build a validated :class:`ProxyFilter`, applying the default latency
-    threshold when none is supplied (Requirement 8.4)."""
+    threshold when none is supplied (Requirement 8.4) and defaulting the
+    anonymity selector to ``ELITE_ONLY`` (Requirement 7.6, 8.6)."""
     latency = max_latency_ms if max_latency_ms else DEFAULT_MAX_LATENCY_MS
     filter = ProxyFilter(
         country_code=country_code,
         protocols=frozenset(protocols),
         max_latency_ms=latency,
-        require_anonymous=require_anonymous,
+        min_anonymity=min_anonymity,
     )
     validate_filter(filter)
     return filter
@@ -86,14 +88,34 @@ def passes_country(result: ProxyResult, filter: ProxyFilter) -> bool:
     return result.country_code.upper() == target
 
 
+def anonymity_ok(
+    anonymity: AnonymityLevel, min_anonymity: AnonymityFilter
+) -> bool:
+    """Whether *anonymity* satisfies the *min_anonymity* selector
+    (Property 3, Requirement 7.3-7.5).
+
+    * ``ANY``                 => always ``True`` (no anonymity restriction).
+    * ``ANONYMOUS_OR_BETTER`` => ``anonymity != AnonymityLevel.TRANSPARENT``.
+    * ``ELITE_ONLY``          => ``anonymity == AnonymityLevel.ELITE``.
+    """
+    if min_anonymity == AnonymityFilter.ANY:
+        return True
+    if min_anonymity == AnonymityFilter.ANONYMOUS_OR_BETTER:
+        return anonymity != AnonymityLevel.TRANSPARENT
+    if min_anonymity == AnonymityFilter.ELITE_ONLY:
+        return anonymity == AnonymityLevel.ELITE
+    # Defensive default: unknown selector imposes no restriction.
+    return True
+
+
 def is_premium(result: ProxyResult, filter: ProxyFilter) -> bool:
-    """Premium predicate (Property 3, Requirement 7.2, 7.3).
+    """Premium predicate (Property 3, Requirement 7.2-7.5).
 
     ``premium`` iff::
 
         alive
         AND latency_ms <= filter.max_latency_ms
-        AND (not filter.require_anonymous OR anonymity != TRANSPARENT)
+        AND anonymity_ok(anonymity, filter.min_anonymity)
     """
     if not result.alive:
         return False
@@ -101,7 +123,7 @@ def is_premium(result: ProxyResult, filter: ProxyFilter) -> bool:
         return False
     if result.latency_ms > filter.max_latency_ms:
         return False
-    if filter.require_anonymous and result.anonymity == AnonymityLevel.TRANSPARENT:
+    if not anonymity_ok(result.anonymity, filter.min_anonymity):
         return False
     return True
 

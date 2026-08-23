@@ -69,6 +69,26 @@ class AnonymityLevel(Enum):
     UNKNOWN = "unknown"          # could not be determined
 
 
+class AnonymityFilter(Enum):
+    """Minimum anonymity level a proxy must reach to qualify as premium.
+
+    Ordered from least to most restrictive. The default is ``ELITE_ONLY``
+    because the primary use case is proxies where the destination site cannot
+    detect that a proxy is being used at all (Requirement 7.3-7.6, 8.5-8.7).
+
+    Semantics (evaluated against :class:`AnonymityLevel`):
+    * ``ANY``                 -- no anonymity restriction; every level qualifies.
+    * ``ANONYMOUS_OR_BETTER`` -- exclude ``TRANSPARENT`` only (the prior
+      ``require_anonymous == True`` behaviour); ``ANONYMOUS`` and ``ELITE`` pass.
+    * ``ELITE_ONLY``          -- require ``ELITE`` (the site cannot tell a proxy
+      is in use at all).
+    """
+
+    ANY = "any"                                   # no anonymity restriction
+    ANONYMOUS_OR_BETTER = "anonymous_or_better"   # exclude TRANSPARENT only
+    ELITE_ONLY = "elite_only"                     # require ELITE
+
+
 class ExportFormat(Enum):
     """Supported export formats (Requirement 13.1)."""
 
@@ -342,7 +362,9 @@ class ProxyFilter:
         default_factory=lambda: frozenset(ProxyProtocol)
     )
     max_latency_ms: int = DEFAULT_MAX_LATENCY_MS
-    require_anonymous: bool = False
+    # Default to ELITE_ONLY: by default only proxies the destination site
+    # cannot detect are considered premium (Requirement 7.6, 8.6).
+    min_anonymity: AnonymityFilter = AnonymityFilter.ELITE_ONLY
 
     @property
     def wants_specific_country(self) -> bool:

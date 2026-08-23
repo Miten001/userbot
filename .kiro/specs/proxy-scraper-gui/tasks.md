@@ -128,14 +128,16 @@ Testing uses **pytest**, **pytest-qt**, and **Hypothesis**. Property-based tests
 - [ ] 11. Implement filter and premium-classification logic
   - [ ] 11.1 Implement filter validation and the premium predicate in `application/filtering.py`
     - Reject a `ProxyFilter` with an empty protocol set or a non-positive `max_latency_ms`; apply a default `max_latency_ms` of 5000 when unspecified.
-    - Implement `is_premium(result, filter)` = `alive AND latency_ms <= filter.max_latency_ms AND (not filter.require_anonymous OR anonymity != TRANSPARENT)`.
+    - Define/consume the `AnonymityFilter` enum (`ANY`, `ANONYMOUS_OR_BETTER`, `ELITE_ONLY`) and default `filter.min_anonymity` to `ELITE_ONLY` when unspecified.
+    - Implement `anonymity_ok(anonymity, min_anonymity)` with three-level semantics: `ANY` ⟹ always satisfied; `ANONYMOUS_OR_BETTER` ⟹ `anonymity != TRANSPARENT`; `ELITE_ONLY` ⟹ `anonymity == ELITE`.
+    - Implement `is_premium(result, filter)` = `alive AND latency_ms <= filter.max_latency_ms AND anonymity_ok(result.anonymity, filter.min_anonymity)`; under the default `ELITE_ONLY`, only `ELITE` results qualify.
     - Implement `passes_country(result, filter)`: specific code ⟹ `country_code == code` and exclude `"??"`; None/"ANY" ⟹ any country.
-    - _Requirements: 6.2, 6.3, 6.4, 7.2, 7.3, 8.2, 8.3, 8.4_
+    - _Requirements: 6.2, 6.3, 6.4, 7.2, 7.3, 7.4, 7.5, 7.6, 8.2, 8.3, 8.4_
 
   - [ ]* 11.2 Write property test for the premium predicate
     - **Property 3: Premium definition**
-    - **Validates: Requirements 7.2, 7.3**
-    - Use Hypothesis over random `(alive, latency, anonymity, require_anonymous, threshold)` tuples to assert `is_premium` matches its definition.
+    - **Validates: Requirements 7.2, 7.3, 7.4, 7.5, 7.6**
+    - Use Hypothesis over random `(alive, latency, anonymity, min_anonymity, threshold)` tuples to assert `is_premium` matches its definition across all three `AnonymityFilter` levels: `ANY` (any anonymity qualifies), `ANONYMOUS_OR_BETTER` (excludes `TRANSPARENT`), and `ELITE_ONLY` (only `ELITE` qualifies).
 
   - [ ]* 11.3 Write property test for country-filter soundness
     - **Property 2: Country filter soundness**
@@ -186,8 +188,10 @@ Testing uses **pytest**, **pytest-qt**, and **Hypothesis**. Property-based tests
 - [ ] 15. Implement the PyQt6 MainWindow (Presentation)
   - [ ] 15.1 Build MainWindow widgets and filter controls
     - Implement `presentation/main_window.py`: searchable country selector with a "Random / Any" option, protocol multi-select, latency-threshold input, Start/Cancel buttons, progress bar, and status bar.
+    - Add an anonymity-level dropdown offering exactly "Any", "Anonymous or better", and "Elite only" (mapping to `AnonymityFilter.ANY`, `ANONYMOUS_OR_BETTER`, `ELITE_ONLY`), defaulting to "Elite only" on first presentation; this replaces the old "Require anonymous" checkbox.
+    - Wire the selected anonymity level into the constructed `ProxyFilter.min_anonymity`.
     - Perform no direct network I/O in the window.
-    - _Requirements: 6.1, 8.1, 10.3_
+    - _Requirements: 6.1, 8.1, 8.5, 8.6, 8.7, 10.3_
 
   - [ ] 15.2 Build the incremental, sortable results table and export dialog
     - Implement a results table that appends rows in batches (not per-result) and supports sorting by country, latency, anonymity, and protocol.

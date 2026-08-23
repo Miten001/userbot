@@ -10,6 +10,7 @@ from hypothesis import strategies as st
 
 from proxy_scraper.application.filtering import (
     FilterValidationError,
+    anonymity_ok,
     is_premium,
     normalize_filter,
     passes_country,
@@ -17,12 +18,23 @@ from proxy_scraper.application.filtering import (
 )
 from proxy_scraper.domain.models import (
     DEFAULT_MAX_LATENCY_MS,
+    AnonymityFilter,
     AnonymityLevel,
     ProxyCandidate,
     ProxyFilter,
     ProxyProtocol,
     ProxyResult,
 )
+
+
+def _anonymity_ok_expected(anon: AnonymityLevel, min_anon: AnonymityFilter) -> bool:
+    """Reference implementation of the anonymity semantics (Requirement 7.3-7.5)."""
+    if min_anon == AnonymityFilter.ANY:
+        return True
+    if min_anon == AnonymityFilter.ANONYMOUS_OR_BETTER:
+        return anon != AnonymityLevel.TRANSPARENT
+    # ELITE_ONLY
+    return anon == AnonymityLevel.ELITE
 
 
 def _result(alive, latency, anon, code="US"):
@@ -45,29 +57,73 @@ def _result(alive, latency, anon, code="US"):
     alive=st.booleans(),
     latency=st.integers(min_value=0, max_value=30000),
     anon=st.sampled_from(list(AnonymityLevel)),
-    require_anon=st.booleans(),
+    min_anon=st.sampled_from(list(AnonymityFilter)),
     threshold=st.integers(min_value=1, max_value=30000),
 )
-def test_premium_matches_definition(alive, latency, anon, require_anon, threshold):
+def test_premium_matches_definition(alive, latency, anon, min_anon, threshold):
     result = _result(alive, latency if alive else None, anon)
     flt = ProxyFilter(
         country_code=None,
         protocols=frozenset({ProxyProtocol.HTTP}),
         max_latency_ms=threshold,
-        require_anonymous=require_anon,
+        min_anonymity=min_anon,
     )
     expected = (
         alive
         and (latency is not None and latency <= threshold)
-        and (not require_anon or anon != AnonymityLevel.TRANSPARENT)
+        and _anonymity_ok_expected(anon, min_anon)
     )
     assert is_premium(result, flt) == expected
 
 
-def test_transparent_excluded_when_anonymity_required():
-    result = _result(True, 100, AnonymityLevel.TRANSPARENT)
-    flt = ProxyFilter(protocols=frozenset({ProxyProtocol.HTTP}), require_anonymous=True)
-    assert is_premium(result, flt) is False
+@given(
+    anon=st.sampled_from(list(AnonymityLevel)),
+    min_anon=st.sampled_from(list(AnonymityFilter)),
+)
+def test_anonymity_ok_matches_definition(anon, min_anon):
+    """anonymity_ok honors each of the three anonymity levels (Req 7.3-7.5)."""
+    assert anonymity_ok(anon, min_anon) == _anonymity_ok_expected(anon, min_anon)
+
+
+def test_elite_only_admits_only_elite():
+    """ELITE_ONLY (the default): only ELITE qualifies as premium."""
+    flt = ProxyFilter(
+        protocols=frozenset({ProxyProtocol.HTTP}),
+        min_anonymity=AnonymityFilter.ELITE_ONLY,
+    )
+    for anon in AnonymityLevel:
+        result = _result(True, 100, anon)
+        assert is_premium(result, flt) is (anon == AnonymityLevel.ELITE)
+
+
+def test_anonymous_or_better_excludes_transparent():
+    """ANONYMOUS_OR_BETTER admits everything except TRANSPARENT."""
+    flt = ProxyFilter(
+        protocols=frozenset({ProxyProtocol.HTTP}),
+        min_anonymity=AnonymityFilter.ANONYMOUS_OR_BETTER,
+    )
+    for anon in AnonymityLevel:
+        result = _result(True, 100, anon)
+        assert is_premium(result, flt) is (anon != AnonymityLevel.TRANSPARENT)
+
+
+def test_any_admits_all_anonymity_levels():
+    """ANY imposes no anonymity restriction; every level qualifies."""
+    flt = ProxyFilter(
+        protocols=frozenset({ProxyProtocol.HTTP}),
+        min_anonymity=AnonymityFilter.ANY,
+    )
+    for anon in AnonymityLevel:
+        result = _result(True, 100, anon)
+        assert is_premium(result, flt) is True
+
+
+def test_default_min_anonymity_is_elite_only():
+    """When omitted, min_anonymity defaults to ELITE_ONLY (Req 7.6, 8.6)."""
+    flt = ProxyFilter(protocols=frozenset({ProxyProtocol.HTTP}))
+    assert flt.min_anonymity == AnonymityFilter.ELITE_ONLY
+    assert is_premium(_result(True, 100, AnonymityLevel.ANONYMOUS), flt) is False
+    assert is_premium(_result(True, 100, AnonymityLevel.ELITE), flt) is True
 
 
 # --- Task 11.3: Property 2 - country filter soundness ----------------------
@@ -105,10 +161,25 @@ def test_nonpositive_latency_rejected():
 
 
 def test_default_latency_applied_when_unspecified():
-    flt = normalize_filter(None, frozenset({ProxyProtocol.HTTP}), None, False)
+    flt = normalize_filter(None, frozenset({ProxyProtocol.HTTP}), None)
     assert flt.max_latency_ms == DEFAULT_MAX_LATENCY_MS
+
+
+def test_normalize_filter_defaults_to_elite_only():
+    flt = normalize_filter(None, frozenset({ProxyProtocol.HTTP}), 1000)
+    assert flt.min_anonymity == AnonymityFilter.ELITE_ONLY
+
+
+def test_normalize_filter_accepts_min_anonymity():
+    flt = normalize_filter(
+        None,
+        frozenset({ProxyProtocol.HTTP}),
+        1000,
+        AnonymityFilter.ANONYMOUS_OR_BETTER,
+    )
+    assert flt.min_anonymity == AnonymityFilter.ANONYMOUS_OR_BETTER
 
 
 def test_invalid_country_code_rejected():
     with pytest.raises(FilterValidationError):
-        normalize_filter("ZZZ", frozenset({ProxyProtocol.HTTP}), 1000, False)
+        normalize_filter("ZZZ", frozenset({ProxyProtocol.HTTP}), 1000)

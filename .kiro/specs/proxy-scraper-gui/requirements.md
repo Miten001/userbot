@@ -19,9 +19,10 @@ These requirements are derived from the approved design document and trace direc
 - **Results_Table**: The UI widget that displays validated proxy results incrementally.
 - **Proxy_Candidate**: A raw, unvalidated proxy identified by `(host, port, protocol)`.
 - **Proxy_Result**: A candidate after validation, including `alive`, `latency_ms`, `country_code`, `country_name`, and `anonymity`.
-- **Proxy_Filter**: The user's active selection: country (specific, or None/"ANY" for random/any), protocols, maximum latency, and anonymity requirement.
-- **Premium**: A quality classification, not a paid tier. A result is premium iff it is alive, its latency is within the configured threshold, and (when anonymity is required) its anonymity level is not transparent.
-- **Anonymity_Level**: One of transparent, anonymous, elite, or unknown.
+- **Proxy_Filter**: The user's active selection: country (specific, or None/"ANY" for random/any), protocols, maximum latency, and a minimum anonymity level (`min_anonymity`).
+- **Premium**: A quality classification, not a paid tier. A Proxy_Result is premium if and only if it is alive, its latency is within the configured `max_latency_ms` threshold, AND its Anonymity_Level satisfies the Proxy_Filter's `min_anonymity` selector (see Anonymity_Filter). Under the default `min_anonymity` of "Elite only", only elite proxies (those the destination site cannot detect as proxies) are premium.
+- **Anonymity_Level**: The classification of a single proxy. One of transparent, anonymous, elite, or unknown.
+- **Anonymity_Filter**: The minimum anonymity level a Proxy_Result must reach to qualify as premium, selected by the user. One of three levels, ordered from least to most restrictive: **Any** (`ANY`) imposes no anonymity restriction; **Anonymous or better** (`ANONYMOUS_OR_BETTER`) excludes transparent proxies; **Elite only** (`ELITE_ONLY`) admits only elite proxies (the destination site cannot detect a proxy is being used). The default is **Elite only**.
 - **Judge_Endpoint**: A neutral, trusted endpoint used to test a proxy without routing the user's sensitive traffic.
 - **Supported_Protocol**: One of HTTP, HTTPS, SOCKS4, SOCKS5.
 
@@ -100,8 +101,11 @@ These requirements are derived from the approved design document and trace direc
 #### Acceptance Criteria
 
 1. THE Results_Table SHALL display only Proxy_Results whose `alive` value is true.
-2. THE App_Controller SHALL classify a Proxy_Result as premium if and only if the result is alive AND its `latency_ms` is less than or equal to the Proxy_Filter's `max_latency_ms` AND (the Proxy_Filter does not require anonymity OR the result's anonymity level is not transparent).
-3. WHERE the Proxy_Filter requires anonymity, THE App_Controller SHALL exclude Proxy_Results whose anonymity level is transparent from the premium classification.
+2. THE App_Controller SHALL classify a Proxy_Result as premium if and only if the result is alive AND its `latency_ms` is less than or equal to the Proxy_Filter's `max_latency_ms` AND the result's Anonymity_Level satisfies the Proxy_Filter's `min_anonymity` selector as defined in acceptance criteria 7.3 through 7.5.
+3. WHERE the Proxy_Filter's `min_anonymity` is "Any" (`ANY`), THE App_Controller SHALL treat the anonymity condition as satisfied for every Proxy_Result regardless of its Anonymity_Level.
+4. WHERE the Proxy_Filter's `min_anonymity` is "Anonymous or better" (`ANONYMOUS_OR_BETTER`), THE App_Controller SHALL treat the anonymity condition as satisfied for a Proxy_Result if and only if its Anonymity_Level is not transparent.
+5. WHERE the Proxy_Filter's `min_anonymity` is "Elite only" (`ELITE_ONLY`), THE App_Controller SHALL treat the anonymity condition as satisfied for a Proxy_Result if and only if its Anonymity_Level is elite.
+6. WHERE the user does not select an anonymity level, THE App_Controller SHALL apply a default `min_anonymity` of "Elite only" (`ELITE_ONLY`).
 
 ### Requirement 8: Configure filter controls
 
@@ -113,6 +117,9 @@ These requirements are derived from the approved design document and trace direc
 2. THE App_Controller SHALL reject a Proxy_Filter whose protocol set is empty.
 3. THE App_Controller SHALL reject a Proxy_Filter whose `max_latency_ms` is not a positive integer.
 4. WHERE no maximum latency is specified by the user, THE App_Controller SHALL apply a default latency threshold of 5000 milliseconds.
+5. THE Main_Window SHALL provide an anonymity-level selector offering exactly the three options "Any", "Anonymous or better", and "Elite only", mapping respectively to the Anonymity_Filter values `ANY`, `ANONYMOUS_OR_BETTER`, and `ELITE_ONLY`.
+6. WHEN the Main_Window is first presented, THE Main_Window SHALL set the anonymity-level selector to "Elite only".
+7. WHEN the user selects an anonymity level, THE App_Controller SHALL set the Proxy_Filter's `min_anonymity` to the corresponding Anonymity_Filter value.
 
 ### Requirement 9: Display live, incremental results
 

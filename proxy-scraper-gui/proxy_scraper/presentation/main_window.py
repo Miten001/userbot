@@ -42,6 +42,7 @@ from proxy_scraper.domain.countries import sorted_countries
 from proxy_scraper.domain.models import (
     ANY_COUNTRY,
     DEFAULT_MAX_LATENCY_MS,
+    AnonymityFilter,
     ExportFormat,
     ProxyProtocol,
     ProxyResult,
@@ -132,11 +133,23 @@ class MainWindow(QMainWindow):
         latency_col.addWidget(self.latency_spin)
         layout.addLayout(latency_col)
 
-        # Require anonymity (exclude transparent proxies).
+        # Anonymity-level selector (Requirement 8.5-8.7). Exactly three
+        # options mapping to the AnonymityFilter values; defaults to
+        # "Elite only" so only proxies the destination site cannot detect
+        # are shown (Requirement 7.6, 8.6).
         anon_col = QVBoxLayout()
         anon_col.addWidget(QLabel("Anonymity"))
-        self.anon_check = QCheckBox("Require anonymous")
-        anon_col.addWidget(self.anon_check)
+        self.anon_combo = QComboBox()
+        self.anon_combo.addItem("Any", userData=AnonymityFilter.ANY)
+        self.anon_combo.addItem(
+            "Anonymous or better", userData=AnonymityFilter.ANONYMOUS_OR_BETTER
+        )
+        self.anon_combo.addItem("Elite only", userData=AnonymityFilter.ELITE_ONLY)
+        # Default selection: "Elite only".
+        self.anon_combo.setCurrentIndex(
+            self.anon_combo.findData(AnonymityFilter.ELITE_ONLY)
+        )
+        anon_col.addWidget(self.anon_combo)
         anon_col.addStretch()
         layout.addLayout(anon_col)
 
@@ -238,12 +251,18 @@ class MainWindow(QMainWindow):
             proto for proto, cb in self.protocol_checks.items() if cb.isChecked()
         )
 
+    def _selected_anonymity(self) -> AnonymityFilter:
+        data = self.anon_combo.currentData()
+        if isinstance(data, AnonymityFilter):
+            return data
+        return AnonymityFilter.ELITE_ONLY
+
     def _build_filter(self):
         return normalize_filter(
             country_code=self._selected_country(),
             protocols=self._selected_protocols(),
             max_latency_ms=self.latency_spin.value(),
-            require_anonymous=self.anon_check.isChecked(),
+            min_anonymity=self._selected_anonymity(),
         )
 
     # -- actions -------------------------------------------------------------
@@ -422,7 +441,7 @@ class MainWindow(QMainWindow):
         # Filter controls are locked during a run.
         self.country_combo.setEnabled(not running)
         self.latency_spin.setEnabled(not running)
-        self.anon_check.setEnabled(not running)
+        self.anon_combo.setEnabled(not running)
         for cb in self.protocol_checks.values():
             cb.setEnabled(not running)
         if not running:

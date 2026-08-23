@@ -180,7 +180,11 @@ class ValidationEngine(Protocol):
 **Responsibilities**:
 - Attempt a request to a stable "judge" endpoint through each proxy for HTTP/HTTPS/SOCKS4/SOCKS5.
 - Measure round-trip latency; mark dead on timeout/connection error.
-- Classify anonymity level (transparent / anonymous / elite) by inspecting whether the origin IP or proxy-related headers leak.
+- Classify anonymity level by inspecting the judge endpoint's echoed request:
+  - **transparent** — the user's real origin IP is exposed (e.g. leaked in `X-Forwarded-For`/`Forwarded` or the observed source IP), so the site sees both the proxy and the real client.
+  - **anonymous** — the real IP is hidden, but proxy-identifying headers (e.g. `Via`, `X-Forwarded-For`, `Forwarded`, `Proxy-Connection`) are present, so the site can still tell a proxy is in use.
+  - **elite** — neither the real IP nor any proxy-identifying headers (`Via`, `X-Forwarded-For`, `Forwarded`, `Proxy-Connection`) are exposed, so the destination site cannot tell a proxy is being used at all.
+  - **unknown** — classification could not be determined.
 - Apply retry policy (configurable attempts) before declaring a proxy dead.
 
 ### Component 4: GeoLocationService
@@ -224,6 +228,7 @@ class ExportService(Protocol):
 **Responsibilities**:
 - Country selector (searchable dropdown of countries + a "Random / Any" option).
 - Protocol and latency-threshold filter controls.
+- An anonymity-level selector (dropdown) with options "Any", "Anonymous or better", and "Elite only", mapping to `AnonymityFilter.ANY`, `AnonymityFilter.ANONYMOUS_OR_BETTER`, and `AnonymityFilter.ELITE_ONLY` respectively; it defaults to "Elite only" so that, by default, only proxies the destination site cannot detect are shown.
 - Start / Cancel buttons, live progress bar, and status messages.
 - Results table (sortable by country, latency, anonymity, protocol) that updates incrementally.
 - Export button opening the export dialog (format + destination).
@@ -285,25 +290,44 @@ class ProxyResult:
 - If `alive` is `False`, `latency_ms` is `None`.
 - If `alive` is `True`, `latency_ms` is a non-negative integer.
 - `country_code` is a 2-letter code or the sentinel `"??"`.
-- A result is "premium" iff `alive and latency_ms <= threshold and anonymity != TRANSPARENT`.
+- A result is "premium" iff `alive and latency_ms <= threshold` and its `anonymity` satisfies the filter's `min_anonymity` (see Property 3).
 
 ### Model 3: ProxyFilter
 
 The user's active selection driving scraping/validation display.
 
 ```python
+class AnonymityFilter(Enum):
+    """Minimum anonymity level a proxy must reach to qualify as premium.
+
+    Ordered from least to most restrictive. The default is ELITE_ONLY because
+    the primary use case is proxies where the destination site cannot detect
+    that a proxy is being used at all.
+    """
+    ANY = "any"                            # no anonymity restriction
+    ANONYMOUS_OR_BETTER = "anonymous_or_better"  # exclude TRANSPARENT only
+    ELITE_ONLY = "elite_only"              # require ELITE (site can't detect proxy)
+
 @dataclass(frozen=True)
 class ProxyFilter:
     country_code: str | None      # None or "ANY" means random/any country
     protocols: frozenset[Protocol]
     max_latency_ms: int           # quality threshold for "premium"
-    require_anonymous: bool        # exclude TRANSPARENT proxies when True
+    min_anonymity: AnonymityFilter = AnonymityFilter.ELITE_ONLY  # default: elite only
 ```
 
 **Validation Rules**:
 - `country_code` is either `None`, `"ANY"`, or a valid ISO alpha-2 code.
 - `protocols` is non-empty.
 - `max_latency_ms` is a positive integer (sensible default, e.g. 5000).
+- `min_anonymity` is one of the `AnonymityFilter` values; when omitted it defaults to `ELITE_ONLY`.
+
+**Anonymity semantics** (evaluated against `ProxyResult.anonymity`):
+- `ANY` — no anonymity restriction; any level (including `TRANSPARENT` and `UNKNOWN`) qualifies.
+- `ANONYMOUS_OR_BETTER` — exclude `TRANSPARENT` proxies (the prior `require_anonymous == True` behavior); `ANONYMOUS` and `ELITE` qualify.
+- `ELITE_ONLY` — only `AnonymityLevel.ELITE` qualifies, so the destination site cannot tell a proxy is being used at all.
+
+> Backward compatibility: the old boolean `require_anonymous` maps onto this selector — `False` ≡ `ANY`, `True` ≡ `ANONYMOUS_OR_BETTER`. `ELITE_ONLY` is the new, stricter default.
 
 ### Model 4: ScrapeProgress / ScrapeOutcome / ExportOutcome
 
@@ -349,7 +373,12 @@ When `filter.country_code` is a specific code `C`, every displayed result satisf
 **Validates: Requirements 6.2, 6.3, 6.4, 5.4**
 
 ### Property 3: Premium definition
-A result is labeled premium iff `alive and latency_ms <= filter.max_latency_ms and (not filter.require_anonymous or anonymity != TRANSPARENT)`.
+A result is labeled premium iff `alive and latency_ms <= filter.max_latency_ms and anonymity_ok(anonymity, filter.min_anonymity)`, where `anonymity_ok` is defined by the `min_anonymity` selector:
+- `AnonymityFilter.ANY` ⟹ always satisfied (no anonymity restriction).
+- `AnonymityFilter.ANONYMOUS_OR_BETTER` ⟹ satisfied iff `anonymity != AnonymityLevel.TRANSPARENT`.
+- `AnonymityFilter.ELITE_ONLY` ⟹ satisfied iff `anonymity == AnonymityLevel.ELITE`.
+
+Thus, under the default `ELITE_ONLY`, only results whose anonymity is `ELITE` (the site cannot detect a proxy) qualify as premium; `ANONYMOUS_OR_BETTER` additionally admits `ANONYMOUS`; `ANY` admits every level.
 
 **Validates: Requirements 7.2, 7.3**
 
