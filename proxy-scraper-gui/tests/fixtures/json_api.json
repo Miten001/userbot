@@ -1,0 +1,8 @@
+{
+  "data": [
+    {"ip": "203.0.113.40", "port": "8080", "protocols": ["http"]},
+    {"ip": "198.51.100.50", "port": "1080", "protocols": ["socks5"]},
+    {"ip": "bad host", "port": "80", "protocols": ["http"]},
+    {"ip": "192.0.2.60", "port": "0", "protocols": ["http"]}
+  ]
+}
