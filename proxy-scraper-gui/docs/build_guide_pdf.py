@@ -402,10 +402,25 @@ def build():
     g.section_heading("5. How to Use the App")
     g.numbered(1, 'Pick a country or leave it on "Random / Any".')
     g.numbered(2, "Choose protocols (HTTP/HTTPS/SOCKS4/SOCKS5) and a max latency.")
-    g.numbered(3, 'Optionally tick "Require anonymous".')
+    g.numbered(3, 'Choose an Anonymity level from the dropdown. "Elite only" is the '
+                  'default - pick it if you want the website to NOT be able to tell you '
+                  'are using a proxy. "Anonymous or better" hides your real IP but the '
+                  'site may still detect that a proxy is being used. "Any" applies no '
+                  'anonymity restriction.')
     g.numbered(4, "Click Start - working proxies stream into the table.")
     g.numbered(5, "Click Cancel anytime (keeps results found so far).")
     g.numbered(6, "Click Export to save as CSV / TXT / JSON.")
+
+    g.sub_heading("Anonymity Levels (which proxy hides best?)")
+    g.bullet("Transparent: leaks your real IP - avoid.")
+    g.bullet("Anonymous: hides your IP, but the site can tell a proxy is being used.")
+    g.bullet("Elite (High Anonymous): hides your IP AND that a proxy is used - the site "
+             "cannot detect the proxy. Best for browsing. This is the app's default.")
+    g.note(
+        "Note: free \"Elite\" proxies still may be blocked by advanced sites "
+        "(Cloudflare/Google) via IP reputation; for undetectable use, residential/paid "
+        "proxies are more reliable."
+    )
 
     # ---------------- Section 6 ----------------
     g.section_heading("6. Troubleshooting")
