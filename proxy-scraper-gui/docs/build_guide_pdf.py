@@ -399,7 +399,37 @@ def build():
     ])
 
     # ---------------- Section 5 ----------------
-    g.section_heading("5. How to Use the App")
+    g.section_heading("5. Running It Again (Next Time)")
+    g.paragraph(
+        "You only download and `pip install` once. Next time you want to use the app, "
+        "you do NOT need to download or reinstall anything - just open Command Prompt, "
+        "go to the app folder, and run it."
+    )
+    g.code_block([
+        "cd %USERPROFILE%\\userbot-feat-proxy-scraper-gui\\proxy-scraper-gui",
+        "python main.py",
+    ])
+    g.note(
+        "If you downloaded with Git (Method B), the folder is `proxy-app` instead:"
+    )
+    g.code_block([
+        "cd %USERPROFILE%\\proxy-app\\proxy-scraper-gui",
+        "python main.py",
+    ])
+    g.sub_heading("If you used a virtual environment (Section 4):")
+    g.code_block([
+        "cd %USERPROFILE%\\userbot-feat-proxy-scraper-gui\\proxy-scraper-gui",
+        ".venv\\Scripts\\activate",
+        "python main.py",
+    ])
+    g.note(
+        "Tip: run `dir` to list folders if you are unsure of the exact folder name. "
+        "The key point: you do NOT need to download or reinstall - only `cd` into the "
+        "folder and run `python main.py`."
+    )
+
+    # ---------------- Section 6 ----------------
+    g.section_heading("6. How to Use the App")
     g.numbered(1, 'Pick a country or leave it on "Random / Any".')
     g.numbered(2, "Choose protocols (HTTP/HTTPS/SOCKS4/SOCKS5) and a max latency.")
     g.numbered(3, 'Choose an Anonymity level from the dropdown. "Elite only" is the '
@@ -422,8 +452,8 @@ def build():
         "proxies are more reliable."
     )
 
-    # ---------------- Section 6 ----------------
-    g.section_heading("6. Troubleshooting")
+    # ---------------- Section 7 ----------------
+    g.section_heading("7. Troubleshooting")
     g.bullet('"python is not recognized" -> Python not on PATH; reinstall Python and '
              'tick "Add Python to PATH", then reopen Command Prompt.')
     g.bullet('"pip is not recognized" -> use  python -m pip install -r requirements.txt')
@@ -432,8 +462,8 @@ def build():
     g.bullet("Do NOT run these commands inside C:\\Windows\\System32 - use your user "
              "folder (%USERPROFILE%).")
 
-    # ---------------- Section 7 ----------------
-    g.section_heading("7. Proxy Types Explained: HTTP vs HTTPS vs SOCKS4 vs SOCKS5")
+    # ---------------- Section 8 ----------------
+    g.section_heading("8. Proxy Types Explained: HTTP vs HTTPS vs SOCKS4 vs SOCKS5")
 
     g.sub_heading("HTTP proxy")
     g.paragraph(
