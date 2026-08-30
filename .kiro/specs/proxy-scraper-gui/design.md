@@ -8,9 +8,13 @@ The application uses **PyQt6** for the user interface and an asynchronous/thread
 
 The scraper is source-driven and extensible: each proxy source is a pluggable adapter behind a common interface, so new sites/APIs can be added without touching the core engine. This design targets a local desktop tool (no server, no serverless timeout limits), which is the natural fit for the heavy concurrent network I/O that proxy validation requires.
 
+To guarantee freshness, the application also maintains a **persistent, cross-session "seen proxy" history**: once a proxy IP has been surfaced to the user, it is remembered on disk and never surfaced again on any future run — including after the app is closed and reopened on a different day. This is stronger than the existing in-run `(host, port, protocol)` deduplication: the history dedupes by **IP/host** and survives restarts, so the user always receives a stream of previously-unseen, working, elite (non-detectable) proxies. The user can reset this history at any time to start fresh.
+
 ## Architecture
 
-The application is organized into four layers: a **Presentation layer** (PyQt6 UI), an **Application/Orchestration layer** (controllers and background workers), a **Domain layer** (scraping, validation, geolocation, export services), and an **Infrastructure layer** (HTTP client, source adapters, local cache/storage).
+The application is organized into four layers: a **Presentation layer** (PyQt6 UI), an **Application/Orchestration layer** (controllers and background workers), a **Domain layer** (scraping, validation, geolocation, export services, and the seen-proxy contract), and an **Infrastructure layer** (HTTP client, source adapters, local cache/storage, and the persistent `SeenProxyStore`).
+
+The **`SeenProxyStore`** is a new persistent component that records the IP/host of every proxy actually surfaced to the user. Its contract lives in the Domain layer (alongside the other service protocols) while its concrete, disk-backed implementation lives in the Infrastructure layer (a JSON or SQLite file in a per-user app-data directory). The `AppController` loads the store on startup, consults it as an additional filter on the display path (excluding any candidate/result whose host is already known), and records newly-surfaced hosts back into it so they are never shown again on a later run.
 
 ```mermaid
 graph TD
@@ -46,6 +50,7 @@ graph TD
         end
         GEODB[(Local GeoIP DB / API)]
         CACHE[(Local Cache / Config)]
+        SEEN[(SeenProxyStore - persistent seen-IP history)]
     end
 
     MW --> CTRL
@@ -68,7 +73,12 @@ graph TD
     SIG --> PB
     RT --> EX
     CTRL --> CACHE
+    CTRL -->|exclude seen host + record surfaced host| SEEN
 ```
+
+> The `AppController` reads `SeenProxyStore` before displaying a result (to drop
+> hosts seen on any previous run) and writes back the host of every result it
+> actually surfaces. A "Clear seen history" action in the UI wipes the store.
 
 ### Main Flow (Scrape → Validate → Display)
 
@@ -82,9 +92,11 @@ sequenceDiagram
     participant VW as ValidationWorker Pool
     participant VE as ValidationEngine
     participant G as GeoLocationService
+    participant SS as SeenProxyStore
 
     U->>UI: Select country (or Random) + click "Scrape"
     UI->>C: start_scrape(filter)
+    C->>SS: load() [seen IPs from previous runs]
     C->>SW: run() [background thread]
     SW->>SM: scrape_all(sources)
     SM-->>SW: raw proxy candidates (deduplicated)
@@ -98,7 +110,16 @@ sequenceDiagram
         VE-->>VW: ProxyResult(alive, latency, country, anonymity)
     end
     VW-->>C: incremental validated results
-    C-->>UI: append rows (filtered by country)
+    loop per validated result
+        C->>SS: contains(result.host)?
+        alt host already seen (prior or current run)
+            SS-->>C: true -> skip (never surface again)
+        else new host that passes all filters
+            SS-->>C: false
+            C->>SS: add(result.host) + save (persist promptly)
+            C-->>UI: append row (surfaced to user)
+        end
+    end
     UI-->>U: live results table + progress
     U->>UI: click "Export"
     UI->>C: export(results, format)
@@ -139,6 +160,26 @@ class AppController(Protocol):
 - Manage worker lifecycle (start, cancel, cleanup) via `QThread`/`QThreadPool`.
 - Marshal results from worker threads to the UI thread using Qt signals/slots.
 - Enforce the active `ProxyFilter` (country / random, protocol, latency threshold).
+- Load the `SeenProxyStore` on startup and consult it as an additional display-path filter: a candidate/result is surfaced only if its host is **not** already in the store (i.e. it was never surfaced on this or any prior run).
+- Record the host of every result it actually surfaces into the `SeenProxyStore` and persist it promptly, so a subsequent close/crash/restart still remembers the IP.
+- Expose a `clear_seen_history()` operation (wired to a UI action/menu item) that empties the store so the user can start fresh.
+
+**Extended interface** (additions for the persistent no-repeat feature):
+```python
+class AppController(Protocol):
+    # ... existing methods (start_scrape, cancel, export, on_progress, on_result) ...
+
+    def clear_seen_history(self) -> None:
+        """Wipe the persistent seen-proxy history so previously-surfaced IPs
+        may appear again on future runs. Wired to a UI action/menu item."""
+```
+
+> The display predicate becomes: *alive AND passes protocol AND passes country
+> AND premium AND `not seen_store.contains(result.host)`*. When a result passes
+> that predicate it is both emitted to the UI **and** recorded via
+> `seen_store.add(result.host)` (then persisted). Recording happens only for
+> surfaced results, so unshown candidates are never wrongly blocked from a
+> future run.
 
 ### Component 2: ScraperManager
 
@@ -232,7 +273,74 @@ class ExportService(Protocol):
 - Start / Cancel buttons, live progress bar, and status messages.
 - Results table (sortable by country, latency, anonymity, protocol) that updates incrementally.
 - Export button opening the export dialog (format + destination).
+- A **"Clear seen history"** action (e.g. a menu item under a *Tools*/*History* menu, or a button near the filter panel) that calls `AppController.clear_seen_history()` after a confirmation prompt, so the user can deliberately allow previously-surfaced IPs to appear again.
 - Runs only on the Qt main thread; never performs network I/O directly.
+
+### Component 7: SeenProxyStore
+
+**Purpose**: A persistent, cross-session record of the IP/host of every proxy that has actually been surfaced to the user, so those IPs are never surfaced again on any future run. This is the component that makes "no repeated IP proxy — even after closing the app and reopening on another day" true.
+
+**Layering**: The contract (below) is a Domain-layer `Protocol`; the concrete disk-backed implementation lives in the Infrastructure layer.
+
+**Interface**:
+```python
+from typing import Protocol, Iterable, Optional
+
+class SeenProxyStore(Protocol):
+    def load(self) -> None:
+        """Read the persisted history from disk into memory. On a missing or
+        corrupt file, initialize to an empty history and never raise
+        (see Error Scenario 7)."""
+
+    def contains(self, host: str) -> bool:
+        """True if *host* (IP) has been surfaced on this or any previous run."""
+
+    def add(self, host: str) -> bool:
+        """Record *host* as surfaced. Returns True if it was newly added,
+        False if it was already present. Idempotent per host."""
+
+    def add_many(self, hosts: Iterable[str]) -> int:
+        """Record several hosts at once; returns the count newly added."""
+
+    def save(self) -> None:
+        """Persist the current history to disk atomically (write-temp +
+        rename) so a crash/close cannot corrupt or lose the file."""
+
+    def clear(self) -> None:
+        """Empty the history in memory and on disk (used by the UI
+        'Clear seen history' action)."""
+
+    def __len__(self) -> int:
+        """Number of distinct hosts remembered (for status/UI display)."""
+```
+
+**On-disk location**: A per-user app-data / config directory chosen with a
+platform-appropriate helper (e.g. `platformdirs.user_data_dir("proxy-scraper-gui")`),
+resolving to locations such as:
+- Linux: `~/.local/share/proxy-scraper-gui/seen_proxies.json`
+- macOS: `~/Library/Application Support/proxy-scraper-gui/seen_proxies.json`
+- Windows: `%LOCALAPPDATA%\proxy-scraper-gui\seen_proxies.json`
+
+The path MUST be **configurable** (constructor argument / config value / env var) so tests and power-users can override it; tests point it at a temp directory.
+
+**File format**: JSON is the default — an object mapping each surfaced host to the epoch timestamp it was first seen, which keeps the file human-readable and supports optional age-based pruning:
+```json
+{
+  "version": 1,
+  "hosts": {
+    "203.0.113.7": 1731000000.0,
+    "198.51.100.42": 1731003600.0
+  }
+}
+```
+A **SQLite** file (`seen_proxies.sqlite` with a `seen(host TEXT PRIMARY KEY, first_seen REAL)` table) is an acceptable alternative when the history is expected to grow very large (fast membership checks, incremental appends without rewriting the whole file). Either way, identity is keyed by **host (IP)** only — not `(host, port, protocol)` — because the requirement is to never show the same IP again regardless of port/protocol.
+
+**Responsibilities**:
+- Load history on startup; treat a missing/corrupt file as an empty history (never crash — Error Scenario 7).
+- Answer `contains(host)` in O(1) (in-memory set / indexed table).
+- Persist promptly and atomically whenever new hosts are surfaced so that a close or crash still remembers them.
+- Record entries **only** for hosts that were actually surfaced to the user (so unshown candidates remain eligible on future runs).
+- Support a full `clear()` for the UI reset action.
 
 ## Data Models
 
@@ -358,6 +466,23 @@ class ExportOutcome:
     error: str | None
 ```
 
+### Model 5: SeenProxy
+
+A single entry in the persistent seen-proxy history. Identity is the **host (IP)** alone.
+
+```python
+@dataclass(frozen=True)
+class SeenProxy:
+    host: str            # IPv4/IPv6 address that was surfaced to the user
+    first_seen: float    # epoch seconds when it was first surfaced
+```
+
+**Validation Rules**:
+- `host` is a non-empty, syntactically valid IP/host (same rule as `ProxyCandidate.host`).
+- `first_seen` is a non-negative epoch timestamp.
+- Identity / uniqueness in the store is `host` only (NOT `(host, port, protocol)`), because the requirement is that a given IP is never surfaced twice regardless of the port or protocol it appears on.
+- The store is the set `{ SeenProxy.host }`; `contains(host)` is membership in that set.
+
 ## Correctness Properties
 
 These are the invariants the implementation and tests must uphold:
@@ -407,6 +532,24 @@ No network or CPU-bound work executes on the Qt main thread; all such work happe
 
 **Validates: Requirements 13.3, 13.4, 13.5**
 
+### Property 9: No IP is surfaced twice across runs
+
+For the lifetime of a `SeenProxyStore` (which persists on disk across app restarts and days), the same `host` (IP) is never surfaced to the user in two different runs, nor twice within one run. Formally: for any sequence of runs sharing a store, and for any host `h`, the number of times `h` is displayed across all those runs is at most 1. Equivalently, if `seen_store.contains(h)` is true (because `h` was surfaced on this or an earlier run), then no result with `result.host == h` is ever displayed again — even after the app is closed and reopened on a later day.
+
+**Validates: Requirements 19.1, 19.2, 19.3**
+
+### Property 10: Only surfaced hosts are recorded
+
+For any run, a host `h` is added to the `SeenProxyStore` if and only if a result with `result.host == h` actually passed the full display predicate and was surfaced to the user. Candidates that were fetched or validated but not surfaced (dead, wrong country, non-premium, or filtered out) are never recorded, so they remain eligible to be surfaced on a future run.
+
+**Validates: Requirements 19.3**
+
+### Property 11: Clearing the seen history is a reset
+
+After `SeenProxyStore.clear()` completes, `contains(h)` is false for every host `h`, and `len(store) == 0`, both in memory and after a reload from disk — so previously-surfaced IPs become eligible to appear again.
+
+**Validates: Requirements 19.4**
+
 ## Error Handling
 
 ### Error Scenario 1: Source unreachable or format changed
@@ -439,6 +582,12 @@ No network or CPU-bound work executes on the Qt main thread; all such work happe
 **Response**: Workers observe a cancellation flag, stop scheduling new work, and drain gracefully.
 **Recovery**: Results validated so far remain visible and exportable; UI returns to idle state.
 
+### Error Scenario 7: Seen-proxy store file missing or corrupt
+**Condition**: On startup the `SeenProxyStore` file does not exist yet (first run), or it exists but is unreadable / malformed (truncated JSON, invalid schema, permission error).
+**Response**: `SeenProxyStore.load()` treats the situation as an **empty history** and never raises; a missing file is normal on first run, and a corrupt file is logged and re-initialized (optionally backed up as `seen_proxies.json.bak`) rather than aborting startup.
+**Recovery**: The app runs normally; the store is rebuilt from that point forward. At worst the user may briefly see IPs that a corrupted history had previously recorded — acceptable and self-healing, and never a crash.
+**Write safety**: `save()` writes to a temp file and atomically renames it, so an interrupted write cannot corrupt the existing store.
+
 ## Testing Strategy
 
 ### Unit Testing Approach
@@ -446,7 +595,8 @@ No network or CPU-bound work executes on the Qt main thread; all such work happe
 - **ValidationEngine**: Mock the HTTP client / judge endpoint to simulate alive/dead/slow proxies and each anonymity level; assert latency and classification logic.
 - **Deduplicator**: Assert `(host, port, protocol)` uniqueness across mixed inputs.
 - **ExportService**: Round-trip results to CSV/TXT/JSON and assert record counts and content match.
-- **Filter logic**: Assert the premium predicate and country filter against enumerated cases.
+- **Filter logic**: Assert the premium predicate and country filter against enumerated cases; assert the extended display predicate excludes hosts already in the `SeenProxyStore`.
+- **SeenProxyStore**: Point the store at a temp path and assert `load`/`add`/`contains`/`save`/`clear` behavior; assert a missing file loads as empty, a corrupt file loads as empty without raising, and that a fresh instance re-loading the same path sees hosts persisted by a prior instance (simulating an app restart on another day).
 - Framework: **pytest**.
 
 ### Property-Based Testing Approach
@@ -457,9 +607,13 @@ Use property tests to validate invariants over generated inputs.
   - Premium predicate matches its definition for random `(alive, latency, anonymity)` tuples and thresholds.
   - Latency consistency invariant (`alive` ⟺ `latency_ms is not None`) holds for any generated `ProxyResult`.
   - Country filter never emits a result whose country differs from a specific requested code.
+  - **No IP surfaced twice across runs (Property 9)**: for any generated sequence of results split into "runs" that share one `SeenProxyStore` (with a `save`/reload between runs to simulate a restart), every host is displayed at most once across all runs.
+  - **Only surfaced hosts recorded (Property 10)**: after a run over generated results, the store contains exactly the hosts that passed the display predicate — no dead/filtered candidates.
+  - **Clear resets (Property 11)**: after `clear()` and a reload, `contains(h)` is false for all generated hosts.
 
 ### Integration Testing Approach
 - End-to-end run against a **local mock proxy + mock source server** to exercise scrape → dedupe → validate → geolocate → display without hitting the real internet (keeps tests deterministic and offline).
+- **Cross-session no-repeat test**: run the pipeline twice against the same mock sources with a shared on-disk `SeenProxyStore` (constructing a fresh `AppController`/store from the same path for the second run to simulate closing and reopening the app on another day); assert that no host surfaced in run 1 is surfaced again in run 2.
 - Optional, opt-in "live smoke test" (network-gated, off by default) that runs a small real scrape to catch source drift.
 - UI smoke test using `pytest-qt` to verify signals update the table and progress bar without blocking the main thread.
 
@@ -470,6 +624,7 @@ Use property tests to validate invariants over generated inputs.
 - **Incremental UI updates**: Results stream to the table in batches to avoid repainting the widget per proxy.
 - **GeoIP offline first**: Prefer a local GeoIP database to avoid per-lookup network latency and API rate limits.
 - **Cancellation**: A shared cancellation flag lets long runs stop promptly.
+- **Seen-store size & pruning**: The `SeenProxyStore` grows monotonically as new IPs are surfaced and could become large over months/years of use. Membership checks stay O(1) via an in-memory set (JSON) or a primary-key index (SQLite), so lookups remain cheap; only persistence cost grows. Because entries carry a `first_seen` timestamp, an **optional age-based pruning policy** (e.g. drop entries older than N months, on the assumption free-proxy IPs churn and old ones can safely reappear) or a **max-size cap** can bound the file. For very large histories, prefer the SQLite backend so appends do not require rewriting the whole file, and consider **batching saves** (debounced/periodic) while still persisting promptly enough that a crash loses at most a few of the most-recently-surfaced hosts.
 
 ## Security Considerations
 
@@ -478,6 +633,7 @@ Use property tests to validate invariants over generated inputs.
 - **Respect source terms & rate limits**: Adapters should use reasonable request rates and a descriptive User-Agent; avoid hammering sources. This is a defensive tool for the user's own use, not a scraping-abuse tool.
 - **Input sanitization**: Host/port parsed from sources must be validated (range checks, IP/hostname format) before any connection attempt to avoid malformed-input issues.
 - **Safe file writes**: Export paths are validated; the app writes only to user-chosen locations.
+- **Seen-store privacy & locality**: The `SeenProxyStore` persists only third-party proxy IPs and a first-seen timestamp — no user credentials or personal data — in a per-user, app-private data directory. It is written atomically and is purely local (never transmitted anywhere). The user retains control via the "Clear seen history" action, and the store path is configurable so it can be relocated or excluded from backups if desired.
 
 ## Dependencies
 
@@ -489,6 +645,8 @@ Use property tests to validate invariants over generated inputs.
 | **aiohttp-socks** / **PySocks** | SOCKS4/SOCKS5 proxy support for validation |
 | **BeautifulSoup4** + **lxml** | Parsing HTML-table proxy sources |
 | **geoip2** + MaxMind GeoLite2 DB (offline) | Country/geo resolution, with a public API fallback |
+| **platformdirs** | Resolve the per-user app-data/config directory for the persistent `SeenProxyStore` |
+| **sqlite3** (Python standard library) | Optional SQLite backend for the `SeenProxyStore` when the seen-IP history grows large (no extra dependency) |
 | **pytest**, **pytest-qt**, **Hypothesis** | Unit, UI, and property-based testing |
 
 > Note: The existing `userbot` repository is a Next.js/TypeScript web app; this feature is an independent Python desktop application and does not share that stack. Only the spec documents live under the repo's `.kiro/specs/` directory.

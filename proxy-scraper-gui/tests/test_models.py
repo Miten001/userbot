@@ -8,6 +8,7 @@ from hypothesis import given
 from proxy_scraper.domain.models import (
     ProxyProtocol,
     ProxyResult,
+    SeenProxy,
     make_candidate,
 )
 from tests.conftest import result_strategy
@@ -88,3 +89,38 @@ def test_candidate_key_identity():
     a = make_candidate("1.2.3.4", 80, "http")
     b = make_candidate("1.2.3.4", 80, "http")
     assert a.key == b.key
+
+
+
+
+# --- Task 18.1: SeenProxy model (Model 5) ----------------------------------
+
+
+def test_seen_proxy_valid():
+    sp = SeenProxy("203.0.113.7", 1731000000.0)
+    assert sp.host == "203.0.113.7"
+    assert sp.first_seen == 1731000000.0
+
+
+def test_seen_proxy_accepts_hostname_and_zero_timestamp():
+    sp = SeenProxy("proxy.example.com", 0.0)
+    assert sp.host == "proxy.example.com"
+    assert sp.first_seen == 0.0
+
+
+@pytest.mark.parametrize("host", ["", "not a host!!", "bad_host", "   "])
+def test_seen_proxy_rejects_invalid_host(host):
+    with pytest.raises(ValueError):
+        SeenProxy(host, 100.0)
+
+
+@pytest.mark.parametrize("ts", [-1.0, -0.001, -100])
+def test_seen_proxy_rejects_negative_timestamp(ts):
+    with pytest.raises(ValueError):
+        SeenProxy("203.0.113.7", ts)
+
+
+def test_seen_proxy_is_frozen():
+    sp = SeenProxy("203.0.113.7", 1.0)
+    with pytest.raises(Exception):
+        sp.host = "1.1.1.1"  # type: ignore[misc]

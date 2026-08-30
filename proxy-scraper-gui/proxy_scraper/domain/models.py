@@ -441,3 +441,38 @@ class ExportOutcome:
     records_written: int
     path: str
     error: Optional[str] = None
+
+
+
+# ---------------------------------------------------------------------------
+# Model 5: SeenProxy
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class SeenProxy:
+    """A single entry in the persistent cross-session seen-proxy history.
+
+    Identity is the **host (IP)** alone -- NOT ``(host, port, protocol)`` --
+    because the requirement is that a given IP is never surfaced twice
+    regardless of the port or protocol it appears on (Model 5, Requirement
+    19.1).
+
+    Invariants (enforced in ``__post_init__``):
+    * ``host`` is a non-empty, syntactically valid IP/host (same rule as
+      :class:`ProxyCandidate.host`).
+    * ``first_seen`` is a non-negative epoch timestamp.
+    """
+
+    host: str
+    first_seen: float
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.host, str) or not is_valid_host(self.host):
+            raise ValueError(f"invalid seen-proxy host: {self.host!r}")
+        if isinstance(self.first_seen, bool) or not isinstance(
+            self.first_seen, (int, float)
+        ):
+            raise ValueError("first_seen must be a numeric epoch timestamp")
+        if self.first_seen < 0:
+            raise ValueError("first_seen must be a non-negative epoch timestamp")

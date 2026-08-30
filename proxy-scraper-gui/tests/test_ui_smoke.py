@@ -25,6 +25,8 @@ from proxy_scraper.domain.models import (  # noqa: E402
 )
 from proxy_scraper.presentation.main_window import MainWindow  # noqa: E402
 
+from tests.fakes import InMemorySeenProxyStore  # noqa: E402
+
 
 class _NullExport:
     def export(self, results, fmt, path):  # pragma: no cover - unused here
@@ -34,17 +36,20 @@ class _NullExport:
 
 
 def _make_controller():
+    # Inject an isolated in-memory seen-store so smoke tests never touch the
+    # real per-user data directory.
     return AppController(
         http_client_factory=lambda: None,
         scraper_manager=None,
         validation_engine=None,
         export_service=_NullExport(),
+        seen_store=InMemorySeenProxyStore(),
     )
 
 
-def _alive_result(code="US", latency=100):
+def _alive_result(code="US", latency=100, host="1.2.3.4"):
     return ProxyResult(
-        ProxyCandidate("1.2.3.4", 8080, ProxyProtocol.HTTP, "t"),
+        ProxyCandidate(host, 8080, ProxyProtocol.HTTP, "t"),
         alive=True,
         latency_ms=latency,
         country_code=code,
@@ -71,8 +76,10 @@ def test_results_flush_into_table(qtbot):
     controller._filter = ProxyFilter(protocols=frozenset({ProxyProtocol.HTTP}))
     window._flush_timer.start()
 
-    controller._on_worker_result(_alive_result())
-    controller._on_worker_result(_alive_result(latency=250))
+    # Distinct hosts: the seen-store dedupes by host, so a single host is
+    # surfaced at most once per run (Requirement 19.3).
+    controller._on_worker_result(_alive_result(host="1.2.3.4"))
+    controller._on_worker_result(_alive_result(host="5.6.7.8", latency=250))
 
     # Wait for the batch timer to flush.
     qtbot.waitUntil(lambda: window.table.rowCount() == 2, timeout=2000)

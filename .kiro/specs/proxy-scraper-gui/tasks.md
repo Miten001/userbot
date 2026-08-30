@@ -217,6 +217,70 @@ Testing uses **pytest**, **pytest-qt**, and **Hypothesis**. Property-based tests
 - [ ] 17. Final checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
+- [ ] 18. Implement the persistent cross-session SeenProxyStore (never surface the same IP twice)
+  - [ ] 18.1 Add the `SeenProxy` data model (Model 5)
+    - Add a frozen dataclass `SeenProxy(host: str, first_seen: float)` in `domain/models.py`.
+    - Enforce validation rules: `host` is a non-empty, syntactically valid IP/host (reuse the `ProxyCandidate.host` rule from task 2.1); `first_seen` is a non-negative epoch timestamp; identity/uniqueness in the store is `host` alone (NOT `(host, port, protocol)`).
+    - _Requirements: 19.1_
+
+  - [ ] 18.2 Declare the `SeenProxyStore` interface
+    - Add a `SeenProxyStore` Protocol/ABC to `domain/interfaces.py` matching the design signatures: `load()`, `contains(host) -> bool`, `add(host) -> bool`, `add_many(hosts) -> int`, `save()`, `clear()`, and `__len__()`.
+    - Document the contract: identity keyed by host (IP) only; `load()` must never raise on a missing/corrupt file; `save()` must persist atomically.
+    - _Requirements: 19.1, 19.2, 19.4, 19.5_
+
+  - [ ] 18.3 Implement the disk-backed JSON `SeenProxyStore`
+    - Create `infrastructure/seen_proxy_store.py` implementing the `SeenProxyStore` interface with an in-memory `set[str]` (or `dict[str, float]`) for O(1) `contains`.
+    - Resolve the default on-disk path with `platformdirs.user_data_dir("proxy-scraper-gui")` (e.g. `seen_proxies.json`), and accept a **configurable path** via constructor argument so tests can point it at a temp directory.
+    - Use the JSON format `{ "version": 1, "hosts": { host: first_seen } }`; keep `first_seen` timestamps to support optional age-based pruning.
+    - Implement atomic `save()` (write to a temp file, then `os.replace`/rename) so an interrupted write cannot corrupt the store.
+    - On `load()`, treat a missing OR corrupt/malformed file as an **empty history** and return without raising (Error Scenario 7); optionally back up a corrupt file as `seen_proxies.json.bak`.
+    - _Requirements: 19.1, 19.2, 19.5_
+
+  - [ ]* 18.4 Write unit tests for `SeenProxyStore`
+    - Point the store at a temp path; assert `load`/`add`/`contains`/`save`/`clear` behavior and idempotent `add` (returns False for an already-present host).
+    - Assert a missing file loads as empty, a corrupt/truncated file loads as empty without raising, and that a fresh instance re-loading the same path sees hosts persisted by a prior instance (simulating an app restart on another day).
+    - _Requirements: 19.5_
+
+  - [ ] 18.5 Extend the `AppController` display path to exclude and record seen hosts
+    - In `application/app_controller.py`, extend the display predicate to also require `not seen_store.contains(result.host)` (in addition to alive/protocol/country/premium).
+    - When a result passes the full predicate and is surfaced, call `seen_store.add(result.host)` and persist promptly via `seen_store.save()`; record a host ONLY when it is actually surfaced (never for fetched/validated-but-filtered candidates).
+    - Surface at most one result per host within a single run (track hosts surfaced in the current run so duplicates within the run are dropped).
+    - _Requirements: 19.1, 19.2, 19.3_
+
+  - [ ] 18.6 Add `clear_seen_history()` to the `AppController`
+    - Implement `AppController.clear_seen_history()` which empties the `SeenProxyStore` in memory and on disk (delegating to `seen_store.clear()`), so previously-surfaced hosts may be surfaced again on subsequent runs.
+    - _Requirements: 19.4_
+
+  - [ ]* 18.7 Write property test for no-IP-surfaced-twice-across-runs
+    - **Property 9: No IP is surfaced twice across runs**
+    - **Validates: Requirements 19.1, 19.2, 19.3**
+    - Generate a sequence of results split into two "runs" that share one on-disk `SeenProxyStore`, performing a `save`/reload between runs (constructing a fresh store from the same path) to simulate closing and reopening the app; assert every host is displayed at most once across both runs.
+
+  - [ ]* 18.8 Write property test for only-surfaced-hosts-recorded
+    - **Property 10: Only surfaced hosts are recorded**
+    - **Validates: Requirements 19.3**
+    - Over generated results (mixing dead, wrong-country, non-premium, and passing entries), assert that after a run the store contains exactly the hosts that passed the full display predicate — no dead/filtered candidates.
+
+  - [ ]* 18.9 Write property test for clearing-resets-the-history
+    - **Property 11: Clearing the seen history is a reset**
+    - **Validates: Requirements 19.4**
+    - For any generated set of recorded hosts, assert that after `clear()` (and a reload from disk) `contains(h)` is false for every host and `len(store) == 0`, both in memory and after reload.
+
+  - [ ] 18.10 Add the "Clear seen history" action to the MainWindow
+    - In `presentation/main_window.py`, add a "Clear seen history" action (menu item under a Tools/History menu, or a button near the filter panel) that, after a confirmation prompt, calls `AppController.clear_seen_history()`.
+    - _Requirements: 19.4, 19.6_
+
+  - [ ] 18.11 Wire the `SeenProxyStore` into the composition root
+    - In `main.py`, instantiate the disk-backed `SeenProxyStore`, call `load()` on startup, and pass it into the `AppController` so the display path and `clear_seen_history()` use the same persistent instance.
+    - _Requirements: 19.2_
+
+  - [ ]* 18.12 Write a cross-session no-repeat integration test
+    - Run the offline pipeline twice against the same mock sources with a shared on-disk `SeenProxyStore`, constructing a fresh `AppController`/store from the same path for the second run (simulating closing and reopening the app on another day); assert no host surfaced in run 1 is surfaced again in run 2.
+    - _Requirements: 19.1, 19.2, 19.3_
+
+- [ ] 19. Final checkpoint - persistent seen-proxy history
+  - Ensure all tests pass, ask the user if questions arise.
+
 ## Notes
 
 - Tasks marked with `*` are optional test tasks and can be skipped for a faster MVP, though they validate the design's correctness properties and are strongly recommended.
@@ -231,15 +295,16 @@ Testing uses **pytest**, **pytest-qt**, and **Hypothesis**. Property-based tests
 {
   "waves": [
     { "id": 0, "tasks": ["2.1"] },
-    { "id": 1, "tasks": ["2.2", "2.3", "4.1", "6.1"] },
-    { "id": 2, "tasks": ["4.2", "5.1", "6.2", "8.1", "11.1", "12.1"] },
-    { "id": 3, "tasks": ["5.2", "7.1", "8.2", "9.1", "11.2", "11.3", "12.2", "12.3"] },
+    { "id": 1, "tasks": ["2.2", "2.3", "4.1", "6.1", "18.1", "18.2"] },
+    { "id": 2, "tasks": ["4.2", "5.1", "6.2", "8.1", "11.1", "12.1", "18.3"] },
+    { "id": 3, "tasks": ["5.2", "7.1", "8.2", "9.1", "11.2", "11.3", "12.2", "12.3", "18.4", "18.9"] },
     { "id": 4, "tasks": ["7.2", "7.3", "9.2"] },
     { "id": 5, "tasks": ["9.3", "9.4", "9.5", "13.1"] },
     { "id": 6, "tasks": ["13.2", "15.1"] },
-    { "id": 7, "tasks": ["13.3", "13.4", "15.2"] },
-    { "id": 8, "tasks": ["15.3", "16.1"] },
-    { "id": 9, "tasks": ["16.2"] }
+    { "id": 7, "tasks": ["13.3", "13.4", "15.2", "18.5"] },
+    { "id": 8, "tasks": ["15.3", "16.1", "18.6", "18.7", "18.8", "18.10"] },
+    { "id": 9, "tasks": ["16.2", "18.11"] },
+    { "id": 10, "tasks": ["18.12"] }
   ]
 }
 ```

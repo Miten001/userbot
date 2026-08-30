@@ -60,3 +60,46 @@ class FakeSource:
             # prove the ScraperManager isolates it.
             raise self._raise
         return list(self._candidates)
+
+
+
+class InMemorySeenProxyStore:
+    """An in-memory SeenProxyStore test double (no disk I/O).
+
+    Implements the ``SeenProxyStore`` protocol so tests can inject it into the
+    AppController without touching the real per-user data directory.
+    """
+
+    def __init__(self) -> None:
+        self._hosts: dict[str, float] = {}
+        self.save_calls = 0
+
+    def load(self) -> None:
+        # Nothing persisted; already in memory.
+        pass
+
+    def contains(self, host: str) -> bool:
+        return host in self._hosts
+
+    def add(self, host: str) -> bool:
+        if host in self._hosts:
+            return False
+        self._hosts[host] = 0.0
+        return True
+
+    def add_many(self, hosts) -> int:
+        added = 0
+        for host in hosts:
+            if self.add(host):
+                added += 1
+        return added
+
+    def save(self) -> None:
+        self.save_calls += 1
+
+    def clear(self) -> None:
+        self._hosts = {}
+        self.save()
+
+    def __len__(self) -> int:
+        return len(self._hosts)

@@ -13,6 +13,8 @@ from __future__ import annotations
 import logging
 import sys
 
+logger = logging.getLogger(__name__)
+
 
 def _configure_logging() -> None:
     logging.basicConfig(
@@ -33,6 +35,7 @@ def build_controller():
     from proxy_scraper.domain.scraper_manager import DefaultScraperManager
     from proxy_scraper.domain.validation_engine import DefaultValidationEngine
     from proxy_scraper.infrastructure.http_client import AsyncHttpClient
+    from proxy_scraper.infrastructure.seen_proxy_store import JsonSeenProxyStore
     from proxy_scraper.infrastructure.source_registry import default_sources
 
     # Infrastructure: a factory so each background run gets a fresh client
@@ -54,11 +57,19 @@ def build_controller():
     )
     export_service = DefaultExportService()
 
+    # Persistent cross-session seen-proxy history (Requirement 19). Load the
+    # previously-saved history from disk on startup so IPs surfaced on prior
+    # runs (including on earlier days) are never surfaced again.
+    seen_store = JsonSeenProxyStore()
+    seen_store.load()
+    logger.info("Seen-proxy history holds %d host(s) at %s", len(seen_store), seen_store.path)
+
     controller = AppController(
         http_client_factory=http_client_factory,
         scraper_manager=scraper_manager,
         validation_engine=validation_engine,
         export_service=export_service,
+        seen_store=seen_store,
         concurrency=100,
     )
     return controller, geo_service

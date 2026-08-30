@@ -15,6 +15,7 @@ import logging
 from typing import Optional
 
 from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QAction
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -66,6 +67,7 @@ class MainWindow(QMainWindow):
         self.resize(1000, 680)
 
         self._build_ui()
+        self._build_menu()
         self._connect_controller()
 
         # Batch table updates so we do not repaint per individual result
@@ -87,6 +89,17 @@ class MainWindow(QMainWindow):
         root.addWidget(self._build_status_bar())
 
         self.setCentralWidget(central)
+
+    def _build_menu(self) -> None:
+        """Build the menu bar with a Tools menu hosting the 'Clear seen
+        history' action (Requirement 19.4, 19.6)."""
+        tools_menu = self.menuBar().addMenu("&Tools")
+        self.clear_seen_action = QAction("Clear seen history…", self)
+        self.clear_seen_action.setToolTip(
+            "Forget every proxy IP surfaced so far so they may appear again."
+        )
+        self.clear_seen_action.triggered.connect(self._on_clear_seen_history)
+        tools_menu.addAction(self.clear_seen_action)
 
     def _build_filter_panel(self) -> QWidget:
         box = QGroupBox("Filters")
@@ -297,6 +310,23 @@ class MainWindow(QMainWindow):
     def _on_cancel_clicked(self) -> None:
         self.status_label.setText("Cancelling… draining in-flight checks.")
         self._controller.cancel()
+
+    def _on_clear_seen_history(self) -> None:
+        """Confirm and clear the persistent seen-proxy history so previously
+        surfaced IPs may appear again (Requirement 19.4, 19.6)."""
+        reply = QMessageBox.question(
+            self,
+            "Clear seen history",
+            "Forget every proxy IP that has been surfaced so far?\n\n"
+            "Previously-shown proxies will then be eligible to appear again "
+            "on future runs. This cannot be undone.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        self._controller.clear_seen_history()
+        self.status_label.setText("Seen-proxy history cleared.")
 
     def _on_export_clicked(self) -> None:
         results = self._controller.displayed_results

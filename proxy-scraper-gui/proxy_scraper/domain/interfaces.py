@@ -11,7 +11,7 @@ Design references: Components 1-6.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Awaitable, Callable, Optional, Protocol, runtime_checkable
+from typing import Awaitable, Callable, Iterable, Optional, Protocol, runtime_checkable
 
 from proxy_scraper.domain.models import (
     ExportFormat,
@@ -165,6 +165,63 @@ class ExportService(Protocol):
     ) -> ExportOutcome:
         """Write results to disk (Requirement 13). Never raises; failures are
         reported via ``ExportOutcome.success == False``."""
+        ...
+
+
+# ---------------------------------------------------------------------------
+# Domain contract: persistent seen-proxy store (Component 7)
+# ---------------------------------------------------------------------------
+
+
+@runtime_checkable
+class SeenProxyStore(Protocol):
+    """A persistent, cross-session record of the host (IP) of every proxy that
+    has actually been surfaced to the user, so those IPs are never surfaced
+    again on any future run (Component 7, Requirement 19).
+
+    Contract:
+    * Identity is keyed by **host (IP) only** -- not ``(host, port, protocol)``.
+    * :meth:`load` MUST never raise on a missing/corrupt file; it initializes
+      to an empty history instead (Error Scenario 7, Requirement 19.5).
+    * :meth:`save` MUST persist atomically (write-temp + rename) so a
+      crash/close cannot corrupt or lose the file.
+    * :meth:`contains` is O(1) (backed by an in-memory set/dict).
+    """
+
+    def load(self) -> None:
+        """Read the persisted history from disk into memory. On a missing or
+        corrupt file, initialize to an empty history and never raise
+        (Error Scenario 7, Requirement 19.5)."""
+        ...
+
+    def contains(self, host: str) -> bool:
+        """True if *host* (IP) has been surfaced on this or any previous run
+        (Requirement 19.2)."""
+        ...
+
+    def add(self, host: str) -> bool:
+        """Record *host* as surfaced. Returns ``True`` if it was newly added,
+        ``False`` if it was already present. Idempotent per host
+        (Requirement 19.1)."""
+        ...
+
+    def add_many(self, hosts: Iterable[str]) -> int:
+        """Record several hosts at once; returns the count newly added."""
+        ...
+
+    def save(self) -> None:
+        """Persist the current history to disk atomically (write-temp +
+        rename) so a crash/close cannot corrupt or lose the file
+        (Requirement 19.1, write safety of Error Scenario 7)."""
+        ...
+
+    def clear(self) -> None:
+        """Empty the history in memory and on disk (used by the UI
+        'Clear seen history' action, Requirement 19.4)."""
+        ...
+
+    def __len__(self) -> int:
+        """Number of distinct hosts remembered (for status/UI display)."""
         ...
 
 

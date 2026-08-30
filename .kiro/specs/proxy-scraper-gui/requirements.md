@@ -25,6 +25,8 @@ These requirements are derived from the approved design document and trace direc
 - **Anonymity_Filter**: The minimum anonymity level a Proxy_Result must reach to qualify as premium, selected by the user. One of three levels, ordered from least to most restrictive: **Any** (`ANY`) imposes no anonymity restriction; **Anonymous or better** (`ANONYMOUS_OR_BETTER`) excludes transparent proxies; **Elite only** (`ELITE_ONLY`) admits only elite proxies (the destination site cannot detect a proxy is being used). The default is **Elite only**.
 - **Judge_Endpoint**: A neutral, trusted endpoint used to test a proxy without routing the user's sensitive traffic.
 - **Supported_Protocol**: One of HTTP, HTTPS, SOCKS4, SOCKS5.
+- **Surfaced**: The state of a Proxy_Result that passed all active filters (alive, matching protocol, matching country, and premium per the `min_anonymity` selector) and was actually displayed to the user in the Results_Table. A proxy that was fetched or validated but filtered out is not surfaced. By construction, every surfaced Proxy_Result is alive (working) and, under the default `min_anonymity` of "Elite only", is elite (non-detectable) — see Requirements 7.1 and 7.5.
+- **Seen_Proxy_Store**: A persistent, cross-session record of the host (IP) of every Proxy_Result that has been surfaced to the user. It is loaded from disk on startup and saved to disk so that a host recorded in it is never surfaced again on any future run, including after the application is closed and reopened on a later day. Identity in the Seen_Proxy_Store is keyed by host (IP) alone, not by `(host, port, protocol)`.
 
 ## Requirements
 
@@ -221,3 +223,18 @@ These requirements are derived from the approved design document and trace direc
 1. THE Validation_Engine SHALL route only Judge_Endpoint requests through scraped proxies and SHALL NOT route the user's sensitive traffic through them.
 2. WHEN a Judge_Endpoint request is issued through a proxy, THE Validation_Engine SHALL exclude cookies, tokens, and personal data from that request.
 3. THE Export_Service SHALL write only to user-chosen destination locations.
+
+### Requirement 19: Never surface the same proxy IP twice across sessions
+
+**User Story:** As a user, I want the application to remember which proxy IPs it has already shown me and never show the same IP again — even after I close the app and reopen it on another day — so that every run gives me a fresh stream of previously-unseen, working, non-detectable proxies.
+
+Every surfaced Proxy_Result is, by construction, alive (working) and — under the default `min_anonymity` of "Elite only" — elite (non-detectable); this is guaranteed by Requirements 7.1 and 7.5 and is not restated here.
+
+#### Acceptance Criteria
+
+1. WHEN a Proxy_Result is surfaced to the user, THE App_Controller SHALL record that result's host in the persistent Seen_Proxy_Store and SHALL cause the Seen_Proxy_Store to be saved to disk.
+2. WHEN the application is reopened after being closed, THE App_Controller SHALL load the previously saved Seen_Proxy_Store from disk and SHALL exclude from the surfaced results any Proxy_Result whose host is already recorded in the Seen_Proxy_Store, so that no host recorded on a prior session is surfaced again.
+3. THE App_Controller SHALL record a host in the Seen_Proxy_Store only when a Proxy_Result with that host is surfaced to the user, SHALL NOT record hosts of candidates that were fetched or validated but not surfaced so that unshown hosts remain eligible on a future run, and SHALL surface at most one Proxy_Result per host within a single run.
+4. WHEN the user invokes the "Clear seen history" action, THE App_Controller SHALL empty the Seen_Proxy_Store in memory and on disk, so that previously-surfaced hosts may be surfaced again on subsequent runs.
+5. IF the Seen_Proxy_Store file is missing or corrupt when loaded, THEN THE Seen_Proxy_Store SHALL initialize to an empty history and SHALL complete loading without raising an error.
+6. THE Main_Window SHALL provide a "Clear seen history" action that invokes the App_Controller to clear the Seen_Proxy_Store.
