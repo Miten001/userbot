@@ -429,7 +429,28 @@ def build():
     )
 
     # ---------------- Section 6 ----------------
-    g.section_heading("6. How to Use the App")
+    g.section_heading("6. Fresh Proxies Every Time (No Repeats)")
+    g.paragraph(
+        "The app records every proxy IP it shows you and will never show that same IP "
+        "again on future runs."
+    )
+    g.paragraph(
+        "This works across sessions: close the app and reopen it another day, and "
+        "previously-shown IPs are still excluded (the history is saved on disk and kept "
+        "permanently)."
+    )
+    g.bullet("Only working (live) and, by default, Elite (the website cannot detect a "
+             "proxy) proxies are shown.")
+    g.bullet("The history is stored in your per-user app data folder (file: "
+             "seen_proxies.json). You do not need to manage it.")
+    g.bullet('To start over and allow previously-shown IPs again, use the menu: '
+             'Tools -> "Clear seen history..." and confirm.')
+    g.bullet("Because free proxies churn and each IP is used only once, repeated runs "
+             "give you fresh proxies but the total number available per run naturally "
+             "shrinks over time until new proxies appear online or you clear the history.")
+
+    # ---------------- Section 7 ----------------
+    g.section_heading("7. How to Use the App")
     g.numbered(1, 'Pick a country or leave it on "Random / Any".')
     g.numbered(2, "Choose protocols (HTTP/HTTPS/SOCKS4/SOCKS5) and a max latency.")
     g.numbered(3, 'Choose an Anonymity level from the dropdown. "Elite only" is the '
@@ -440,6 +461,8 @@ def build():
     g.numbered(4, "Click Start - working proxies stream into the table.")
     g.numbered(5, "Click Cancel anytime (keeps results found so far).")
     g.numbered(6, "Click Export to save as CSV / TXT / JSON.")
+    g.numbered(7, 'To reset the no-repeat memory so previously-shown IPs can appear '
+                  'again, use the menu: Tools -> "Clear seen history..." and confirm.')
 
     g.sub_heading("Anonymity Levels (which proxy hides best?)")
     g.bullet("Transparent: leaks your real IP - avoid.")
@@ -452,8 +475,8 @@ def build():
         "proxies are more reliable."
     )
 
-    # ---------------- Section 7 ----------------
-    g.section_heading("7. Troubleshooting")
+    # ---------------- Section 8 ----------------
+    g.section_heading("8. Troubleshooting")
     g.bullet('"python is not recognized" -> Python not on PATH; reinstall Python and '
              'tick "Add Python to PATH", then reopen Command Prompt.')
     g.bullet('"pip is not recognized" -> use  python -m pip install -r requirements.txt')
@@ -462,8 +485,8 @@ def build():
     g.bullet("Do NOT run these commands inside C:\\Windows\\System32 - use your user "
              "folder (%USERPROFILE%).")
 
-    # ---------------- Section 8 ----------------
-    g.section_heading("8. Proxy Types Explained: HTTP vs HTTPS vs SOCKS4 vs SOCKS5")
+    # ---------------- Section 9 ----------------
+    g.section_heading("9. Proxy Types Explained: HTTP vs HTTPS vs SOCKS4 vs SOCKS5")
 
     g.sub_heading("HTTP proxy")
     g.paragraph(
