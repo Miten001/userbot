@@ -10,3 +10,14 @@ dist/
 .DS_Store
 .vercel
 next-env.d.ts
+
+# musicbot (Spydii Music)
+musicbot/.env
+musicbot/cache/
+musicbot/downloads/
+musicbot/__pycache__/
+musicbot/**/__pycache__/
+musicbot/*.session
+musicbot/*.session-journal
+musicbot/log.txt
+musicbot/anony/cookies/*.txt
