@@ -10,3 +10,8 @@ dist/
 .DS_Store
 .vercel
 next-env.d.ts
+
+# scam awareness bot — token kabhi commit mat karna
+scam-awareness-bot/.env
+__pycache__/
+*.pyc
