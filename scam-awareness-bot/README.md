@@ -30,6 +30,7 @@ dikhake, aur phir **REVEAL** karke samjhata hai ki trick kahan thi.
 | 🚩 Red flags checklist | Scam bot pehchanne ke 7 signs |
 | 🛡️ Protection tips | Telegram privacy settings, Aadhaar lock, OTP rules |
 | 🚨 Report guide | cybercrime.gov.in, helpline 1930, Telegram reporting |
+| 📋 Report kit | Kisi asli scam/doxxing bot ko ban karwane ka step-by-step kit — [`report-kit.md`](./report-kit.md) |
 
 ## 🚀 Setup (5 minute)
 
