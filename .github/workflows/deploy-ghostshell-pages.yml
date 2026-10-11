@@ -2,7 +2,7 @@ name: Deploy GhostShell site to Pages
 
 on:
   push:
-    branches: ["arena/bec46eeb-userbot"]
+    branches: ["arena/bec46eeb-userbot", "uncheck"]
     paths:
       - "ghostshell/**"
       - ".github/workflows/deploy-ghostshell-pages.yml"
@@ -31,11 +31,12 @@ jobs:
           cp -R ghostshell/site/. _site/
           cp ghostshell/install.sh _site/install.sh
 
-          # Full package: launchers + extension + tools, minus the site itself.
+          # Full package: launchers + extension + relay + site + tools.
           # Members keep the "ghostshell/" prefix so `tar -xzf` lands in a
           # directory named ghostshell, which is what install.sh expects.
-          tar --exclude='ghostshell/site' \
-              --exclude='.DS_Store' \
+          # site/ ships inside the tarball too — the relay serves it as the
+          # in-site browser UI after install.
+          tar --exclude='.DS_Store' \
               -czf _site/ghostshell.tar.gz ghostshell
 
           # Extension on its own, for people already on a system VPN
