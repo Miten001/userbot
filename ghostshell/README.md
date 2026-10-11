@@ -62,6 +62,7 @@ or just [`extension.zip`](https://miten001.github.io/userbot/extension.zip).
 | `TZ` + `--lang` | Makes the whole process agree with your exit country, not just the page |
 | `--disable-features=OptimizationHints,…` | Turns off Google background chatter that correlates your profile |
 | `--user-data-dir` | Isolated profile, so none of this touches your real Chrome |
+| `--new-identity` / `-NewIdentity` | Wipes the isolated profile (fresh fingerprint seed) and tells a running relay to drop its cookies and rotate the proxy |
 
 ### Extension (`extension/`)
 
@@ -83,6 +84,34 @@ ghostshell --check
 Checks the tunnel interface, your DNS resolver, whether you have IPv6, what your
 exit IP geolocates to, whether it's a hosting range, and whether your system
 timezone matches — then tells you which third-party pages to verify in.
+
+### Relay (`relay/`) + in-site browser (`site/browser.html`)
+
+A local fetch+rewrite viewer with a scoring proxy manager. Node 18+, zero
+npm dependencies, bound to `127.0.0.1` only.
+
+```bash
+./tools/relay.sh --open          # starts the relay, opens the browser UI
+# → http://127.0.0.1:8787/browser.html
+```
+
+- **Search + viewer** — type a search or a URL; the relay fetches it (direct or
+  through the pool), rewrites every URL (`<base>` deleted, `srcset`, CSS
+  `url()`/`@import`, meta-refresh), strips CSP and active content, and renders
+  it in a sandboxed frame. Forms POST through the relay so logins/searches work.
+- **Proxy manager** — paste `socks5://user:pass@host:port`, `http://…`,
+  `socks4://…` or bare `host:port` lines; the relay tests each one for real
+  (latency, exit IP, datacenter or not) and scores it 0–100. Pick one
+  explicitly or let *Select best* decide.
+- **SSRF guard** — every target, including redirect hops and form POSTs, is
+  resolved and checked against loopback/private/link-local/metadata ranges
+  before a socket opens, and again at DNS time.
+- **New identity** — one click (or `ghostshell.sh --new-identity`) drops the
+  relay's cookie jar and rotates the proxy.
+
+`browser.html` on the static Pages site shows **“relay not running”** — that is
+expected. The viewer only ever talks to the relay on your machine; Pages can't
+run it for you.
 
 ---
 
@@ -123,11 +152,18 @@ ghostshell/
 │   ├── src/background.js      proxy, WebRTC policy, Accept-Language
 │   ├── src/popup.js|options.js|ui-shared.js|styles.css
 │   └── icons/
+├── relay/
+│   ├── server.js              fetch+rewrite viewer + pool API (127.0.0.1 only)
+│   └── lib/net.js|rewrite.js|pool.js
 ├── tools/
 │   ├── preflight.sh           leak pre-flight
+│   ├── relay.sh               relay launcher (Node 18+)
 │   └── make_icons.py          icon generator (stdlib only)
 ├── docs/
-├── site/                      the GitHub Pages site
+├── site/                      the GitHub Pages site + in-site browser
+│   ├── index.html             landing page
+│   ├── browser.html|browser.js  in-site browser (needs the local relay)
+│   └── leak-test.html         self-test
 └── install.sh
 ```
 

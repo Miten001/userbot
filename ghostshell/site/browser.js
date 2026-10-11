@@ -1,0 +1,355 @@
+/* GhostShell in-site browser — search, embedded viewer, proxy manager.
+ *
+ * Talks ONLY to the local relay (127.0.0.1:8787). On the static Pages
+ * deployment the fetch fails by design and the page shows "relay not
+ * running" — expected behaviour, not a bug: the viewer must never be able
+ * to fetch anything except through the relay the user is running.
+ */
+(function () {
+  'use strict';
+
+  // When the relay serves this page, same-origin works out of the box.
+  // On https Pages, this http://127.0.0.1 fetch is blocked as mixed
+  // content → we land in the "relay not running" state, exactly as intended.
+  var RELAY = (location.protocol === 'http:' &&
+    (location.hostname === '127.0.0.1' || location.hostname === 'localhost'))
+    ? location.origin
+    : 'http://127.0.0.1:8787';
+
+  var SEARCH = 'https://lite.duckduckgo.com/lite/?q=';
+
+  var $ = function (id) { return document.getElementById(id); };
+  var viewer = $('viewer');
+  var relayUp = false;
+
+  // ── history (toolbar-level navigations; the iframe is same-origin
+  //    once the relay is up, so we can also read its real location) ──
+  var history = [];
+  var hIndex = -1;
+
+  function toast(msg) {
+    var t = $('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(t._timer);
+    t._timer = setTimeout(function () { t.classList.remove('show'); }, 2600);
+  }
+
+  function setPill(state, text) {
+    var pill = $('relayPill');
+    pill.className = 'pill ' + state;
+    pill.textContent = text;
+  }
+
+  // ── relay API ─────────────────────────────────────────────────────────
+
+  function api(path, opts) {
+    return fetch(RELAY + path, opts).then(function (res) {
+      return res.json().then(function (data) {
+        if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+        return data;
+      });
+    });
+  }
+
+  function ping() {
+    return api('/api/ping').then(function (data) {
+      relayUp = true;
+      setPill('online', 'relay: online · v' + data.version);
+      $('stRelay').textContent = 'online · v' + data.version;
+      $('stIdentity').textContent = '#' + data.identity;
+      $('stEgress').textContent = data.activeProxy || 'direct';
+      $('relayDown').classList.remove('show');
+      viewer.style.display = '';
+      $('btnReload').disabled = false;
+      return data;
+    }).catch(function () {
+      relayUp = false;
+      setPill('offline', 'relay: not running');
+      $('stRelay').textContent = 'not running';
+      $('relayDown').classList.add('show');
+      viewer.style.display = 'none';
+      $('btnReload').disabled = true;
+      return null;
+    });
+  }
+
+  // ── navigation ────────────────────────────────────────────────────────
+
+  function looksLikeUrl(text) {
+    if (/^https?:\/\//i.test(text)) return true;
+    if (/\s/.test(text)) return false;
+    // host.tld or host.tld/path — but not "search words.with.dots"
+    return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+(:\d+)?([/?#].*)?$/i.test(text);
+  }
+
+  function targetFor(input) {
+    var text = input.trim();
+    if (text === '') return null;
+    if (looksLikeUrl(text)) {
+      if (!/^https?:\/\//i.test(text)) text = 'https://' + text;
+      return text;
+    }
+    return SEARCH + encodeURIComponent(text);
+  }
+
+  function viewUrl(target, p) {
+    return RELAY + '/view?u=' + encodeURIComponent(target) + '&p=' + encodeURIComponent(p || 'auto');
+  }
+
+  function navigate(target, push) {
+    if (!relayUp) { toast('relay not running — start tools/relay.sh first'); return; }
+    var url = viewUrl(target);
+    if (push !== false) {
+      history = history.slice(0, hIndex + 1);
+      history.push({ target: target, url: url });
+      hIndex = history.length - 1;
+    }
+    viewer.src = url;
+    $('addr').value = target;
+    $('btnBack').disabled = hIndex <= 0;
+    $('btnFwd').disabled = hIndex >= history.length - 1;
+    $('btnReload').disabled = false;
+    updateEgress();
+  }
+
+  function updateEgress() {
+    var sel = window._selectedProxy || 'auto';
+    $('stEgress').textContent =
+      sel === 'direct' ? 'direct' :
+      sel === 'auto' ? 'auto (pool)' : (window._selectedProxyRaw || sel);
+  }
+
+  // Read the real URL + rewrite stats back out of the viewer once a page
+  // loads. Safe: the relay serves /view from our origin and strips scripts,
+  // and the iframe stays sandboxed without popups.
+  viewer.addEventListener('load', function () {
+    if (!relayUp) return;
+    try {
+      var loc = viewer.contentWindow.location;
+      if (loc.href === 'about:blank') return;
+      var u = new URL(loc.href).searchParams.get('u');
+      if (u) {
+        $('addr').value = u;
+        if (hIndex >= 0) history[hIndex].target = u;
+      }
+    } catch (e) { /* cross-origin — keep the last known URL */ }
+    try {
+      var meta = viewer.contentDocument.querySelector('meta[name="gs-stats"]');
+      if (meta) {
+        var s = meta.getAttribute('content') || '';
+        var m = /scripts=(\d+).*handlers=(\d+)/.exec(s);
+        $('stBlocked').textContent = m ? (m[1] + ' scripts, ' + m[2] + ' handlers') : s;
+      }
+    } catch (e) { /* ignore */ }
+  });
+
+  $('addrForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var t = targetFor($('addr').value);
+    if (t) navigate(t);
+    else toast('type a URL or a search');
+  });
+  $('btnGo').addEventListener('click', function () {
+    var t = targetFor($('addr').value);
+    if (t) navigate(t);
+    else toast('type a URL or a search');
+  });
+  $('btnBack').addEventListener('click', function () {
+    if (hIndex > 0) { hIndex--; navigate(history[hIndex].target, false); }
+  });
+  $('btnFwd').addEventListener('click', function () {
+    if (hIndex < history.length - 1) { hIndex++; navigate(history[hIndex].target, false); }
+  });
+  $('btnReload').addEventListener('click', function () {
+    if (hIndex >= 0) navigate(history[hIndex].target, false);
+    else if ($('addr').value) { var t = targetFor($('addr').value); if (t) navigate(t); }
+  });
+
+  // ── identity ──────────────────────────────────────────────────────────
+
+  $('btnIdentity').addEventListener('click', function () {
+    if (!relayUp) { toast('relay not running'); return; }
+    api('/api/identity', { method: 'POST' }).then(function (data) {
+      $('stIdentity').textContent = '#' + data.identity;
+      $('stEgress').textContent = data.proxy || 'direct';
+      toast('new identity · cookies dropped · egress: ' + (data.proxy || 'direct'));
+      if (hIndex >= 0) navigate(history[hIndex].target, false);
+    }).catch(function (e) { toast('identity reset failed: ' + e.message); });
+  });
+
+  // ── proxy manager ─────────────────────────────────────────────────────
+
+  function renderProxies(data) {
+    var list = $('proxyList');
+    var proxies = (data && data.proxies) || [];
+    $('poolCount').textContent = proxies.length ? ('· ' + proxies.length) : '';
+    if (proxies.length === 0) {
+      list.innerHTML = '<p style="color:var(--dim);font-size:12.5px">' +
+        'No proxies yet. Paste some above, or browse direct — the relay works without a pool.</p>';
+      return;
+    }
+    list.innerHTML = '';
+    proxies.forEach(function (p) {
+      var row = document.createElement('div');
+      row.className = 'proxy-row' + (data.active === p.id ? ' active' : '');
+
+      var score = Math.round(p.score);
+      var status = p.lastOk == null ? '' : (p.lastOk ? 'ok' : 'bad');
+      var bits = [];
+      if (p.lastMs) bits.push(p.lastMs + 'ms');
+      if (p.exitIp) bits.push(p.exitIp);
+      if (p.isp) bits.push(p.isp);
+      if (p.error) bits.push('ERR: ' + p.error.slice(0, 60));
+      if (p.hosting === true) bits.push('datacenter');
+
+      row.innerHTML =
+        '<div class="raw"><span class="dot ' + status + '"></span>' + escapeHtml(mask(p.raw)) + '</div>' +
+        '<div class="meta">' + escapeHtml(bits.join(' · ') || 'untested') + ' · score ' + score + '</div>' +
+        '<div class="scorebar"><i style="width:' + score + '%"></i></div>' +
+        '<div class="row-actions">' +
+        '<button data-act="use">Use</button>' +
+        '<button data-act="test">Test</button>' +
+        '<button data-act="rm">Remove</button>' +
+        '</div>';
+      row.querySelector('[data-act=use]').addEventListener('click', function () {
+        api('/api/proxy/select', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: p.id }),
+        }).then(function () {
+          window._selectedProxy = p.id;
+          window._selectedProxyRaw = p.raw;
+          updateEgress();
+          toast('egress → ' + mask(p.raw));
+          loadProxies();
+        }).catch(function (e) { toast(e.message); });
+      });
+      row.querySelector('[data-act=test]').addEventListener('click', function (ev) {
+        ev.target.disabled = true;
+        ev.target.textContent = '…';
+        api('/api/proxy/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: p.id }),
+        }).then(function () { loadProxies(); toast('tested ' + mask(p.raw)); })
+          .catch(function (e) { toast(e.message); })
+          .then(function () { ev.target.disabled = false; ev.target.textContent = 'Test'; });
+      });
+      row.querySelector('[data-act=rm]').addEventListener('click', function () {
+        api('/api/proxy?id=' + encodeURIComponent(p.id), { method: 'DELETE' })
+          .then(function () { loadProxies(); toast('removed'); })
+          .catch(function (e) { toast(e.message); });
+      });
+      list.appendChild(row);
+    });
+  }
+
+  // keep credentials out of sight in the list
+  function mask(raw) {
+    return String(raw).replace(/\/\/([^@/]+)@/, '//•••@');
+  }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function loadProxies() {
+    return api('/api/proxy').then(renderProxies).catch(function () {});
+  }
+
+  $('btnProxies').addEventListener('click', function () {
+    var panel = $('proxyPanel');
+    panel.classList.toggle('open');
+    $('btnProxies').classList.toggle('active', panel.classList.contains('open'));
+    if (panel.classList.contains('open')) loadProxies();
+  });
+
+  $('btnAdd').addEventListener('click', function () {
+    if (!relayUp) { toast('relay not running'); return; }
+    var text = $('proxyInput').value;
+    if (!text.trim()) { toast('paste some proxies first'); return; }
+    api('/api/proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: text }),
+    }).then(function (data) {
+      $('proxyInput').value = '';
+      toast('added ' + data.added + ' · pool ' + data.total);
+      loadProxies();
+    }).catch(function (e) { toast('add failed: ' + e.message); });
+  });
+
+  $('btnTestAll').addEventListener('click', function () {
+    if (!relayUp) { toast('relay not running'); return; }
+    toast('testing the pool…');
+    api('/api/proxy/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    }).then(function () { loadProxies(); toast('pool tested'); })
+      .catch(function (e) { toast('test failed: ' + e.message); });
+  });
+
+  $('btnSelectBest').addEventListener('click', function () {
+    if (!relayUp) { toast('relay not running'); return; }
+    api('/api/proxy/select', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'best' }),
+    }).then(function (data) {
+      window._selectedProxy = data.active || 'direct';
+      window._selectedProxyRaw = data.proxy;
+      updateEgress();
+      toast('best egress → ' + mask(data.proxy || 'direct'));
+      loadProxies();
+    }).catch(function (e) { toast(e.message); });
+  });
+
+  $('btnDirect').addEventListener('click', function () {
+    if (!relayUp) { toast('relay not running'); return; }
+    api('/api/proxy/select', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 'direct' }),
+    }).then(function () {
+      window._selectedProxy = 'direct';
+      window._selectedProxyRaw = null;
+      updateEgress();
+      toast('browsing direct (no proxy)');
+      loadProxies();
+    }).catch(function (e) { toast(e.message); });
+  });
+
+  $('btnClear').addEventListener('click', function () {
+    if (!relayUp) { toast('relay not running'); return; }
+    api('/api/proxy', { method: 'DELETE' }).then(function () {
+      window._selectedProxy = 'auto';
+      updateEgress();
+      loadProxies();
+      toast('pool cleared');
+    }).catch(function (e) { toast(e.message); });
+  });
+
+  $('btnRetry').addEventListener('click', function () {
+    ping().then(function (data) {
+      if (data) toast('relay online');
+      else toast('still not running — ./tools/relay.sh');
+    });
+  });
+
+  // ── boot ──────────────────────────────────────────────────────────────
+  ping().then(function (data) {
+    if (data) {
+      loadProxies();
+      if (data.activeProxy && data.activeProxy !== 'direct') {
+        window._selectedProxyRaw = data.activeProxy;
+        updateEgress();
+      }
+    }
+  });
+
+  // quiet liveness poll so the pill tracks a relay that dies mid-session
+  setInterval(ping, 30000);
+})();

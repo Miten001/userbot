@@ -10,7 +10,7 @@
 set -euo pipefail
 
 REPO="Miten001/userbot"
-BRANCH="arena/bec46eeb-userbot"
+BRANCH="uncheck"
 SITE="https://miten001.github.io/userbot"
 DEST="${GHOSTSHELL_HOME:-$HOME/.ghostshell}"
 TMP="$(mktemp -d)"
@@ -56,10 +56,12 @@ if [[ -f "$DEST/launch/ghostshell.conf" ]]; then
   cp "$DEST/launch/ghostshell.conf" "$TMP/ghostshell/launch/ghostshell.conf"
 fi
 
-mkdir -p "$DEST/launch" "$DEST/extension" "$DEST/tools"
+mkdir -p "$DEST/launch" "$DEST/extension" "$DEST/tools" "$DEST/relay" "$DEST/site"
 cp -R "$TMP/ghostshell/launch/."    "$DEST/launch/"
 cp -R "$TMP/ghostshell/extension/." "$DEST/extension/"
 cp -R "$TMP/ghostshell/tools/."     "$DEST/tools/"
+cp -R "$TMP/ghostshell/relay/."     "$DEST/relay/"
+[[ -d "$TMP/ghostshell/site" ]] && cp -R "$TMP/ghostshell/site/." "$DEST/site/"
 for f in README.md CHANGELOG.md; do
   [[ -f "$TMP/ghostshell/$f" ]] && cp "$TMP/ghostshell/$f" "$DEST/$f"
 done
@@ -67,6 +69,7 @@ done
 chmod +x "$DEST/launch/ghostshell.sh" \
          "$DEST/launch/ghostshell.command" \
          "$DEST/tools/preflight.sh" \
+         "$DEST/tools/relay.sh" \
          "$DEST/tools/make_icons.py" 2>/dev/null || true
 
 good "files installed"
@@ -99,6 +102,9 @@ cat <<EOF
 
   Then verify you are clean:
     $DEST/tools/preflight.sh
+
+  Optional — in-site browser (search + rewrite viewer + proxy manager):
+    $DEST/tools/relay.sh --open      # needs Node.js 18+
 
   ────────────────────────────────────────────────────────────
 EOF

@@ -11,6 +11,7 @@
 #    ./ghostshell.sh                       launch
 #    ./ghostshell.sh --proxy=socks5://127.0.0.1:1080
 #    ./ghostshell.sh --tz=Europe/Berlin --locale=de-DE
+#    ./ghostshell.sh --new-identity        wipe the profile and rotate the relay
 #    ./ghostshell.sh --print               print the flags, don't launch
 #    ./ghostshell.sh --check               run the leak pre-flight
 #    ./ghostshell.sh --help
@@ -58,12 +59,14 @@ fi
 # ── CLI overrides ────────────────────────────────────────────────────────
 PRINT_ONLY=0
 DO_CHECK=0
+NEW_IDENTITY=0
 OPEN_URL=""
 for arg in "$@"; do
   case "$arg" in
-    --help|-h)      sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --help|-h)      sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     --print)        PRINT_ONLY=1 ;;
     --check)        DO_CHECK=1 ;;
+    --new-identity) NEW_IDENTITY=1 ;;
     --proxy=*)      PROXY="${arg#*=}" ;;
     --tz=*)         TIMEZONE="${arg#*=}" ;;
     --locale=*)     LOCALE="${arg#*=}" ;;
@@ -123,6 +126,20 @@ CHROME="$(find_chrome)" || {
 # ── profile ──────────────────────────────────────────────────────────────
 PROFILE_DIR="${PROFILE_DIR/#\~/$HOME}"
 mkdir -p "$PROFILE_DIR"
+
+# ── new identity ─────────────────────────────────────────────────────────
+# Wipe the isolated profile: fresh fingerprint seed, no cookies, no history.
+# A running GhostShell relay gets the same treatment — cookie jar dropped,
+# proxy rotation forced — so browser + relay start from zero together.
+if [[ "$NEW_IDENTITY" == "1" ]]; then
+  find "$PROFILE_DIR" -mindepth 1 -delete 2>/dev/null || true
+  RELAY_URL="http://127.0.0.1:${GHOSTSHELL_RELAY_PORT:-8787}/api/identity"
+  if command -v curl >/dev/null 2>&1 && curl -fsS -m 2 -X POST "$RELAY_URL" >/dev/null 2>&1; then
+    echo "ghostshell  ·  new identity: profile wiped, relay rotated"
+  else
+    echo "ghostshell  ·  new identity: profile wiped (relay not running)"
+  fi
+fi
 
 # Chrome's own "first run" state decides the profile locale, so seed it once
 # for a fresh profile. Without this, --lang silently does nothing.
