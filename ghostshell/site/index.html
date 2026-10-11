@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GhostShell — hardened Chromium that doesn't advertise your VPN</title>
+<meta name="description" content="A hardened Chromium launcher plus a leak-blocking extension: closes WebRTC, DNS, IPv6 and QUIC leaks and makes your timezone, locale and fingerprint agree with your exit IP.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="nav">
+  <div class="inner">
+    <a class="logo" href="#top">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M12 2l7 3v6c0 5-3 8.5-7 11-4-2.5-7-6-7-11V5l7-3z" fill="url(#g)"/><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#22264a"/><stop offset="1" stop-color="#0ca8a8"/></linearGradient></defs></svg>
+      <span>GhostShell</span>
+    </a>
+    <nav>
+      <a href="#how">How it works</a>
+      <a href="#matrix">What it fixes</a>
+      <a href="#install">Install</a>
+      <a href="#test">Self-test</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <a class="btn sm" href="#download">Download</a>
+  </div>
+</header>
+
+<main id="top">
+
+<section class="hero">
+  <div class="inner">
+    <div class="eyebrow">Open source · Chromium · Linux / macOS / Windows</div>
+    <h1>Hardened Chromium that doesn't<br><span class="grad">advertise your VPN.</span></h1>
+    <p class="lede">
+      GhostShell is a launcher plus an extension. The launcher applies the flags an
+      extension is not allowed to touch (QUIC, IPv6, the WebRTC ICE policy); the
+      extension closes the leaks that happen inside the page.
+      Together they stop your browser from contradicting your exit IP.
+    </p>
+    <div class="cta">
+      <a class="btn" href="#download">Download</a>
+      <a class="btn ghost" href="#matrix">See what it actually fixes</a>
+    </div>
+    <div class="terminal" aria-hidden="true">
+      <div class="bar"><i></i><i></i><i></i><span>ghostshell</span></div>
+      <pre><code><span class="d">$</span> curl -fsSL https://miten001.github.io/userbot/install.sh | bash
+
+<span class="d">$</span> ghostshell --check
+  <span class="ok">PASS</span>  tunnel interface detected: wg0
+  <span class="ok">PASS</span>  resolver is 10.64.0.1
+  <span class="ok">PASS</span>  no global IPv6 address
+  <span class="ok">PASS</span>  public IP: 203.0.113.44
+  <span class="ok">PASS</span>  system timezone matches the exit country
+  <span class="dim">····</span>  geolocated to: Frankfurt, Germany
+  6 passed, 0 warnings, 0 leaks</code></pre>
+    </div>
+  </div>
+</section>
+
+<section class="callout" id="honest">
+  <div class="inner">
+    <div class="callout-card">
+      <h2>Read this first — the honest version</h2>
+      <p>
+        <b>No browser can make a flagged IP address unflagged.</b> Commercial VPN and
+        datacentre ranges are published in MaxMind, IPQualityScore and IP2Location, and
+        strict sites check every incoming connection against them. That lookup happens
+        on their server, before your browser has rendered a single pixel. Nothing you
+        install can change it.
+      </p>
+      <p>
+        What <em>does</em> get most people caught is the browser contradicting itself:
+        a German exit IP with an Indian timezone, a proxy tunnel with WebRTC
+        cheerfully publishing the real public IP, or a Windows user-agent sitting on a
+        Retina screen at DPR 2. <b>That second category is entirely fixable, and it's
+        what GhostShell does.</b>
+      </p>
+      <p class="note-line">
+        Practical rule: if the site you care about is strict, the IP matters more than
+        the browser. Use a residential or mobile exit. GhostShell then makes sure your
+        browser doesn't give you away on top of it.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section id="how">
+  <div class="inner">
+    <h2 class="sec">Two halves, because half of it is out of reach of extensions</h2>
+    <div class="cols">
+      <div class="col">
+        <div class="colnum">01</div>
+        <h3>The launcher</h3>
+        <p>Runs Chrome in an isolated profile with the flags Chrome exposes no API for:</p>
+        <ul class="ticks">
+          <li><code>--force-webrtc-ip-handling-policy=disable_non_proxied_udp</code> — stops STUN from gathering your real public IP</li>
+          <li><code>--disable-quic</code> — QUIC is UDP; most proxies don't tunnel UDP, so Chrome silently connects direct</li>
+          <li><code>--disable-ipv6</code> — most VPNs tunnel IPv4 only, and IPv6 walks straight past the tunnel</li>
+          <li><code>--disable-blink-features=AutomationControlled</code> + <code>--exclude-switches=enable-automation</code></li>
+          <li>Process-level <code>TZ</code> and <code>--lang</code>, so the whole browser agrees with your exit country</li>
+          <li>Google background chatter off: optimization hints, component update, domain reliability, metrics</li>
+        </ul>
+      </div>
+      <div class="col">
+        <div class="colnum">02</div>
+        <h3>The extension</h3>
+        <p>A Manifest V3 extension that runs before page scripts and makes the JS surface self-consistent:</p>
+        <ul class="ticks">
+          <li>Strips local/public ICE candidates that aren't your tunnel</li>
+          <li>Rewrites <code>Intl</code>, <code>Date</code> and <code>Accept-Language</code> to the exit timezone and locale</li>
+          <li>Spoofs <code>navigator.geolocation</code> to coordinates that match your exit country</li>
+          <li>Adds <b>deterministic</b> canvas / WebGL / audio noise — stable within a session like a real browser, different across sites</li>
+          <li>Normalises plugins, media device IDs, battery, GPU string, CPU/RAM, permissions</li>
+          <li>Removes <code>navigator.webdriver</code> and every Puppeteer / Playwright / CDP marker</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="matrix" class="alt">
+  <div class="inner">
+    <h2 class="sec">What it fixes, what it can't</h2>
+    <p class="seclede">Sorted by how much trouble each one actually causes. "Fixed" means GhostShell closes it; "Not fixable" means no browser can.</p>
+
+    <div class="matrix">
+      <div class="mrow head"><span>Detection vector</span><span>Status</span></div>
+
+      <div class="mrow"><span><b>IP reputation databases</b> — MaxMind / IPQualityScore / IP2Location flag the ASN<div class="mdesc">Server-side. Happens before your browser exists.</div></span><span class="tag no">Not fixable</span></div>
+      <div class="mrow"><span><b>Datacentre / hosting ASN</b><div class="mdesc">Also server-side. Needs a residential or mobile exit IP.</div></span><span class="tag no">Not fixable</span></div>
+      <div class="mrow"><span><b>Behavioural analysis</b> — mouse paths, typing cadence, session timing<div class="mdesc">Statistical. Browser hardening makes it worse, not better: unusual fingerprints get scored higher.</div></span><span class="tag no">Not fixable</span></div>
+      <div class="mrow"><span><b>Account and device history</b> — prior logins, cookies, payment fingerprints<div class="mdesc">Start from a clean profile and a clean identity, or it doesn't matter.</div></span><span class="tag no">Not fixable</span></div>
+
+      <div class="mrow"><span><b>WebRTC ICE candidate leak</b><div class="mdesc">The single most common way a real IP escapes a proxy.</div></span><span class="tag yes">Fixed</span></div>
+      <div class="mrow"><span><b>Timezone vs. IP mismatch</b><div class="mdesc">Frankfurt IP, <code>Asia/Kolkata</code> clock. Near-certain flag.</div></span><span class="tag yes">Fixed</span></div>
+      <div class="mrow"><span><b>Locale / <code>Accept-Language</code> mismatch</b></span><span class="tag yes">Fixed</span></div>
+      <div class="mrow"><span><b>Geolocation vs. IP mismatch</b></span><span class="tag yes">Fixed</span></div>
+      <div class="mrow"><span><b>QUIC (HTTP/3) bypassing the proxy</b><div class="mdesc">UDP doesn't go through a TCP proxy; Chrome falls back to direct.</div></span><span class="tag yes">Fixed</span></div>
+      <div class="mrow"><span><b>IPv6 bypassing the tunnel</b></span><span class="tag yes">Fixed</span></div>
+      <div class="mrow"><span><b><code>navigator.webdriver</code> and automation markers</b></span><span class="tag yes">Fixed</span></div>
+      <div class="mrow"><span><b>Screen / DPR / inner-outer size contradictions</b></span><span class="tag yes">Fixed</span></div>
+      <div class="mrow"><span><b>Media device IDs and the "no plugins at all" tell</b></span><span class="tag yes">Fixed</span></div>
+      <div class="mrow"><span><b>Local network discovery</b> — mDNS, MediaRouter, WebBluetooth<div class="mdesc">Reveals your LAN even when the WAN IP is hidden.</div></span><span class="tag yes">Fixed</span></div>
+
+      <div class="mrow"><span><b>Canvas / WebGL / audio fingerprint</b><div class="mdesc">Randomised per site, stable per session. Beats static-value spoofing, which is trivially detected.</div></span><span class="tag mid">Mitigated</span></div>
+      <div class="mrow"><span><b>Font enumeration</b><div class="mdesc">Covered for <code>document.fonts.check</code>; measurement-based detection still works.</div></span><span class="tag mid">Mitigated</span></div>
+      <div class="mrow"><span><b>DNS leaks</b><div class="mdesc">Fixed by using a real system VPN; <code>preflight.sh</code> detects the case where you aren't.</div></span><span class="tag mid">Mitigated</span></div>
+      <div class="mrow"><span><b>TLS / JA3 / JA4 fingerprint</b><div class="mdesc">You inherit Chrome's, which is the most common fingerprint on the web. That's the good outcome, not a bad one.</div></span><span class="tag mid">Mitigated</span></div>
+      <div class="mrow"><span><b>TCP/IP stack fingerprint</b> — TTL, window size, p0f<div class="mdesc">OS-level. Tunable on Linux via <code>sysctl</code>; intact on Windows/macOS.</div></span><span class="tag mid">Mitigated</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="install">
+  <div class="inner">
+    <h2 class="sec">Install</h2>
+
+    <div class="tabs" role="tablist">
+      <button class="tab active" data-os="linux">Linux</button>
+      <button class="tab" data-os="macos">macOS</button>
+      <button class="tab" data-os="windows">Windows</button>
+    </div>
+
+    <div class="tabpanel active" data-os="linux">
+      <div class="step"><span class="n">1</span><div>
+        <h4>Install the launcher</h4>
+        <div class="cmd"><button class="copy" title="Copy">copy</button><code>curl -fsSL https://miten001.github.io/userbot/install.sh | bash</code></div>
+        <p class="hint">Installs to <code>~/.ghostshell</code> and links <code>~/.local/bin/ghostshell</code>.</p>
+      </div></div>
+      <div class="step"><span class="n">2</span><div>
+        <h4>Load the extension once</h4>
+        <p>Run <code>ghostshell</code>, then open <code>chrome://extensions</code>, turn on <b>Developer mode</b>, choose <b>Load unpacked</b> and select <code>~/.ghostshell/extension</code>. It stays installed in the isolated profile.</p>
+      </div></div>
+      <div class="step"><span class="n">3</span><div>
+        <h4>Tell it where you exit</h4>
+        <p>Open the shield icon and pick your exit country. That sets timezone, locale, <code>Accept-Language</code> and GPS <em>together</em> — setting only one of them is worse than setting none.</p>
+      </div></div>
+      <div class="step"><span class="n">4</span><div>
+        <h4>Check for leaks</h4>
+        <div class="cmd"><button class="copy" title="Copy">copy</button><code>ghostshell --check</code></div>
+      </div></div>
+    </div>
+
+    <div class="tabpanel" data-os="macos">
+      <div class="step"><span class="n">1</span><div>
+        <h4>Install the launcher</h4>
+        <div class="cmd"><button class="copy" title="Copy">copy</button><code>curl -fsSL https://miten001.github.io/userbot/install.sh | bash</code></div>
+      </div></div>
+      <div class="step"><span class="n">2</span><div>
+        <h4>Launch</h4>
+        <p>Double-click <code>~/.ghostshell/launch/ghostshell.command</code>, or run <code>~/.local/bin/ghostshell</code> from a terminal.</p>
+      </div></div>
+      <div class="step"><span class="n">3</span><div>
+        <h4>Load the extension once</h4>
+        <p><code>chrome://extensions</code> → <b>Developer mode</b> → <b>Load unpacked</b> → <code>~/.ghostshell/extension</code>.</p>
+      </div></div>
+      <div class="step"><span class="n">4</span><div>
+        <h4>Check for leaks</h4>
+        <div class="cmd"><button class="copy" title="Copy">copy</button><code>~/.ghostshell/tools/preflight.sh</code></div>
+      </div></div>
+    </div>
+
+    <div class="tabpanel" data-os="windows">
+      <div class="step"><span class="n">1</span><div>
+        <h4>Download and unzip</h4>
+        <p>Grab <a href="ghostshell.tar.gz">ghostshell.tar.gz</a> (or <a href="extension.zip">extension.zip</a> for the extension alone), extract it to <code>%USERPROFILE%\.ghostshell</code>.</p>
+      </div></div>
+      <div class="step"><span class="n">2</span><div>
+        <h4>Launch</h4>
+        <p>Double-click <code>GhostShell.bat</code> in the <code>launch</code> folder. It runs the PowerShell launcher with a one-off execution-policy bypass, so you don't have to change anything machine-wide.</p>
+      </div></div>
+      <div class="step"><span class="n">3</span><div>
+        <h4>Load the extension once</h4>
+        <p><code>chrome://extensions</code> → <b>Developer mode</b> → <b>Load unpacked</b> → the <code>extension</code> folder.</p>
+      </div></div>
+      <div class="step"><span class="n">4</span><div>
+        <h4>Set the timezone yourself</h4>
+        <p>Windows Chrome reads the OS clock for anything that isn't JavaScript. The extension covers <code>Intl</code> and <code>Date</code>, which is what web pages read, but if you want full consistency set your Windows timezone to match your exit country too.</p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<section id="test" class="alt">
+  <div class="inner">
+    <h2 class="sec">Verify it yourself</h2>
+    <p class="seclede">Don't take the README's word for it. Open either of these inside GhostShell.</p>
+    <div class="cards">
+      <a class="card" href="leak-test.html">
+        <h4>Built-in self-test <span class="arrow">→</span></h4>
+        <p>Runs entirely in your browser: timezone, locale, canvas and audio hashes, WebGL vendor, <code>webdriver</code>, plugins, device IDs and a live ICE-candidate capture.</p>
+      </a>
+      <a class="card" href="https://browserleaks.com/webrtc" target="_blank" rel="noopener">
+        <h4>browserleaks.com/webrtc <span class="arrow">↗</span></h4>
+        <p>Should show no address except your VPN's. Any private or unexpected public IP here means WebRTC is still leaking.</p>
+      </a>
+      <a class="card" href="https://dnsleaktest.com" target="_blank" rel="noopener">
+        <h4>dnsleaktest.com <span class="arrow">↗</span></h4>
+        <p>The extended test should list only your VPN's resolvers. Your ISP appearing here is a DNS leak.</p>
+      </a>
+      <a class="card" href="https://ipleak.net" target="_blank" rel="noopener">
+        <h4>ipleak.net <span class="arrow">↗</span></h4>
+        <p>Checks WebRTC, DNS and your IPv6 address in one place — the three leaks that survive a browser-only proxy.</p>
+      </a>
+    </div>
+  </div>
+</section>
+
+<section id="download">
+  <div class="inner">
+    <h2 class="sec">Download</h2>
+    <div class="dlgrid">
+      <div class="dl">
+        <h4>Full package</h4>
+        <p>Launchers for all three platforms, the extension, and the pre-flight checker.</p>
+        <a class="btn" href="ghostshell.tar.gz">ghostshell.tar.gz</a>
+        <div class="cmd sm"><button class="copy" title="Copy">copy</button><code>curl -fsSL https://miten001.github.io/userbot/install.sh | bash</code></div>
+      </div>
+      <div class="dl">
+        <h4>Extension only</h4>
+        <p>Already running a system VPN? Just install the shield — no launcher needed.</p>
+        <a class="btn" href="extension.zip">extension.zip</a>
+        <p class="hint">Unzip, then <b>Load unpacked</b> in <code>chrome://extensions</code>.</p>
+      </div>
+    </div>
+    <p class="hint center">
+      Chromium blocks installing extensions from outside the Chrome Web Store in normal
+      profiles, which is why this is "load unpacked" rather than a one-click install.
+      It survives restarts in the GhostShell profile.
+    </p>
+  </div>
+</section>
+
+<section id="faq" class="alt">
+  <div class="inner">
+    <h2 class="sec">FAQ</h2>
+    <details><summary>Will this make my VPN undetectable?</summary>
+      <p>No, and nothing will. If your exit IP belongs to a known VPN or hosting provider, servers identify it before your browser sends a byte. GhostShell stops your <em>browser</em> from adding evidence on top. For strict sites, the IP is the deciding factor — use a residential or mobile exit.</p>
+    </details>
+    <details><summary>Is this just an anti-detect browser like Multilogin or Kameleo?</summary>
+      <p>No. Those sell curated fingerprint pools and profile management, generally closed-source and paid. This is ~2,000 lines of plain JavaScript and shell that you can read, aimed specifically at <em>leak closure and self-consistency</em> rather than at impersonating a large number of separate identities.</p>
+    </details>
+    <details><summary>Why not just use Brave or Firefox with RFP?</summary>
+      <p>They're good on fingerprinting, and Firefox's <code>privacy.resistFingerprinting</code> is a genuinely strong baseline. Neither fixes location inconsistency (your timezone still contradicts your exit IP), and neither blocks the UDP-family leaks when you're on a browser-level proxy rather than a system VPN. Those are the two things that catch people most often.</p>
+    </details>
+    <details><summary>Do I need both the launcher and the extension?</summary>
+      <p>The extension alone gets you most of the in-page wins. The launcher adds the flags Chrome exposes no API for — QUIC, IPv6, the ICE policy — plus an isolated profile. If you're on a real system VPN, the extension alone is a big improvement; both together is the complete picture.</p>
+    </details>
+    <details><summary>Why is the canvas noise deterministic instead of random?</summary>
+      <p>Because a real browser returns the same bytes every time you read a canvas. If noise changes on every read, a site that samples twice knows instantly that something is intercepting. GhostShell seeds from the origin plus a per-session salt: identical within a session, different across sites. You look like one distinct real user to each site.</p>
+    </details>
+    <details><summary>Why does my proxy need to be unauthenticated?</summary>
+      <p>Chrome's <code>chrome.proxy</code> API deliberately omits credentials. Chrome will show its own auth prompt the first time, and that's fine — but for a silent setup, run the tunnel locally (SSH <code>-D</code>, <code>gost</code>, or your VPN client) and point GhostShell at <code>127.0.0.1</code>.</p>
+    </details>
+    <details><summary>Does it slow anything down?</summary>
+      <p>Negligibly. The canvas noiser only touches canvases under 96 KB, so image editors and games are unaffected. Audio perturbation runs on every 97th sample and is roughly 140 dB below full scale.</p>
+    </details>
+    <details><summary>Is this legal?</summary>
+      <p>Hardening your own browser is ordinary privacy practice, and leak protection is what any good VPN setup guide tells you to do. What you then <em>do</em> with it is your business and your responsibility: bypassing geo-restrictions usually breaches the terms of service of the site involved, and using any of this for fraud, evasion of enforcement, or harming others is not what this is for.</p>
+    </details>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="inner">
+    <div class="footrow">
+      <div>
+        <div class="logo"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 2l7 3v6c0 5-3 8.5-7 11-4-2.5-7-6-7-11V5l7-3z" fill="#0ca8a8"/></svg><span>GhostShell</span></div>
+        <p class="hint">Open source. Read the code — it's short enough to audit in an afternoon.</p>
+      </div>
+      <div class="footlinks">
+        <a href="https://github.com/Miten001/userbot/tree/arena/bec46eeb-userbot/ghostshell">Source</a>
+        <a href="https://github.com/Miten001/userbot/issues">Issues</a>
+        <a href="leak-test.html">Self-test</a>
+        <a href="ghostshell.tar.gz">Download</a>
+      </div>
+    </div>
+    <p class="disclaimer">
+      Provided as-is, for privacy and for testing systems you own. No warranty, no
+      guarantee of undetectability — see the honest section above. Respect the laws and
+      the terms of service that apply to you.
+    </p>
+  </div>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

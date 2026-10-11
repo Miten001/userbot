@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GhostShell — self-test</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="nav">
+  <div class="inner">
+    <a class="logo" href="index.html">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M12 2l7 3v6c0 5-3 8.5-7 11-4-2.5-7-6-7-11V5l7-3z" fill="url(#g2)"/><defs><linearGradient id="g2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#22264a"/><stop offset="1" stop-color="#0ca8a8"/></linearGradient></defs></svg>
+      <span>GhostShell</span>
+    </a>
+    <nav>
+      <a href="index.html#matrix">What it fixes</a>
+      <a href="index.html#install">Install</a>
+      <a href="index.html#download">Download</a>
+    </nav>
+  </div>
+</header>
+
+<div class="testwrap">
+  <h1>Self-test</h1>
+  <p class="sub">Runs entirely in your browser. Open this page inside GhostShell and in a normal Chrome window, then compare.</p>
+
+  <div class="shield-status" id="shield">
+    <span class="dot"></span>
+    <div><b>Checking…</b><span></span></div>
+  </div>
+
+  <div id="groups"></div>
+
+  <p class="hint" style="margin-top:34px">
+    Two caveats. First, this page cannot see your IP reputation — that is decided on the
+    server, from your address. Second, if every value here looks normal <em>and</em> you
+    are on a hosting-range IP, you will still be flagged by any site that checks; the
+    browser is only half the problem.
+  </p>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ── helpers ─────────────────────────────────────────────────── */
+  function hash(str) {
+    var h = 5381, i = str.length;
+    while (i) { h = (h * 33) ^ str.charCodeAt(--i); }
+    return ((h >>> 0).toString(16) + '00000000').slice(0, 8);
+  }
+  function txt(v) { return v === undefined ? 'undefined' : v === null ? 'null' : String(v); }
+  function esc(s) { return txt(s).replace(/[&<>]/g, function (c) { return ({'&':'&amp;','<':'&lt;','>':'&gt;'})[c]; }); }
+
+  var GROUPS = [];
+  function group(title) { var g = { title: title, rows: [] }; GROUPS.push(g); return g; }
+  function row(g, label, value, verdict) { g.rows.push({ k: label, v: value, s: verdict || '' }); }
+
+  /* ── 1. shield presence ──────────────────────────────────────── */
+  var hasShield = !!(window.__ghostshell__);
+  var shieldEl = document.getElementById('shield');
+  shieldEl.className = 'shield-status ' + (hasShield ? 'on' : 'off');
+  shieldEl.querySelector('b').textContent = hasShield
+    ? 'GhostShell Shield is active'
+    : 'GhostShell Shield is not loaded';
+  shieldEl.querySelector('span').textContent = hasShield
+    ? 'Main-world hardening installed before page scripts ran.'
+    : 'You are seeing raw Chrome values. Load the extension, or open this page in a GhostShell window.';
+
+  /* ── 2. automation traces ────────────────────────────────────── */
+  var g = group('Automation traces');
+  row(g, 'navigator.webdriver', navigator.webdriver, navigator.webdriver ? 'bad' : 'ok');
+  var markers = Object.getOwnPropertyNames(window).filter(function (k) {
+    return /^(cdc_|__playwright|__puppeteer|__nightmare|domAutomation|callPhantom|fxdriver)/i.test(k);
+  });
+  row(g, 'Automation globals on window', markers.length ? markers.join(', ') : 'none', markers.length ? 'bad' : 'ok');
+  row(g, 'window.chrome present', !!window.chrome ? 'yes' : 'no', window.chrome ? 'ok' : 'warn');
+
+  /* ── 3. identity ─────────────────────────────────────────────── */
+  g = group('Identity');
+  row(g, 'userAgent', navigator.userAgent);
+  row(g, 'platform', navigator.platform);
+  row(g, 'vendor', navigator.vendor);
+  try {
+    var ua = navigator.userAgentData;
+    row(g, 'userAgentData.platform', ua ? ua.platform : 'not exposed');
+    row(g, 'userAgentData.brands', ua ? ua.brands.map(function (b) { return b.brand + ' ' + b.version; }).join(' · ') : '—');
+  } catch (e) { row(g, 'userAgentData', 'error: ' + e.message, 'warn'); }
+
+  var uaLower = navigator.userAgent.toLowerCase();
+  var platformLower = txt(navigator.platform).toLowerCase();
+  var consistent =
+    (uaLower.indexOf('windows') >= 0 && platformLower.indexOf('win') === 0) ||
+    (uaLower.indexOf('macintosh') >= 0 && platformLower.indexOf('mac') === 0) ||
+    (uaLower.indexOf('x11; linux') >= 0 && platformLower.indexOf('linux') === 0) ||
+    (uaLower.indexOf('android') >= 0 && platformLower.indexOf('linux') === 0);
+  row(g, 'UA ↔ platform consistency', consistent ? 'consistent' : 'MISMATCH — UA says one OS, navigator.platform says another',
+      consistent ? 'ok' : 'bad');
+
+  /* ── 4. location consistency ─────────────────────────────────── */
+  g = group('Location consistency');
+  var tz = 'n/a';
+  try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch (e) {}
+  row(g, 'Intl timezone', tz);
+  row(g, 'getTimezoneOffset()', new Date().getTimezoneOffset() + ' min');
+  row(g, 'Date.toString()', new Date().toString());
+  row(g, 'navigator.language', navigator.language);
+  row(g, 'navigator.languages', (navigator.languages || []).join(', '));
+  row(g, 'Date.toLocaleString()', new Date().toLocaleString());
+
+  // Does the resolved zone actually agree with the reported offset?
+  var agrees = 'unknown';
+  try {
+    var p = {};
+    new Intl.DateTimeFormat('en-US', { timeZone: tz, hour12: false,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    }).formatToParts(new Date()).forEach(function (x) { p[x.type] = x.value; });
+    var asUTC = Date.UTC(+p.year, +p.month - 1, +p.day, (+p.hour) % 24, +p.minute, +p.second);
+    var zoneOffsetMin = Math.round((asUTC - Math.floor(Date.now() / 1000) * 1000) / 60000);
+    agrees = (zoneOffsetMin === new Date().getTimezoneOffset()) ? 'yes' : 'NO';
+    row(g, 'zone offset ↔ getTimezoneOffset', agrees + '  (zone: ' + zoneOffsetMin + ' min, Date: ' + new Date().getTimezoneOffset() + ' min)',
+        agrees === 'yes' ? 'ok' : 'bad');
+  } catch (e) { row(g, 'zone offset check', 'skipped', 'warn'); }
+
+  row(g, '', 'Compare the timezone above with the country your IP geolocates to. If they disagree, that alone is a strong VPN signal — set your exit country in the GhostShell popup.');
+
+  /* ── 5. hardware / screen ────────────────────────────────────── */
+  g = group('Hardware and screen');
+  row(g, 'hardwareConcurrency', navigator.hardwareConcurrency);
+  row(g, 'deviceMemory', navigator.deviceMemory === undefined ? 'not exposed' : navigator.deviceMemory + ' GB');
+  row(g, 'maxTouchPoints', navigator.maxTouchPoints);
+  row(g, 'screen', screen.width + '×' + screen.height + ' (avail ' + screen.availWidth + '×' + screen.availHeight + ')');
+  row(g, 'colorDepth / pixelDepth', screen.colorDepth + ' / ' + screen.pixelDepth);
+  row(g, 'devicePixelRatio', window.devicePixelRatio);
+  row(g, 'inner / outer', window.innerWidth + '×' + window.innerHeight + '  /  ' + window.outerWidth + '×' + window.outerHeight);
+
+  var geoOk = window.outerWidth >= window.innerWidth && window.outerHeight >= window.innerHeight;
+  row(g, 'outer ≥ inner', geoOk ? 'yes' : 'NO — headless or broken geometry', geoOk ? 'ok' : 'bad');
+  var retinaUa = /macintosh/i.test(navigator.userAgent);
+  var retinaScreen = window.devicePixelRatio > 1.5;
+  row(g, 'DPR matches platform', (retinaUa === retinaScreen) ? 'plausible' : 'questionable — macOS UA at DPR ' + window.devicePixelRatio,
+      (retinaUa === retinaScreen) ? 'ok' : 'warn');
+
+  /* ── 6. plugins / devices ────────────────────────────────────── */
+  g = group('Plugins and devices');
+  row(g, 'navigator.plugins.length', navigator.plugins.length, navigator.plugins.length > 0 ? 'ok' : 'bad');
+  row(g, 'mimeTypes.length', navigator.mimeTypes.length);
+  row(g, 'pdfViewerEnabled', navigator.pdfViewerEnabled);
+
+  /* ── 7. canvas ───────────────────────────────────────────────── */
+  g = group('Canvas fingerprint');
+  try {
+    function canvasProbe() {
+      var c = document.createElement('canvas');
+      c.width = 240; c.height = 60;
+      var x = c.getContext('2d');
+      if (!x) return 'no 2d context';
+      x.textBaseline = 'alphabetic';
+      x.font = '17px "Arial"';
+      x.fillStyle = '#f60';
+      x.fillRect(100, 1, 62, 20);
+      x.fillStyle = '#069';
+      x.fillText('GhostShell \u{1F510} 1234', 2, 17);
+      x.globalCompositeOperation = 'multiply';
+      x.fillStyle = 'rgb(255,0,255)';
+      x.beginPath(); x.arc(50, 30, 20, 0, Math.PI * 2, true); x.closePath(); x.fill();
+      x.fillStyle = 'rgb(0,255,255)';
+      x.beginPath(); x.arc(70, 30, 20, 0, Math.PI * 2, true); x.closePath(); x.fill();
+      return c.toDataURL();
+    }
+    var a = canvasProbe(), b = canvasProbe();
+    row(g, 'canvas hash', hash(a));
+    row(g, 'stable across two reads', a === b ? 'yes — behaves like a real browser' : 'NO — value changes on every read, which is itself a tell',
+        a === b ? 'ok' : 'bad');
+    var probe = document.createElement('canvas');
+    probe.width = 240; probe.height = 60;
+    var px = probe.getContext('2d').getImageData(0, 0, 240, 60).data;
+    row(g, 'getImageData hash', hash(px.join(',')));
+  } catch (e) {
+    row(g, 'canvas', 'error: ' + e.message, 'warn');
+  }
+
+  /* ── 8. webgl ────────────────────────────────────────────────── */
+  g = group('WebGL');
+  try {
+    var cv = document.createElement('canvas');
+    var gl = cv.getContext('webgl') || cv.getContext('experimental-webgl');
+    if (!gl) { row(g, 'WebGL', 'unavailable', 'warn'); }
+    else {
+      var dbg = gl.getExtension('WEBGL_debug_renderer_info');
+      row(g, 'VENDOR', gl.getParameter(gl.VENDOR));
+      row(g, 'RENDERER', gl.getParameter(gl.RENDERER));
+      if (dbg) {
+        row(g, 'UNMASKED_VENDOR', gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL));
+        row(g, 'UNMASKED_RENDERER', gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL));
+      } else {
+        row(g, 'debug_renderer_info', 'not exposed (Chrome disables it by default)', 'warn');
+      }
+      row(g, 'extensions', (gl.getSupportedExtensions() || []).length + ' reported');
+      var renderer = dbg ? String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) : '';
+      row(g, 'GPU looks virtual', /swiftshader|llvmpipe|software|mesa offscreen/i.test(renderer) ? 'YES — software rasteriser, common on VMs and servers' : 'no',
+          /swiftshader|llvmpipe|software|mesa offscreen/i.test(renderer) ? 'warn' : 'ok');
+    }
+  } catch (e) { row(g, 'WebGL', 'error: ' + e.message, 'warn'); }
+
+  /* ── 9. audio ────────────────────────────────────────────────── */
+  g = group('Audio fingerprint');
+  var audioRow = { k: 'audio hash', v: 'computing…', s: '' };
+  g.rows.push(audioRow);
+  try {
+    var AC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!AC) { audioRow.v = 'OfflineAudioContext unavailable'; audioRow.s = 'warn'; }
+    else {
+      var ctx = new AC(1, 44100, 44100);
+      var osc = ctx.createOscillator();
+      osc.type = 'triangle';
+      osc.frequency.value = 10000;
+      var comp = ctx.createDynamicsCompressor();
+      comp.threshold.value = -50;
+      comp.knee.value = 40;
+      comp.ratio.value = 12;
+      comp.attack.value = 0;
+      comp.release.value = 0.25;
+      osc.connect(comp); comp.connect(ctx.destination);
+      osc.start(0);
+      ctx.startRendering().then(function (buf) {
+        var d = buf.getChannelData(0);
+        var s = 0;
+        for (var i = 4500; i < 5000; i++) s += Math.abs(d[i]);
+        audioRow.v = hash(String(s));
+        render();
+      }).catch(function (e) { audioRow.v = 'error: ' + e.message; audioRow.s = 'warn'; render(); });
+    }
+  } catch (e) { audioRow.v = 'error: ' + e.message; audioRow.s = 'warn'; }
+
+  /* ── 10. misc surfaces ───────────────────────────────────────── */
+  g = group('Other surfaces');
+  row(g, 'doNotTrack', txt(navigator.doNotTrack));
+  row(g, 'cookieEnabled', navigator.cookieEnabled);
+  try {
+    row(g, 'connection', navigator.connection
+      ? navigator.connection.effectiveType + ' · downlink ' + navigator.connection.downlink + ' · rtt ' + navigator.connection.rtt
+      : 'not exposed');
+  } catch (e) { row(g, 'connection', 'n/a'); }
+  if (navigator.getBattery) {
+    navigator.getBattery().then(function (b) {
+      row(g, 'battery', Math.round(b.level * 100) + '% · charging: ' + b.charging);
+      render();
+    }).catch(function () {});
+  } else {
+    row(g, 'battery API', 'not exposed (removed in modern Chrome)');
+  }
+  try {
+    var fams = ['Arial', 'Times New Roman', 'Courier New', 'Comic Sans MS', 'Georgia', 'Impact', 'Trebuchet MS'];
+    var avail = fams.filter(function (f) { return document.fonts.check('12px "' + f + '"'); });
+    row(g, 'document.fonts.check', avail.length + '/' + fams.length + ' of a common set report as installed');
+  } catch (e) { row(g, 'fonts', 'n/a'); }
+
+  /* ── 11. WebRTC (async) ──────────────────────────────────────── */
+  var rtcGroup = group('WebRTC — live ICE capture');
+  var rtcRow = { k: 'candidate addresses', v: 'gathering (up to 3 s)…', s: '' };
+  rtcGroup.rows.push(rtcRow);
+
+  (function () {
+    var RTC = window.RTCPeerConnection || window.webkitRTCPeerConnection;
+    if (!RTC) { rtcRow.v = 'RTCPeerConnection unavailable (blocked)'; rtcRow.s = 'ok'; render(); return; }
+    var found = [], done = false;
+    var PRIV = [/^10\./, /^192\.168\./, /^169\.254\./, /^127\./, /^172\.(1[6-9]|2\d|3[01])\./, /^fc/i, /^fd/i, /^fe80/i];
+    try {
+      var pc = new RTC({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+      pc.createDataChannel('ghostshell-probe');
+      pc.onicecandidate = function (ev) {
+        if (!ev.candidate || !ev.candidate.candidate) return;
+        var s = ev.candidate.candidate;
+        var m = /(\d{1,3}(?:\.\d{1,3}){3})/.exec(s);
+        var addr = m ? m[1] : (/\.local/.test(s) ? 'mDNS (.local — obfuscated)' : s.slice(0, 60));
+        if (found.indexOf(addr) === -1) { found.push(addr); render(); }
+      };
+      setTimeout(function () {
+        try { pc.close(); } catch (e) {}
+        if (done) return; done = true;
+        if (!found.length) { rtcRow.v = 'no candidates gathered'; rtcRow.s = 'ok'; }
+        else {
+          var priv = found.filter(function (a) { return PRIV.some(function (r) { return r.test(a); }); });
+          rtcRow.v = found.join('   ');
+          rtcRow.s = priv.length ? 'bad' : (/mDNS/.test(found.join('')) ? 'ok' : 'warn');
+          if (priv.length) {
+            rtcRow.v += '   ← PRIVATE ADDRESS LEAKED';
+            rtcRow.k = 'candidate addresses';
+          }
+        }
+        render();
+      }, 3000);
+      pc.createOffer().then(function (o) { return pc.setLocalDescription(o); }).catch(function (e) {
+        if (!done) { done = true; rtcRow.v = 'offer failed: ' + e.message; rtcRow.s = 'warn'; render(); }
+      });
+    } catch (e) {
+      rtcRow.v = 'error: ' + e.message; rtcRow.s = 'warn'; render();
+    }
+  })();
+
+  /* ── 12. media devices (async) ───────────────────────────────── */
+  var mdGroup = group('Media devices');
+  var mdRow = { k: 'enumerateDevices()', v: 'querying…', s: '' };
+  mdGroup.rows.push(mdRow);
+  if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+    navigator.mediaDevices.enumerateDevices().then(function (devs) {
+      var ids = devs.map(function (d) { return d.kind + (d.label ? ' (' + d.label + ')' : ''); });
+      mdRow.v = ids.length ? ids.join('   ·   ') : 'none';
+      mdRow.s = 'ok';
+      render();
+    }).catch(function (e) { mdRow.v = 'error: ' + e.message; mdRow.s = 'warn'; render(); });
+  } else { mdRow.v = 'not available'; render(); }
+
+  /* ── 13. geolocation (async, only on click) ──────────────────── */
+  var geoGroup = group('Geolocation');
+  var geoRow = { k: 'position', v: '<button id="geobtn" style="cursor:pointer">request position</button>', s: '', raw: true };
+  geoGroup.rows.push(geoRow);
+
+  /* ── render ─────────────────────────────────────────────────── */
+  function render() {
+    var html = GROUPS.map(function (grp) {
+      return '<div class="tgroup"><h2>' + esc(grp.title) + '</h2>' +
+        grp.rows.map(function (r) {
+          return '<div class="trow ' + (r.s || '') + '">' +
+            '<div class="k">' + esc(r.k) + '</div>' +
+            '<div class="v">' + (r.raw ? r.v : esc(r.v)) + '</div></div>';
+        }).join('') + '</div>';
+    }).join('');
+    var host = document.getElementById('groups');
+    host.innerHTML = html;
+    var b = document.getElementById('geobtn');
+    if (b) {
+      b.addEventListener('click', function () {
+        geoRow.v = 'requesting…'; render();
+        navigator.geolocation.getCurrentPosition(function (p) {
+          geoRow.v = p.coords.latitude.toFixed(4) + ', ' + p.coords.longitude.toFixed(4) +
+                     '   (accuracy ' + p.coords.accuracy + ' m)';
+          geoRow.s = 'ok'; render();
+        }, function (e) {
+          geoRow.v = 'denied or unavailable: ' + e.message; geoRow.s = 'ok'; render();
+        }, { timeout: 8000 });
+      });
+    }
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>

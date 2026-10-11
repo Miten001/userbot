@@ -1,0 +1,166 @@
+# GhostShell
+
+Hardened Chromium launcher + anti-leak extension.
+
+GhostShell exists because Chrome leaks information about you in two very different
+places, and only one of them is reachable from an extension.
+
+| Where | What leaks | Who fixes it |
+|---|---|---|
+| **The page** | timezone vs. IP mismatch, WebRTC candidates, canvas/audio GPU hashes, `navigator.webdriver`, device IDs | the **extension** |
+| **The process** | QUIC over UDP, IPv6 outside the tunnel, the WebRTC ICE policy, Google background chatter | the **launcher** — Chrome exposes no API for these |
+
+Run both and your browser stops contradicting your exit IP.
+
+---
+
+## Read this before anything else
+
+**No browser can make a flagged IP address unflagged.**
+
+Commercial VPN and hosting ranges are published in MaxMind, IPQualityScore and
+IP2Location. Strict sites check every incoming connection against those databases
+*on their server*, before your browser has rendered a pixel. Nothing you install
+changes that lookup. If the site you care about is strict, the IP is the deciding
+factor — use a residential or mobile exit.
+
+What GhostShell fixes is the second, much larger category: the browser giving you
+away *on top of* the IP. A Frankfurt exit IP with an `Asia/Kolkata` clock. A proxy
+tunnel with WebRTC cheerfully publishing your real public IP. A Windows user-agent
+sitting on a Retina screen at DPR 2. Those are entirely fixable, and they are what
+actually catches most people.
+
+---
+
+## Install
+
+```bash
+curl -fsSL https://miten001.github.io/userbot/install.sh | bash
+```
+
+Then load the extension once:
+
+1. `ghostshell` (or double-click `launch/ghostshell.command` on macOS, `GhostShell.bat` on Windows)
+2. `chrome://extensions` → **Developer mode** → **Load unpacked** → pick the `extension/` folder
+3. Click the shield icon and choose your exit country
+
+Manual: download [`ghostshell.tar.gz`](https://miten001.github.io/userbot/ghostshell.tar.gz)
+or just [`extension.zip`](https://miten001.github.io/userbot/extension.zip).
+
+---
+
+## What it does
+
+### Launcher (`launch/`)
+
+| Flag | Why |
+|---|---|
+| `--force-webrtc-ip-handling-policy=disable_non_proxied_udp` | Stops STUN gathering your real public IP through the physical NIC |
+| `--disable-quic` | QUIC is UDP; most proxies don't tunnel UDP, so Chrome silently reconnects direct |
+| `--disable-ipv6` | Most VPNs tunnel IPv4 only — IPv6 walks straight past the tunnel |
+| `--disable-blink-features=AutomationControlled` + `--exclude-switches=enable-automation` | Removes the automation flags that bot detectors read first |
+| `TZ` + `--lang` | Makes the whole process agree with your exit country, not just the page |
+| `--disable-features=OptimizationHints,…` | Turns off Google background chatter that correlates your profile |
+| `--user-data-dir` | Isolated profile, so none of this touches your real Chrome |
+
+### Extension (`extension/`)
+
+Runs in the main world at `document_start`, before any page script.
+
+- **WebRTC** — strips ICE candidates that expose non-tunnel addresses; `block` mode disables it entirely
+- **Location** — rewrites `Intl`, `Date`, `navigator.language`, `Accept-Language` and `navigator.geolocation` so all four agree with your exit country
+- **Canvas / WebGL / audio** — deterministic per-site noise: stable within a session like a real browser, different across sites, because a value that changes on every read is itself a tell
+- **Hardware** — CPU/RAM, screen, DPR, inner-vs-outer window geometry, all pulled from one coherent profile
+- **Surfaces** — plugins, MIME types, media device IDs, battery, GPU string, permissions state, font list
+- **Automation** — removes `navigator.webdriver` and every Puppeteer / Playwright / CDP marker on `window`
+
+### Pre-flight (`tools/preflight.sh`)
+
+```bash
+ghostshell --check
+```
+
+Checks the tunnel interface, your DNS resolver, whether you have IPv6, what your
+exit IP geolocates to, whether it's a hosting range, and whether your system
+timezone matches — then tells you which third-party pages to verify in.
+
+---
+
+## Configuration
+
+`launch/ghostshell.conf` (understood by both the bash and the PowerShell launcher):
+
+```ini
+CHROME_PATH=auto
+PROFILE_DIR=~/.ghostshell/profile
+TIMEZONE=Europe/Berlin       # must match your real exit country
+LOCALE=de-DE
+PROXY=                       # empty = use a system VPN (recommended)
+DISABLE_QUIC=1
+BLOCK_IPV6=1
+WINDOW_SIZE=1440,900
+```
+
+If you set the exit country from the extension popup instead, leave `TIMEZONE`
+and `LOCALE` empty so the two can't disagree.
+
+---
+
+## Layout
+
+```
+ghostshell/
+├── launch/
+│   ├── ghostshell.sh          Linux · also used by macOS
+│   ├── ghostshell.command     macOS double-click entry
+│   ├── GhostShell.ps1         Windows
+│   ├── ghostshell.bat         Windows double-click entry
+│   └── ghostshell.conf        shared config
+├── extension/
+│   ├── manifest.json          MV3
+│   ├── src/inject-main.js     MAIN world — all the page-facing patches
+│   ├── src/content.js         ISOLATED world — config bridge
+│   ├── src/background.js      proxy, WebRTC policy, Accept-Language
+│   ├── src/popup.js|options.js|ui-shared.js|styles.css
+│   └── icons/
+├── tools/
+│   ├── preflight.sh           leak pre-flight
+│   └── make_icons.py          icon generator (stdlib only)
+├── docs/
+├── site/                      the GitHub Pages site
+└── install.sh
+```
+
+---
+
+## Docs
+
+- [`docs/DETECTION.md`](docs/DETECTION.md) — how VPN/proxy detection actually works, vector by vector
+- [`docs/PROXY-AUTH.md`](docs/PROXY-AUTH.md) — authenticated proxies, and why Chrome can't store the password
+- [`docs/HARDENING.md`](docs/HARDENING.md) — OS-level extras: DNS, IPv6, TCP stack fingerprinting
+
+---
+
+## Limitations, stated plainly
+
+- **IP reputation is out of scope.** See the top of this file.
+- **Behavioural analysis is out of scope.** Mouse paths, typing cadence, session timing. Heavy fingerprint randomisation can *increase* your score here, because unusual fingerprints get weighted.
+- **Font detection is only partially covered.** `document.fonts.check` is handled; measurement-based enumeration still works.
+- **TLS (JA3/JA4) is inherited.** You get Chrome's, which is the most common fingerprint on the web. That is the good outcome, not a bad one.
+- **The TCP/IP stack fingerprint is OS-level.** Tunable on Linux, effectively fixed on Windows and macOS.
+- **Windows timezone.** Chrome on Windows reads the OS clock for non-JS surfaces. The extension covers what web pages read; set the OS timezone too if you want full consistency.
+
+---
+
+## Responsible use
+
+Hardening your own browser is ordinary privacy practice, and closing WebRTC and
+DNS leaks is what any competent VPN setup guide tells you to do. Use it for
+privacy, for research, and for testing systems you own.
+
+Bypassing geo-restrictions usually breaches the terms of service of the site
+involved. Using this for fraud, for evading enforcement, or to harm other people
+is not what it is for, and no part of this project is designed to help with that.
+
+MIT licensed. As-is, no warranty, and no guarantee of undetectability — see the
+top of this file.

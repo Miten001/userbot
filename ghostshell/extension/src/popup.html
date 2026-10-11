@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>GhostShell Shield</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>body { width: 340px; }</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="brand">
+      <img src="../icons/icon48.png" alt="">
+      <div>
+        <div class="ttl">GhostShell Shield</div>
+        <div class="ver" id="ver">v1.0.0</div>
+      </div>
+      <div style="margin-left:auto" class="status">
+        <span class="pill" id="pillEnabled">—</span>
+        <span class="pill" id="pillProxy">—</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <div>
+          <div class="lbl">Shield enabled</div>
+          <div class="desc">Leak blocking + fingerprint normalisation</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="enabled">
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="field" style="margin-bottom:8px">
+        <label for="country">Match my exit country</label>
+        <select id="country" style="width:100%">
+          <option value="">— don't force a location —</option>
+        </select>
+      </div>
+      <p class="sub">Sets timezone, locale, <code>Accept-Language</code> and GPS together. Setting only one of them is worse than setting none.</p>
+      <div class="status">
+        <span class="pill" id="pillTz">tz: real</span>
+        <span class="pill" id="pillGeo">gps: real</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="field" style="margin-bottom:0">
+        <label for="profile">Device profile</label>
+        <select id="profile" style="width:100%"></select>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <div>
+          <div class="lbl">WebRTC</div>
+          <div class="desc" id="webrtcDesc">Strip local IP candidates</div>
+        </div>
+        <select id="webrtc" style="min-width:110px">
+          <option value="protect">Protect</option>
+          <option value="block">Block</option>
+          <option value="off">Off</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="btnrow">
+      <button id="newSalt">New fingerprint</button>
+      <button id="openOptions" class="ghost">All settings</button>
+    </div>
+
+    <div class="note" id="note">
+      Loading…
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
