@@ -8,13 +8,12 @@
 (function () {
   'use strict';
 
-  // When the relay serves this page, same-origin works out of the box.
-  // On https Pages, this http://127.0.0.1 fetch is blocked as mixed
-  // content → we land in the "relay not running" state, exactly as intended.
-  var RELAY = (location.protocol === 'http:' &&
-    (location.hostname === '127.0.0.1' || location.hostname === 'localhost'))
-    ? location.origin
-    : 'http://127.0.0.1:8787';
+  // Probe the page's own origin first in ping(); if that isn't the relay and
+  // we aren't already on a loopback HTTP origin, fall back to 127.0.0.1:8787.
+  // On https Pages both probes fail and we land in "relay not running" as intended.
+  var isLoopback = location.protocol === 'http:' &&
+    (location.hostname === '127.0.0.1' || location.hostname === 'localhost');
+  var RELAY = isLoopback ? location.origin : 'http://127.0.0.1:8787';
 
   var SEARCH = 'https://lite.duckduckgo.com/lite/?q=';
 
@@ -52,8 +51,22 @@
     });
   }
 
+  function probe(base) {
+    return fetch(base + '/api/ping').then(function (res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    }).then(function (data) {
+      if (!data || !data.ok || !data.version) throw new Error('not a relay');
+      RELAY = base;
+      return data;
+    });
+  }
+
   function ping() {
-    return api('/api/ping').then(function (data) {
+    return probe(location.origin).catch(function (err) {
+      if (isLoopback) throw err;
+      return probe('http://127.0.0.1:8787');
+    }).then(function (data) {
       relayUp = true;
       setPill('online', 'relay: online · v' + data.version);
       $('stRelay').textContent = 'online · v' + data.version;
