@@ -6,6 +6,7 @@
 #    .\GhostShell.ps1
 #    .\GhostShell.ps1 -Proxy socks5://127.0.0.1:1080
 #    .\GhostShell.ps1 -Timezone "Europe/Berlin" -Locale de-DE
+#    .\GhostShell.ps1 -NewIdentity   # wipe the profile and rotate the relay
 #    .\GhostShell.ps1 -Print      # show the command, don't launch
 # ─────────────────────────────────────────────────────────────────────────
 [CmdletBinding()]
@@ -17,6 +18,7 @@ param(
   [string]$ProfileDir = '',
   [switch]$Print,
   [switch]$Incognito,
+  [switch]$NewIdentity,
   [Parameter(ValueFromRemainingArguments = $true)]
   [string[]]$Rest
 )
@@ -93,6 +95,24 @@ $Chrome = Find-Chrome
 # ── profile ──────────────────────────────────────────────────────────────
 $Profile = [Environment]::ExpandEnvironmentVariables($Cfg.PROFILE_DIR)
 if (-not (Test-Path $Profile)) { New-Item -ItemType Directory -Path $Profile -Force | Out-Null }
+
+# ── new identity ─────────────────────────────────────────────────────────
+# Wipe the isolated profile: fresh fingerprint seed, no cookies, no history.
+# A running GhostShell relay gets the same treatment — cookie jar dropped,
+# proxy rotation forced — so browser + relay start from zero together.
+if ($NewIdentity) {
+  Get-ChildItem -Force -Path $Profile -ErrorAction SilentlyContinue |
+    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+  $relayPort = if ($env:GHOSTSHELL_RELAY_PORT) { $env:GHOSTSHELL_RELAY_PORT } else { '8787' }
+  try {
+    Invoke-RestMethod -Method Post -TimeoutSec 2 `
+      -Uri "http://127.0.0.1:$relayPort/api/identity" | Out-Null
+    Write-Host 'ghostshell  ·  new identity: profile wiped, relay rotated'
+  } catch {
+    Write-Host 'ghostshell  ·  new identity: profile wiped (relay not running)'
+  }
+}
+
 $FirstRun = Join-Path $Profile 'First Run'
 if (-not (Test-Path $FirstRun)) { New-Item -ItemType File -Path $FirstRun -Force | Out-Null }
 

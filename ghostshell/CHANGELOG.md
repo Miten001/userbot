@@ -1,5 +1,46 @@
 # Changelog
 
+## 1.1.0 — GhostShell relay
+
+### Relay (`relay/`)
+
+- Local fetch+rewrite viewer + proxy pool API, Node 18+, zero dependencies
+- Binds `127.0.0.1` only and refuses non-loopback peers
+- Egress modes with auth: direct, HTTP `CONNECT`, HTTPS proxy, SOCKS4/4a
+  (userid), SOCKS5 (RFC 1929 username/password)
+- HTML rewriting: URLs absolutised against the final hop, `<base>` deleted,
+  `srcset`/`imagesrcset`, CSS `url()`/`@import`, meta-refresh, form POSTs
+  forwarded through the relay with an explicit `_target`
+- CSP stripped (headers and meta), `X-Frame-Options` & friends dropped,
+  `integrity`/`nonce`/`crossorigin` removed, `<script>`/`on*`/`javascript:`
+  neutralised — a rendered page cannot beacon behind the relay's back
+- SSRF guard on every target and redirect hop: loopback, private, CGNAT,
+  link-local, metadata and multicast ranges blocked before connect, with a
+  re-validating DNS lookup at socket time (rebinding-safe)
+- Cookie jar per identity; `/api/identity` drops it and rotates the proxy
+
+### Proxy pool (`relay/lib/pool.js`)
+
+- Parse `socks5://user:pass@host:port`, `http://…`, `socks4://…`, bare
+  `host:port`; dedupe, persist to `~/.ghostshell/proxy-pool.json`
+- Test against `ip-api.com` (exit IP, ISP, datacenter/proxy flags), timed
+- Score 0–100 from Laplace-smoothed reliability, speed, freshness and exit
+  quality; select `best` (jittered top-3), `rotate` or `random`
+
+### In-site browser (`site/browser.html` + `browser.js`)
+
+- Search (DuckDuckGo lite) or direct URL, embedded sandboxed viewer
+- Proxy manager UI: add / test / score / use / remove, browse direct
+- “New identity” button; live relay pill and rewrite-stat readout
+- On the static Pages site it shows “relay not running” — expected
+
+### Launcher & tooling
+
+- `--new-identity` (bash) / `-NewIdentity` (PowerShell): wipe the isolated
+  profile and rotate a running relay's identity
+- `tools/relay.sh` — relay launcher with `--port`, `--open`, `--print`
+- `install.sh` now ships `relay/` + `site/` and tracks the default branch
+
 ## 1.0.0 — initial release
 
 ### Launcher
