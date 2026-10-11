@@ -64,7 +64,7 @@ jobs:
 
           ls -la _site
           echo "--- tarball contents ---"
-          tar -tzf _site/ghostshell.tar.gz | head -40
+          tar -tzf _site/ghostshell.tar.gz | head -40 || true
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
