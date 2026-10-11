@@ -44,6 +44,23 @@ jobs:
           # Self-test needs to be reachable at a stable URL
           cp ghostshell/site/leak-test.html _site/leak-test.html
 
+          # Keep the previous Pages landing page (docs/index.html, previously
+          # served by the legacy /docs build) reachable instead of deleting it.
+          if [ -f docs/index.html ]; then
+            mkdir -p _site/legacy
+            cp docs/index.html _site/legacy/index.html
+            if [ -f docs/404.html ]; then cp docs/404.html _site/legacy/404.html; fi
+            if [ -f docs/.nojekyll ]; then cp docs/.nojekyll _site/legacy/.nojekyll; fi
+          fi
+
+          printf '%s\n' \
+            '<!doctype html><meta charset="utf-8"><title>404 · GhostShell</title>' \
+            '<link rel="stylesheet" href="/userbot/styles.css">' \
+            '<body style="display:grid;place-items:center;min-height:100vh;text-align:center">' \
+            '<div><h1 style="font-size:22px;margin:0 0 8px">404</h1>' \
+            '<p style="color:#99a2b6;margin:0 0 18px">That page does not exist.</p>' \
+            '<a class="btn" href="/userbot/">Back to GhostShell</a></div>' > _site/404.html
+
           ls -la _site
           echo "--- tarball contents ---"
           tar -tzf _site/ghostshell.tar.gz | head -40
