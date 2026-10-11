@@ -10,3 +10,6 @@ dist/
 .DS_Store
 .vercel
 next-env.d.ts
+
+# GhostShell local build output
+_site/

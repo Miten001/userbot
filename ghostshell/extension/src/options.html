@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>GhostShell Shield — Settings</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="options">
+  <div class="wrap">
+    <div class="brand">
+      <img src="../icons/icon48.png" alt="" style="width:34px;height:34px">
+      <div>
+        <div class="ttl" style="font-size:17px">GhostShell Shield</div>
+        <div class="ver">Hardened Chromium · anti-leak · anti-fingerprint</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <div>
+          <div class="lbl">Shield enabled</div>
+          <div class="desc">Master switch. When off, only automation traces (navigator.webdriver etc.) are cleaned up.</div>
+        </div>
+        <label class="switch"><input type="checkbox" id="enabled"><span class="slider"></span></label>
+      </div>
+    </div>
+
+    <h2>Network / proxy</h2>
+    <div class="card">
+      <div class="grid2">
+        <div class="field">
+          <label for="proxyMode">Proxy source</label>
+          <select id="proxyMode">
+            <option value="system">System VPN / OS proxy</option>
+            <option value="manual">Browser-level proxy</option>
+            <option value="none">No proxy (direct)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="proxyScheme">Scheme</label>
+          <select id="proxyScheme">
+            <option value="socks5">SOCKS5 (remote DNS)</option>
+            <option value="socks4">SOCKS4</option>
+            <option value="http">HTTP</option>
+            <option value="https">HTTPS</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="field">
+          <label for="proxyHost">Host</label>
+          <input type="text" id="proxyHost" placeholder="127.0.0.1">
+        </div>
+        <div class="field">
+          <label for="proxyPort">Port</label>
+          <input type="number" id="proxyPort" placeholder="1080">
+        </div>
+      </div>
+      <div class="field" style="margin-bottom:0">
+        <label for="proxyBypass">Bypass list (semicolon separated)</label>
+        <input type="text" id="proxyBypass" placeholder="localhost;127.0.0.1;[::1]">
+      </div>
+      <div class="note warn">
+        <b>Chrome cannot store proxy credentials.</b> The <code>chrome.proxy</code> API deliberately omits
+        username/password, so an authenticated proxy will trigger Chrome's own login prompt. For a silent
+        setup, run the proxy locally (SSH tunnel / <code>gost</code> / your VPN client) and point GhostShell
+        at <code>127.0.0.1</code>. See <code>docs/PROXY-AUTH.md</code>.
+      </div>
+      <div class="note warn" style="margin-top:8px">
+        <b>A browser proxy is not a VPN.</b> Only TCP is proxied — UDP (QUIC, WebRTC, DNS-over-UDP) can still
+        leak. Use a real system VPN, or launch via <code>ghostshell --proxy</code> which additionally forces
+        <code>--disable-quic</code> and the strict WebRTC policy.
+      </div>
+    </div>
+
+    <h2>Location consistency</h2>
+    <div class="card">
+      <div class="field">
+        <label for="country">Match exit country (sets timezone + locale + Accept-Language + GPS together)</label>
+        <select id="country"><option value="">— don't force a location —</option></select>
+      </div>
+      <div class="grid2">
+        <div class="field">
+          <label for="tzMode">Timezone</label>
+          <select id="tzMode">
+            <option value="real">Use real / system</option>
+            <option value="custom">Override</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="timezone">IANA timezone</label>
+          <input type="text" id="timezone" placeholder="Europe/Berlin">
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="field">
+          <label for="localeMode">Locale</label>
+          <select id="localeMode">
+            <option value="real">Use real / system</option>
+            <option value="custom">Override</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="locale">Locale tag</label>
+          <input type="text" id="locale" placeholder="de-DE">
+        </div>
+      </div>
+      <div class="field">
+        <label for="languages">Languages (comma separated — also sent as Accept-Language)</label>
+        <input type="text" id="languages" placeholder="de-DE, de, en-US, en">
+      </div>
+      <div class="grid2">
+        <div class="field">
+          <label for="geoMode">Geolocation</label>
+          <select id="geoMode">
+            <option value="real">Use real</option>
+            <option value="custom">Spoof to coordinates</option>
+            <option value="off">Block (permission denied)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Accuracy (m)</label>
+          <input type="number" id="accuracy" min="1" max="5000">
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="field">
+          <label for="lat">Latitude</label>
+          <input type="text" id="lat">
+        </div>
+        <div class="field">
+          <label for="lon">Longitude</label>
+          <input type="text" id="lon">
+        </div>
+      </div>
+      <div class="note">
+        A mismatch here is the loudest signal of all: an IP in Frankfurt with
+        <code>Intl.DateTimeFormat().resolvedOptions().timeZone === "Asia/Kolkata"</code> is a near-certain
+        VPN flag, and no amount of canvas noise will hide it.
+      </div>
+    </div>
+
+    <h2>Device profile</h2>
+    <div class="card">
+      <div class="field" style="margin-bottom:0">
+        <label for="profile">Reported device</label>
+        <select id="profile"></select>
+      </div>
+      <div class="note">
+        Applies a coherent set: UA + <code>userAgentData</code> client hints + platform + screen size +
+        CPU/RAM + GPU string. Choosing values piecemeal is how people get caught — e.g. a Windows UA
+        reporting a 2560×1600 Retina screen at DPR 2.
+      </div>
+    </div>
+
+    <h2>Fingerprint defences</h2>
+    <div class="card">
+      <div class="row">
+        <div>
+          <div class="lbl">Canvas</div>
+          <div class="desc">Adds deterministic per-site noise. Stable within a session (like a real browser), different across sites.</div>
+        </div>
+        <select id="canvas"><option value="noise">Noise</option><option value="off">Off</option></select>
+      </div>
+      <div class="row">
+        <div>
+          <div class="lbl">Audio</div>
+          <div class="desc">Perturbs AudioBuffer / AnalyserNode output ~140 dB below full scale — inaudible, but changes every audio hash.</div>
+        </div>
+        <select id="audio"><option value="noise">Noise</option><option value="off">Off</option></select>
+      </div>
+      <div class="row">
+        <div>
+          <div class="lbl">WebGL</div>
+          <div class="desc">Reports the GPU matching the chosen profile and strips datacentre-specific extensions.</div>
+        </div>
+        <select id="webgl"><option value="spoof">Spoof</option><option value="real">Real</option></select>
+      </div>
+      <div class="row">
+        <div>
+          <div class="lbl">Media devices</div>
+          <div class="desc">Device IDs are stable per-browser and are a top-tier identifier. "Generic" reports one mic + one speaker and no camera.</div>
+        </div>
+        <select id="mediaDevices">
+          <option value="generic">Generic (mic + speakers)</option>
+          <option value="hide">Hide all</option>
+          <option value="real">Real</option>
+        </select>
+      </div>
+      <div class="row">
+        <div>
+          <div class="lbl">Font list</div>
+          <div class="desc">Reports a standard Windows font set instead of your real one.</div>
+        </div>
+        <select id="fonts"><option value="curated">Curated</option><option value="real">Real</option><option value="off">Off</option></select>
+      </div>
+      <div class="row">
+        <div>
+          <div class="lbl">Battery API</div>
+          <div class="desc">Always reports charging at 100% — the real value leaks laptop vs desktop and is rarely needed.</div>
+        </div>
+        <select id="battery"><option value="spoof">Spoof</option><option value="real">Real</option></select>
+      </div>
+      <div class="row">
+        <div>
+          <div class="lbl">Permissions prompt state</div>
+          <div class="desc">Normalises notification permission to "prompt". Headless Chrome answers "denied", which no real desktop ever does.</div>
+        </div>
+        <select id="permissions"><option value="normalise">Normalise</option><option value="real">Real</option></select>
+      </div>
+    </div>
+
+    <h2>Network hardening</h2>
+    <div class="card">
+      <div class="row">
+        <div>
+          <div class="lbl">WebRTC</div>
+          <div class="desc">Also forces Chrome's <code>disable_non_proxied_udp</code> policy, so STUN cannot gather your real public IP.</div>
+        </div>
+        <select id="webrtc">
+          <option value="protect">Protect (recommended)</option>
+          <option value="block">Block entirely</option>
+          <option value="off">Off</option>
+        </select>
+      </div>
+      <div class="row">
+        <div>
+          <div class="lbl">Disable QUIC (HTTP/3)</div>
+          <div class="desc">QUIC runs over UDP and commonly bypasses a proxy tunnel. Applied by the launcher; shown here for reference.</div>
+        </div>
+        <label class="switch"><input type="checkbox" id="disableQuic"><span class="slider"></span></label>
+      </div>
+      <div class="row">
+        <div>
+          <div class="lbl">Block IPv6</div>
+          <div class="desc">Many VPNs tunnel only IPv4. If you have IPv6, your traffic exits un-tunnelled. Applied by the launcher.</div>
+        </div>
+        <label class="switch"><input type="checkbox" id="blockIpv6"><span class="slider"></span></label>
+      </div>
+      <div class="note warn">
+        These two are enforced with <code>--disable-quic</code> and <code>--disable-ipv6</code> at process
+        launch — Chrome exposes no runtime API for them. Run Chrome through <code>ghostshell</code> to apply.
+      </div>
+    </div>
+
+    <h2>Session</h2>
+    <div class="card">
+      <div class="row">
+        <div>
+          <div class="lbl">Rotate fingerprint seed</div>
+          <div class="desc">Changes the canvas/audio/device-id noise for every site. Do this after any big config change.</div>
+        </div>
+        <button id="newSalt">Rotate</button>
+      </div>
+      <div class="row">
+        <div>
+          <div class="lbl">Reset everything</div>
+          <div class="desc">Back to defaults, with a fresh random seed.</div>
+        </div>
+        <button id="reset" class="ghost">Reset</button>
+      </div>
+    </div>
+
+    <div class="btnrow">
+      <button id="save" class="primary">Save</button>
+      <span id="savedHint" class="pill" style="opacity:0">Saved</span>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script type="module" src="options.js"></script>
+</body>
+</html>
