@@ -754,10 +754,16 @@ server.listen(port, HOST, () => {
       : process.platform === 'win32' ? 'cmd'
       : 'xdg-open';
     const argv = process.platform === 'win32' ? ['/c', 'start', '', url] : [url];
+    const fallback = () => console.log(`  (open it manually: ${url})`);
     try {
-      spawn(cmd, argv, { detached: true, stdio: 'ignore' }).unref();
+      // A missing opener (e.g. no xdg-open on a headless Linux box) is
+      // reported asynchronously as an 'error' event, not thrown, so the
+      // handler is required or Node crashes the whole relay.
+      const child = spawn(cmd, argv, { detached: true, stdio: 'ignore' });
+      child.on('error', fallback);
+      child.unref();
     } catch {
-      console.log(`  (open it manually: ${url})`);
+      fallback();
     }
   }
 });
