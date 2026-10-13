@@ -109,9 +109,31 @@ npm dependencies, bound to `127.0.0.1` only.
 - **New identity** — one click (or `ghostshell.sh --new-identity`) drops the
   relay's cookie jar and rotates the proxy.
 
-`browser.html` on the static Pages site shows **“relay not running”** — that is
-expected. The viewer only ever talks to the relay on your machine; Pages can't
-run it for you.
+### Web mode — `browser.html` without the relay
+
+On a static deployment (GitHub Pages) there is no local relay, so the browser
+runs **web mode** instead of showing “relay not running”:
+
+- pages are fetched through a pool of **CORS gateways** (any HTTPS URL
+  containing `{url}`), rewritten in the browser — scripts and `on*` handlers
+  stripped, every URL re-pointed at the chosen gateway — and rendered into the
+  sandboxed iframe with `srcdoc`
+- the pool is seeded with built-in gateways, merged with the public list in
+  `site/proxy-sources.json`, and saved to `localStorage`
+- **Test all** asks each gateway for its exit IP, country and ISP
+  (ipwho.is / ipapi.co) and its proxy & hosting flags (ip-api.com)
+- country filter, **Random clean**, **Select best** and **New non-detected IP on
+  every search / site** all work — each search can leave through a different
+  gateway, i.e. a different exit IP
+- if a local relay appears, the page notices within 30 seconds and switches to
+  it automatically; if every gateway fails, one page loads directly (unproxied)
+  rather than dead-ending
+
+The relay is still the real thing: only it can dial `socks5://` / `http://`
+proxies, keep a cookie jar and enforce the SSRF guard. It now also answers the
+CORS preflight with `Access-Control-Allow-Private-Network: true`, so an HTTPS
+page (like the Pages build) is allowed to talk to a relay running on your
+machine.
 
 ---
 
@@ -162,7 +184,8 @@ ghostshell/
 ├── docs/
 ├── site/                      the GitHub Pages site + in-site browser
 │   ├── index.html             landing page
-│   ├── browser.html|browser.js  in-site browser (needs the local relay)
+│   ├── browser.html|browser.js  in-site browser (relay mode + built-in web mode)
+│   ├── proxy-sources.json       public gateway list fetched by web mode
 │   └── leak-test.html         self-test
 └── install.sh
 ```

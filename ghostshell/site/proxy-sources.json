@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "updated": "2026-10-13",
+  "comment": "Public CORS gateway list for GhostShell web mode (relay-free browsing). Fetched once per session by site/browser.js and merged into the built-in defaults. Every entry is tested live before it is used, so a dead or rate-limited gateway is simply scored down and skipped. To add one: any HTTPS URL containing {url} (percent-encoded target) or {rawurl} (target verbatim). Add \"json\": \"contents\" when the gateway wraps the body in JSON.",
+  "gateways": [
+    { "name": "AllOrigins raw",   "raw": "https://api.allorigins.win/raw?url={url}" },
+    { "name": "AllOrigins get",   "raw": "https://api.allorigins.win/get?url={url}", "json": "contents" },
+    { "name": "CodeTabs",         "raw": "https://api.codetabs.com/v1/proxy?quest={url}" },
+    { "name": "Corsfix",          "raw": "https://proxy.corsfix.com/?{rawurl}" },
+    { "name": "cors.workers.dev", "raw": "https://test.cors.workers.dev/?{rawurl}" },
+    { "name": "cors.lol",         "raw": "https://api.cors.lol/?url={url}" },
+    { "name": "cors.eu.org",      "raw": "https://cors.eu.org/{rawurl}" },
+    { "name": "thingproxy",       "raw": "https://thingproxy.freeboard.io/fetch/{rawurl}" },
+    { "name": "Whatever Origin",  "raw": "https://www.whateverorigin.org/get?url={url}", "json": "contents" },
+    { "name": "corsproxy.io",     "raw": "https://corsproxy.io/?url={url}" },
+    { "name": "Jina Reader",      "raw": "https://r.jina.ai/{rawurl}", "text": true }
+  ],
+  "testEndpoints": [
+    "https://ipwho.is/",
+    "https://ipapi.co/json/",
+    "http://ip-api.com/json/?fields=status,message,country,countryCode,query,isp,org,as,proxy,hosting"
+  ]
+}

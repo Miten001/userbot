@@ -12,8 +12,10 @@
 #    ./relay.sh --print            print the URL and command, don't start
 #    ./relay.sh --help
 #
-#  The relay binds to 127.0.0.1 only. browser.html on the static Pages site
-#  shows "relay not running" until this is up — that is expected.
+#  The relay binds to 127.0.0.1 only. Without it browser.html still browses in
+#  web mode (client-side gateway pool + rewriting) — start this to add SOCKS /
+#  HTTP proxy egress, a cookie jar and the SSRF guard. The page notices a
+#  running relay within 30 seconds and switches over by itself.
 # ─────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 

@@ -1,5 +1,45 @@
 # Changelog
 
+## 1.3.0 — in-site browser without the relay (web mode)
+
+### In-site browser (`site/browser.html` + `site/browser.js`)
+
+- Two transport modes, chosen automatically: **relay mode** when
+  `127.0.0.1:8787` answers, **web mode** everywhere else (static GitHub Pages
+  included). The “relay not running” overlay is gone; the relay is now an
+  optional upgrade, not a prerequisite.
+- Web mode fetches documents through a pool of CORS gateways, rewrites them in
+  the browser (`<script>` / `on*` / meta-refresh stripped, every URL absolutised
+  and re-pointed at the chosen gateway, `srcset` + CSS `url()` included) and
+  renders the result into the sandboxed iframe via `srcdoc`
+- The sandboxed document is opaque-origin (`allow-scripts` without
+  `allow-same-origin`) and talks back through a tiny `postMessage` bridge, so
+  link clicks and form submissions become real parent-frame navigations
+- Gateway pool: built-in defaults + the public list in
+  `site/proxy-sources.json`, persisted to `localStorage`, with
+  add / test / use / remove, `Defaults`, `Fetch list` and `Clear`
+- Live tests per gateway through the gateway itself: exit IP, country and ISP
+  from ipwho.is / ipapi.co, proxy & hosting flags from ip-api.com (the same
+  source the relay uses), timed and scored 0–100
+- Country filter (ALL / US / GB / DE / IN …), **Random clean**, **Select best**,
+  **New identity** and **New non-detected IP on every search / site**
+  (`#chkRotateSearch`) all work without `relay.sh` — each rotated search leaves
+  through a different gateway, i.e. a different exit IP
+- Failure handling: a gateway that errors is scored down and the next one is
+  tried (up to four), and only then does a single page fall back to a direct
+  (unproxied) iframe load — with the selection left intact so the next request
+  retries the pool
+- Status pill reports `relay: online · vX`, `relay: web mode` or, before the
+  first probe, `relay: checking…`; Retry no longer dead-ends on
+  “still not running”
+
+### Relay (`relay/server.js`)
+
+- CORS headers on every response and a real `OPTIONS` preflight answer,
+  including `Access-Control-Allow-Private-Network: true`, so an HTTPS page (the
+  Pages build) is allowed to reach a relay on loopback. The listener is still
+  bound to `127.0.0.1` and non-loopback peers are still destroyed on connect.
+
 ## 1.1.0 — GhostShell relay
 
 ### Relay (`relay/`)
