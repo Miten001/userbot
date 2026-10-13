@@ -38,7 +38,7 @@ const { rewriteHtml, rewriteCss } = require('./lib/rewrite');
 const pool = require('./lib/pool');
 
 const NAME = 'ghostshell-relay';
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 const HOST = '127.0.0.1';
 const SITE_DIR = path.resolve(__dirname, '..', 'site');
 
@@ -273,33 +273,130 @@ function cookieHeaderFor(url) {
   return parts.length ? parts.join('; ') : null;
 }
 
-function newIdentity() {
-  identity++;
-  jar.clear();
-  // rotate away from whatever is currently selected
-  const next = pool.select(proxyPool, { mode: 'rotate', cursor: identity });
-  activeProxyId = next ? next.id : null;
-  return { identity, proxy: next ? next.raw : 'direct' };
-}
-
 // ── proxy pool state ─────────────────────────────────────────────────────
 
 let proxyPool = pool.load();
 let activeProxyId = null;
+let activeCountry = 'ALL';
+let lastUsedProxyId = null;
+let lastUsedIp = null;
 let rotateCursor = 0;
 
-function activeProxyEntry(pParam) {
-  if (pParam === 'direct') return null;
-  if (pParam && pParam !== 'auto') {
-    return proxyPool.find((e) => e.id === pParam) || null;
+function normalizeCountry(c) {
+  if (!c) return 'ALL';
+  const s = String(c).trim().toUpperCase();
+  return s === '' || s === '*' ? 'ALL' : s;
+}
+
+function recordUsedProxy(entry) {
+  if (!entry) return;
+  activeProxyId = entry.id;
+  lastUsedProxyId = entry.id;
+  lastUsedIp = entry.exitIp || entry.host || null;
+}
+
+/**
+ * Pick a clean (non-detected) proxy matching `country`, avoiding the last
+ * used proxy ID and exit IP whenever another clean proxy is available.
+ */
+function pickCleanProxy(opts = {}) {
+  const mode = opts.mode || 'random';
+  const cleanOnly = opts.cleanOnly !== undefined ? Boolean(opts.cleanOnly) : true;
+  const cc = normalizeCountry(opts.country || activeCountry);
+  const countryFilter = cc !== 'ALL' ? cc : null;
+  const avoidLast = opts.avoidLast !== false;
+
+  let next = pool.select(proxyPool, {
+    mode,
+    cleanOnly,
+    country: countryFilter,
+    cursor: rotateCursor++,
+    exclude: avoidLast && lastUsedProxyId ? new Set([lastUsedProxyId]) : undefined,
+    excludeIp: avoidLast && lastUsedIp ? new Set([lastUsedIp]) : undefined,
+  });
+
+  // If the pool only has one clean proxy for the requested country, allow it
+  // rather than dropping the user to an unproxied direct connection.
+  if (!next && avoidLast) {
+    next = pool.select(proxyPool, {
+      mode,
+      cleanOnly,
+      country: countryFilter,
+      cursor: rotateCursor++,
+    });
   }
-  if (activeProxyId) {
-    const e = proxyPool.find((x) => x.id === activeProxyId);
-    if (e) return e;
+
+  if (next) recordUsedProxy(next);
+  return next;
+}
+
+function newIdentity(country) {
+  identity++;
+  jar.clear();
+  if (country) activeCountry = normalizeCountry(country);
+  const next = pickCleanProxy({ mode: 'random', cleanOnly: true, country: activeCountry, avoidLast: true });
+  if (!next) activeProxyId = null;
+  return {
+    identity,
+    active: next ? next.id : null,
+    proxy: next ? next.raw : 'direct',
+    exitIp: next ? (next.exitIp || next.host) : null,
+    countryCode: next ? next.countryCode : null,
+    country: activeCountry,
+  };
+}
+
+function activeProxyEntry(pParam, navOpts = {}) {
+  if (navOpts.country) {
+    activeCountry = normalizeCountry(navOpts.country);
+  }
+  if (pParam === 'direct') return null;
+  // Subresources and explicitly-pinned proxy IDs pass p=<entry.id>
+  if (pParam && pParam !== 'auto' && pParam !== 'random') {
+    const pinned = proxyPool.find((e) => e.id === pParam) || null;
+    if (pinned) {
+      lastUsedProxyId = pinned.id;
+      lastUsedIp = pinned.exitIp || pinned.host || null;
+    }
+    return pinned;
+  }
+  if (activeProxyId === 'direct' && pParam !== 'random' && !navOpts.rotate) {
+    return null;
   }
   if (proxyPool.length === 0) return null;
-  const next = pool.select(proxyPool, { mode: 'rotate', cursor: rotateCursor++ });
-  return next;
+
+  // On a new search / site navigation (/view with rotate or p=random/auto),
+  // pick a fresh non-detected proxy excluding lastUsedProxyId & lastUsedIp.
+  const shouldRotate =
+    navOpts.rotate === true ||
+    pParam === 'random' ||
+    (navOpts.isNavigation && navOpts.rotate !== false && pParam === 'auto');
+
+  if (shouldRotate) {
+    return pickCleanProxy({
+      mode: 'random',
+      cleanOnly: true,
+      country: navOpts.country || activeCountry,
+      avoidLast: true,
+    });
+  }
+
+  if (activeProxyId && activeProxyId !== 'direct') {
+    const e = proxyPool.find((x) => x.id === activeProxyId);
+    if (e && pool.isClean(e)) {
+      const cc = normalizeCountry(navOpts.country || activeCountry);
+      if (cc === 'ALL' || (e.countryCode || '').toUpperCase() === cc) {
+        return e;
+      }
+    }
+  }
+
+  return pickCleanProxy({
+    mode: 'random',
+    cleanOnly: true,
+    country: navOpts.country || activeCountry,
+    avoidLast: true,
+  });
 }
 
 function serializeEntry(e) {
@@ -319,7 +416,12 @@ function serializeEntry(e) {
     lastCheck: e.lastCheck,
     exitIp: e.exitIp,
     isp: e.isp,
+    country: e.country || null,
+    countryCode: e.countryCode || null,
     hosting: e.hosting,
+    isProxy: e.isProxy != null ? e.isProxy : null,
+    detected: pool.isDetected(e),
+    clean: pool.isClean(e),
     error: e.error,
   };
 }
@@ -466,10 +568,10 @@ function contentWantsRewrite(contentType) {
   return null;
 }
 
-async function handleFetch(req, res, rawTarget, pParam, method, formBody) {
+async function handleFetch(req, res, rawTarget, pParam, method, formBody, navOpts = {}) {
   await validateTarget(rawTarget); // SSRF — also covers the first hop
 
-  const entry = activeProxyEntry(pParam);
+  const entry = activeProxyEntry(pParam, navOpts);
   const proxy = entry ? parseProxy(entry.raw) : null;
 
   let body = null;
@@ -505,16 +607,35 @@ async function handleFetch(req, res, rawTarget, pParam, method, formBody) {
   absorbSetCookies(result.url, result.headers);
   const clean = cleanResponseHeaders(result.headers);
   clean['X-GhostShell-Via'] = entry ? entry.raw : 'direct';
+  if (entry && entry.countryCode) clean['X-GhostShell-Country'] = entry.countryCode;
+  if (entry && (entry.exitIp || entry.host)) clean['X-GhostShell-Exit-IP'] = entry.exitIp || entry.host;
 
+  // Bind all rewritten subresources of this document to the exact proxy ID
+  // chosen for this page so the whole page loads through one consistent exit IP.
+  const subresourceProxyParam = entry ? entry.id : (pParam === 'direct' ? 'direct' : 'auto');
   const kind = contentWantsRewrite(result.headers['content-type']);
 
   if (kind === 'html') {
     if (result.body.length > MAX_VIEW_BODY) {
       return errorPage(res, 502, 'page too large to rewrite safely');
     }
-    const { html, stats } = rewriteHtml(result.body.toString('utf8'), result.url, {
-      proxyParam: pParam || 'auto',
+    let { html, stats } = rewriteHtml(result.body.toString('utf8'), result.url, {
+      proxyParam: subresourceProxyParam,
     });
+    const egressLabel = entry
+      ? `${entry.raw}${entry.countryCode ? ' [' + entry.countryCode + ']' : ''}${entry.exitIp ? ' (' + entry.exitIp + ')' : ''}`
+      : 'direct';
+    const egressMeta =
+      `<meta name="gs-egress" content="${escapeHtml(egressLabel)}"` +
+      ` data-proxy-id="${escapeHtml(entry ? entry.id : 'direct')}"` +
+      ` data-proxy-raw="${escapeHtml(entry ? entry.raw : 'direct')}"` +
+      ` data-country="${escapeHtml(entry && entry.countryCode ? entry.countryCode : '')}"` +
+      ` data-ip="${escapeHtml(entry ? (entry.exitIp || entry.host || '') : '')}">`;
+    if (html.includes('<meta name="gs-stats"')) {
+      html = html.replace('<meta name="gs-stats"', egressMeta + '<meta name="gs-stats"');
+    } else {
+      html = egressMeta + html;
+    }
     clean['Content-Type'] = 'text/html; charset=utf-8';
     clean['Content-Length'] = Buffer.byteLength(html);
     clean['X-GhostShell-Stats'] =
@@ -525,7 +646,7 @@ async function handleFetch(req, res, rawTarget, pParam, method, formBody) {
 
   if (kind === 'css') {
     const css = rewriteCss(result.body.toString('utf8'), result.url, {
-      proxyParam: pParam || 'auto',
+      proxyParam: subresourceProxyParam,
     });
     clean['Content-Type'] = 'text/css; charset=utf-8';
     clean['Content-Length'] = Buffer.byteLength(css);
@@ -552,7 +673,10 @@ async function route(req, res) {
       version: VERSION,
       identity,
       poolSize: proxyPool.length,
+      cleanCount: proxyPool.filter(pool.isClean).length,
+      country: activeCountry,
       activeProxy: (() => {
+        if (activeProxyId === 'direct') return 'direct';
         const e = activeProxyId ? proxyPool.find((x) => x.id === activeProxyId) : null;
         return e ? e.raw : 'direct';
       })(),
@@ -561,9 +685,14 @@ async function route(req, res) {
 
   if (pathname === '/api/proxy') {
     if (req.method === 'GET') {
+      const countries = Array.from(
+        new Set(proxyPool.map((e) => (e.countryCode || '').toUpperCase()).filter(Boolean))
+      ).sort();
       return sendJson(res, 200, {
         proxies: proxyPool.map(serializeEntry),
         active: activeProxyId,
+        country: activeCountry,
+        countries,
         testUrl: process.env.GHOSTSHELL_TEST_URL || pool.DEFAULT_TEST_URL,
       });
     }
@@ -586,11 +715,15 @@ async function route(req, res) {
       } catch (err) {
         return sendJson(res, 400, { error: String(err.message || err) });
       }
-      const known = new Set(proxyPool.map((e) => e.raw.toLowerCase()));
+      const byRaw = new Map(proxyPool.map((e) => [e.raw.toLowerCase(), e]));
       let count = 0;
       for (const e of added) {
-        if (known.has(e.raw.toLowerCase())) continue;
-        known.add(e.raw.toLowerCase());
+        const existing = byRaw.get(e.raw.toLowerCase());
+        if (existing) {
+          if (e.countryCode && !existing.countryCode) existing.countryCode = e.countryCode;
+          continue;
+        }
+        byRaw.set(e.raw.toLowerCase(), e);
         proxyPool.push(e);
         count++;
       }
@@ -603,11 +736,14 @@ async function route(req, res) {
         const before = proxyPool.length;
         proxyPool = proxyPool.filter((e) => e.id !== id);
         if (activeProxyId === id) activeProxyId = null;
+        if (lastUsedProxyId === id) lastUsedProxyId = null;
         persistPool();
         return sendJson(res, 200, { removed: before - proxyPool.length, total: proxyPool.length });
       }
       proxyPool = [];
       activeProxyId = null;
+      lastUsedProxyId = null;
+      lastUsedIp = null;
       persistPool();
       return sendJson(res, 200, { removed: 0, total: 0 });
     }
@@ -646,30 +782,67 @@ async function route(req, res) {
     const bodyBuf = await readBody(req, MAX_API_BODY);
     let id = null;
     let mode = 'best';
+    let cleanOnly;
+    let country = null;
     try {
       const j = JSON.parse(bodyBuf.toString('utf8') || '{}');
       id = j.id || null;
       mode = j.mode || 'best';
+      cleanOnly = j.cleanOnly;
+      country = j.country || null;
     } catch {
       return sendJson(res, 400, { error: 'bad JSON body' });
     }
+    if (country != null) {
+      activeCountry = normalizeCountry(country);
+    }
     if (id === 'direct') {
       activeProxyId = 'direct';
-      return sendJson(res, 200, { active: 'direct', proxy: 'direct' });
+      return sendJson(res, 200, { active: 'direct', proxy: 'direct', country: activeCountry });
     }
     if (id) {
       const e = proxyPool.find((x) => x.id === id);
       if (!e) return sendJson(res, 404, { error: 'no such proxy' });
-      activeProxyId = e.id;
-      return sendJson(res, 200, { active: e.id, proxy: e.raw });
+      recordUsedProxy(e);
+      return sendJson(res, 200, {
+        active: e.id,
+        proxy: e.raw,
+        exitIp: e.exitIp || e.host || null,
+        countryCode: e.countryCode || null,
+        detected: pool.isDetected(e),
+        clean: pool.isClean(e),
+        country: activeCountry,
+      });
     }
-    const next = pool.select(proxyPool, { mode, cursor: rotateCursor++ });
+    const wantClean = cleanOnly !== undefined ? Boolean(cleanOnly) : true;
+    const next = pickCleanProxy({
+      mode,
+      cleanOnly: wantClean,
+      country: activeCountry,
+      avoidLast: true,
+    });
     activeProxyId = next ? next.id : null;
-    return sendJson(res, 200, { active: next ? next.id : null, proxy: next ? next.raw : 'direct' });
+    return sendJson(res, 200, {
+      active: next ? next.id : null,
+      proxy: next ? next.raw : 'direct',
+      exitIp: next ? (next.exitIp || next.host) : null,
+      countryCode: next ? next.countryCode : null,
+      detected: next ? pool.isDetected(next) : false,
+      clean: next ? pool.isClean(next) : true,
+      country: activeCountry,
+    });
   }
 
   if (pathname === '/api/identity' && req.method === 'POST') {
-    const info = newIdentity();
+    let country = null;
+    const bodyBuf = await readBody(req, MAX_API_BODY);
+    if (bodyBuf.length) {
+      try {
+        const j = JSON.parse(bodyBuf.toString('utf8'));
+        country = j.country || null;
+      } catch { /* ignore */ }
+    }
+    const info = newIdentity(country);
     return sendJson(res, 200, { ok: true, ...info });
   }
 
@@ -681,6 +854,14 @@ async function route(req, res) {
   if (pathname === '/view' || pathname === '/view/raw') {
     let rawTarget = u.searchParams.get('u');
     const pParam = u.searchParams.get('p') || 'auto';
+    const countryParam = u.searchParams.get('c') || u.searchParams.get('country') || null;
+    const rotateParam = u.searchParams.get('rotate');
+    const isNavigation = pathname === '/view';
+    const navOpts = {
+      isNavigation,
+      country: countryParam,
+      rotate: rotateParam === '1' ? true : rotateParam === '0' ? false : undefined,
+    };
 
     if (!rawTarget && req.method === 'POST') {
       const bodyBuf = await readBody(req, MAX_API_BODY);
@@ -688,7 +869,7 @@ async function route(req, res) {
       rawTarget = form._target;
       if (!rawTarget) return errorPage(res, 400, 'form submission without _target');
       try {
-        return await handleFetch(req, res, rawTarget, pParam, 'POST', form);
+        return await handleFetch(req, res, rawTarget, pParam, 'POST', form, navOpts);
       } catch (err) {
         return err.guard
           ? errorPage(res, err.status, 'blocked by SSRF guard', err.message)
@@ -701,7 +882,7 @@ async function route(req, res) {
       return errorPage(res, 400, 'only http(s) targets are fetchable');
     }
     try {
-      return await handleFetch(req, res, rawTarget, pParam, req.method, null);
+      return await handleFetch(req, res, rawTarget, pParam, req.method, null, navOpts);
     } catch (err) {
       return err.guard
         ? errorPage(res, err.status, 'blocked by SSRF guard', err.message)

@@ -3,14 +3,16 @@
 //  GhostShell relay — proxy pool
 //
 //  parse   one proxy per line:  type://[user:pass@]host:port  (or host:port)
+//          with optional country hint:  #US  or  [DE]
 //  test    run a real request through the proxy and time it
 //  score   0–100: reliability (Laplace-smoothed) × speed × freshness
-//  select  pick one: best (jittered among the top), rotate, or random
+//  select  pick one: best (jittered among the top), rotate, or random clean
 //
 //  The pool persists to ~/.ghostshell/proxy-pool.json so a restart does not
 //  throw away everything the tests learned. Pure data + node:fs — no deps.
 // ─────────────────────────────────────────────────────────────────────────
 
+const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -21,11 +23,40 @@ const POOL_FILE = path.join(
   'proxy-pool.json'
 );
 
-const DEFAULT_TEST_URL = 'http://ip-api.com/json/?fields=status,message,query,isp,org,as,proxy,hosting';
+const DEFAULT_TEST_URL = 'http://ip-api.com/json/?fields=status,message,country,countryCode,query,isp,org,as,proxy,hosting';
 const STALE_MS = 15 * 60 * 1000;     // a test older than this counts as "unknown"
 const FAIL_PENALTY_MS = 60 * 1000;   // a failure this recent halves the score
 
 // ── parse ────────────────────────────────────────────────────────────────
+
+/** Extract an optional #US or [DE] country hint from a single proxy line. */
+function extractCountryHint(line) {
+  let s = String(line).trim();
+  let countryCode = null;
+
+  const hashMatch = /^(.*?)\s*#\s*([a-zA-Z]{2})\b.*$/.exec(s);
+  if (hashMatch && hashMatch[1].trim() !== '') {
+    s = hashMatch[1].trim();
+    countryCode = hashMatch[2].toUpperCase();
+  } else {
+    const commentIdx = s.indexOf(' #');
+    if (commentIdx !== -1) s = s.slice(0, commentIdx).trim();
+  }
+
+  const bracketMatch = /\[([a-zA-Z]{2})\]/.exec(s);
+  if (bracketMatch) {
+    if (!countryCode) countryCode = bracketMatch[1].toUpperCase();
+    s = s.replace(/\[[a-zA-Z]{2}\]/g, '').trim();
+  }
+
+  const tailMatch = /^(\S+)\s+([a-zA-Z]{2})$/.exec(s);
+  if (tailMatch) {
+    if (!countryCode) countryCode = tailMatch[2].toUpperCase();
+    s = tailMatch[1].trim();
+  }
+
+  return { spec: s, countryCode };
+}
 
 /** Parse a block of text into pool entries. Throws on the first bad line. */
 function parse(text) {
@@ -34,17 +65,18 @@ function parse(text) {
   for (const lineRaw of String(text).split(/\r?\n/)) {
     const line = lineRaw.trim();
     if (line === '' || line.startsWith('#') || line.startsWith('//')) continue;
-    const proxy = parseProxy(line);
+    const { spec, countryCode } = extractCountryHint(line);
+    const proxy = parseProxy(spec);
     if (!proxy) continue; // "direct" / empty — not pool material
     const key = `${proxy.type}://${proxy.user ? proxy.user + '@' : ''}${proxy.host}:${proxy.port}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    entries.push(freshEntry(proxy));
+    entries.push(freshEntry(proxy, countryCode));
   }
   return entries;
 }
 
-function freshEntry(proxy) {
+function freshEntry(proxy, countryCode = null) {
   return {
     id: makeId(proxy),
     raw: proxy.raw,
@@ -61,24 +93,40 @@ function freshEntry(proxy) {
     lastCheck: 0,
     exitIp: null,
     isp: null,
+    country: null,
+    countryCode: countryCode ? String(countryCode).toUpperCase() : null,
     hosting: null,
+    isProxy: null,
     error: null,
     addedAt: Date.now(),
   };
 }
 
 function makeId(proxy) {
-  return Buffer.from(`${proxy.type}|${proxy.host}|${proxy.port}|${proxy.user || ''}`)
-    .toString('base64url')
-    .replace(/=/g, '')
-    .slice(0, 22);
+  return crypto
+    .createHash('sha1')
+    .update(`${proxy.type}|${proxy.host}|${proxy.port}|${proxy.user || ''}`)
+    .digest('base64url')
+    .slice(0, 16);
 }
 
-// ── score ────────────────────────────────────────────────────────────────
+// ── detection & score ────────────────────────────────────────────────────
+
+/** True when ip-api flagged the exit as a datacenter/hosting range or proxy. */
+function isDetected(entry) {
+  return Boolean(entry && (entry.hosting === true || entry.isProxy === true));
+}
+
+/** True when the entry is not flagged as detected and is not currently failing. */
+function isClean(entry) {
+  return Boolean(entry && !isDetected(entry) && entry.lastOk !== false);
+}
 
 /**
  * 0–100. Reliability dominates; speed breaks ties; stale or freshly-failed
  * entries are pushed down hard so `select` prefers evidence over optimism.
+ * Detected (datacenter/proxy-flagged) exits are penalized heavily while
+ * verified clean residential exits get a boost.
  */
 function score(entry) {
   const n = entry.wins + entry.fails;
@@ -91,25 +139,61 @@ function score(entry) {
   else if (entry.lastOk === false && now - entry.lastCheck < FAIL_PENALTY_MS) value *= 0.35;
 
   // ip-api tells us when an exit looks like a datacenter or an open proxy —
-  // residential-looking exits score better for the same speed and success.
-  if (entry.hosting === false && entry.isp) value *= 1.05;
+  // penalize detected exits and boost verified clean residential exits.
+  if (isDetected(entry)) value *= 0.4;
+  else if (entry.hosting === false && entry.isProxy === false && entry.isp) value *= 1.1;
+  else if (entry.hosting === false && entry.isp) value *= 1.05;
 
   return Math.max(0, Math.min(100, Math.round(value * 10) / 10));
 }
 
 // ── select ───────────────────────────────────────────────────────────────
 
+function toSet(val) {
+  if (!val) return new Set();
+  if (val instanceof Set) return val;
+  if (Array.isArray(val)) return new Set(val.filter(Boolean));
+  return new Set([val]);
+}
+
 /**
  * mode 'best'    → weighted pick among the three highest-scored entries
  * mode 'rotate'  → round-robin over the sorted list (state kept by caller)
- * mode 'random'  → uniform over entries that are not failing right now
- * Never returns an entry in `exclude` (Set of ids).
+ * mode 'random'  → uniform over clean (non-detected) entries
+ *
+ * Options:
+ *   cleanOnly  only pick entries where isClean(entry) is true (default true for 'random')
+ *   country    2-letter ISO code (e.g. 'US', 'DE') or 'ALL'
+ *   exclude    Set / array / string of proxy IDs to skip
+ *   excludeIp  Set / array / string of exitIp / host values to skip
  */
 function select(entries, opts = {}) {
-  const pool = entries.filter((e) => !opts.exclude || !opts.exclude.has(e.id));
+  const excludeIds = toSet(opts.exclude);
+  const excludeIps = toSet(opts.excludeIp);
+  const country = opts.country && String(opts.country).trim().toUpperCase() !== 'ALL'
+    ? String(opts.country).trim().toUpperCase()
+    : null;
+  const mode = opts.mode || 'best';
+  const cleanOnly = opts.cleanOnly !== undefined ? Boolean(opts.cleanOnly) : (mode === 'random');
+
+  let pool = entries.filter((e) => {
+    if (excludeIds.size && excludeIds.has(e.id)) return false;
+    if (excludeIps.size) {
+      const ip = e.exitIp || e.host;
+      if (ip && excludeIps.has(ip)) return false;
+    }
+    if (country && (e.countryCode || '').toUpperCase() !== country) return false;
+    if (cleanOnly && !isClean(e)) return false;
+    return true;
+  });
+
+  if (!cleanOnly) {
+    const cleanPool = pool.filter(isClean);
+    if (cleanPool.length > 0) pool = cleanPool;
+  }
+
   if (pool.length === 0) return null;
 
-  const mode = opts.mode || 'best';
   const ranked = [...pool].sort((a, b) => score(b) - score(a));
 
   if (mode === 'random') {
@@ -140,12 +224,21 @@ function parseTestBody(body) {
     return {
       exitIp: j.query || j.ip || null,
       isp: j.isp || j.org || null,
+      country: j.country || null,
+      countryCode: j.countryCode ? String(j.countryCode).toUpperCase() : null,
       hosting: typeof j.hosting === 'boolean' ? j.hosting : null,
       isProxy: typeof j.proxy === 'boolean' ? j.proxy : null,
     };
   } catch {
     const first = text.split(/\s/)[0];
-    return { exitIp: first.length > 0 && first.length <= 45 ? first : null, isp: null, hosting: null, isProxy: null };
+    return {
+      exitIp: first.length > 0 && first.length <= 45 ? first : null,
+      isp: null,
+      country: null,
+      countryCode: null,
+      hosting: null,
+      isProxy: null,
+    };
   }
 }
 
@@ -179,9 +272,21 @@ async function testEntry(entry, fetchFn, opts = {}) {
     entry.lastCheck = Date.now();
     entry.exitIp = info.exitIp;
     entry.isp = info.isp;
+    if (info.country) entry.country = info.country;
+    if (info.countryCode) entry.countryCode = info.countryCode;
     entry.hosting = info.hosting;
+    entry.isProxy = info.isProxy;
     entry.error = null;
-    return { ok: true, ms, exitIp: info.exitIp, score: score(entry) };
+    return {
+      ok: true,
+      ms,
+      exitIp: info.exitIp,
+      country: entry.country,
+      countryCode: entry.countryCode,
+      detected: isDetected(entry),
+      clean: isClean(entry),
+      score: score(entry),
+    };
   } catch (err) {
     const ms = Date.now() - started;
     entry.fails++;
@@ -189,7 +294,7 @@ async function testEntry(entry, fetchFn, opts = {}) {
     entry.lastMs = ms;
     entry.lastCheck = Date.now();
     entry.error = String(err && err.message ? err.message : err);
-    return { ok: false, ms, error: entry.error, score: score(entry) };
+    return { ok: false, ms, error: entry.error, detected: isDetected(entry), clean: isClean(entry), score: score(entry) };
   }
 }
 
@@ -229,7 +334,11 @@ function load(file = POOL_FILE) {
 
 function save(entries, file = POOL_FILE) {
   try {
-    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.mkdirSync(path.dirname(file), '0700', { recursive: true });
+  } catch {
+    try { fs.mkdirSync(path.dirname(file), { recursive: true }); } catch {}
+  }
+  try {
     fs.writeFileSync(file, JSON.stringify(entries, null, 2) + '\n');
     return true;
   } catch {
@@ -242,6 +351,8 @@ module.exports = {
   DEFAULT_TEST_URL,
   parse,
   parseTestBody,
+  isDetected,
+  isClean,
   score,
   select,
   testEntry,
