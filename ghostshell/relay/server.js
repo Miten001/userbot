@@ -38,7 +38,7 @@ const { rewriteHtml, rewriteCss } = require('./lib/rewrite');
 const pool = require('./lib/pool');
 
 const NAME = 'ghostshell-relay';
-const VERSION = '1.2.0';
+const VERSION = '1.3.0';
 const HOST = '127.0.0.1';
 const SITE_DIR = path.resolve(__dirname, '..', 'site');
 
@@ -462,6 +462,32 @@ function cleanResponseHeaders(headers) {
   return out;
 }
 
+// ── CORS ─────────────────────────────────────────────────────────────────
+//
+// The relay binds to 127.0.0.1, but the in-site browser also ships as a
+// static page over HTTPS (GitHub Pages). A public HTTPS origin fetching a
+// loopback address is a *private network request*, which browsers gate behind
+// a CORS preflight — and that preflight only succeeds when the server answers
+// it with `Access-Control-Allow-Private-Network: true`. Without these headers
+// the Pages build can never see a relay the user really is running.
+//
+// This widens nothing: the listener is still bound to loopback and
+// server.on('connection') still destroys non-loopback peers. It only tells
+// the browser that this loopback server is happy to answer the page that
+// asked — which is the whole point of the local relay.
+
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Max-Age': '600',
+  'Access-Control-Allow-Private-Network': 'true',
+};
+
+function applyCors(res) {
+  for (const [k, v] of Object.entries(CORS_HEADERS)) res.setHeader(k, v);
+}
+
 // ── small HTTP helpers ───────────────────────────────────────────────────
 
 function sendJson(res, status, data) {
@@ -664,6 +690,13 @@ async function handleFetch(req, res, rawTarget, pParam, method, formBody, navOpt
 async function route(req, res) {
   const u = new URL(req.url, `http://${HOST}:${port}`);
   const pathname = u.pathname;
+
+  // ---- CORS (incl. the private-network preflight from HTTPS pages) ----
+  applyCors(res);
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, { 'Content-Length': 0 });
+    return res.end();
+  }
 
   // ---- API ----
   if (pathname === '/api/ping') {

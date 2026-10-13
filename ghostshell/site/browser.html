@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GhostShell Browser — search, viewer, proxy manager</title>
-<meta name="description" content="GhostShell in-site browser: search and browse through the local relay, with an embedded rewrite viewer and a scoring proxy manager. Runs only while the local relay is up.">
+<meta name="description" content="GhostShell in-site browser: search and browse through an embedded rewrite viewer with a live-tested gateway/proxy manager. Uses the local relay when it is running, otherwise works entirely in the browser (web mode).">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🕶️</text></svg>">
 <link rel="stylesheet" href="styles.css">
 <style>
@@ -18,6 +18,8 @@
   }
   .pill.online { border-color: rgba(53,201,18,.45); color: var(--good); }
   .pill.offline { border-color: rgba(239,91,91,.45); color: var(--bad); }
+  .pill.web { border-color: rgba(12,168,168,.5); color: var(--accent); background: rgba(12,168,168,.08); cursor: pointer; }
+  .pill.web:hover { color: var(--text); }
 
   .toolbar {
     display: flex; align-items: center; gap: 8px;
@@ -77,6 +79,12 @@
     font-size: 12px; color: var(--muted);
   }
   .panel-controls .ctrl-row .cselect { flex: 1; height: 30px; font-size: 11.5px; }
+  .web-note {
+    font-size: 11.5px; line-height: 1.55; color: var(--muted);
+    border: 1px solid rgba(12,168,168,.35); background: rgba(12,168,168,.07);
+    border-radius: 9px; padding: 9px 11px; margin: 0 0 12px;
+  }
+  .web-note code { font-family: var(--mono); font-size: 10.5px; color: var(--accent); }
   .rotate-opt {
     display: flex; align-items: center; gap: 8px;
     font-size: 12px; color: var(--text); cursor: pointer; user-select: none;
@@ -103,6 +111,7 @@
   .pbadge.country { color: var(--accent); border-color: rgba(12,168,168,.4); background: rgba(12,168,168,.08); }
   .pbadge.clean { color: var(--good); border-color: rgba(53,201,138,.4); background: rgba(53,201,138,.1); }
   .pbadge.detected { color: var(--bad); border-color: rgba(239,91,91,.4); background: rgba(239,91,91,.1); }
+  .pbadge.relay { color: var(--dim); border-color: var(--line); background: transparent; }
   .proxy-row .meta { color: var(--dim); font-size: 11px; margin: 5px 0 8px; font-family: var(--mono); }
   .proxy-row .row-actions { display: flex; gap: 6px; }
   .proxy-row .row-actions button {
@@ -119,7 +128,7 @@
     border: 0; background: #fff;
   }
   .relay-down {
-    position: absolute; inset: 0; display: none;
+    position: absolute; inset: 0; display: none; z-index: 20;
     place-items: center; text-align: center; padding: 24px;
     background: var(--bg);
   }
@@ -158,7 +167,7 @@
       <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M12 2l7 3v6c0 5-3 8.5-7 11-4-2.5-7-6-7-11V5l7-3z" fill="url(#g2)"/><defs><linearGradient id="g2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#22264a"/><stop offset="1" stop-color="#0ca8a8"/></linearGradient></defs></svg>
       <span>GhostShell Browser</span>
     </a>
-    <span class="pill" id="relayPill">relay: checking…</span>
+    <span class="pill" id="relayPill" title="Local relay status — click for details">relay: checking…</span>
   </div>
 </header>
 
@@ -195,13 +204,25 @@
 <div class="layout">
   <aside id="proxyPanel">
     <h2>Proxy manager</h2>
-    <textarea id="proxyInput" placeholder="one per line (optional #US or [DE] country hint):&#10;socks5://user:pass@1.2.3.4:1080 #US&#10;http://user:pass@1.2.3.4:8080 [DE]&#10;1.2.3.4:8080 #GB"></textarea>
+    <p class="web-note" id="webNote">
+      <b>Web mode.</b> Every line below is either a <em>gateway</em> — an HTTPS URL containing
+      <code>{url}</code>, which this page can fetch through right now — or a
+      <code>socks5://</code>/<code>http://</code> proxy, which only the local relay can dial.
+      Built-in gateways are pre-loaded; <b>Test all</b> asks each one for its exit IP, country
+      and ISP (ipwho.is / ipapi.co) and its proxy &amp; hosting flags (ip-api.com). Gateways are
+      datacentres by nature, so “clean” here means <em>not flagged as a proxy / VPN / Tor exit</em>
+      and passing live tests.
+    </p>
+    <textarea id="proxyInput" placeholder="one per line (optional #US or [DE] country hint):&#10;https://api.allorigins.win/raw?url={url} #US&#10;https://api.codetabs.com/v1/proxy?quest={url}&#10;socks5://user:pass@1.2.3.4:1080 #US&#10;http://user:pass@1.2.3.4:8080 [DE]&#10;1.2.3.4:8080 #GB"></textarea>
     <div class="pool-actions">
       <button class="btn" id="btnAdd">Add</button>
       <button class="btn ghost" id="btnTestAll">Test all</button>
       <button class="btn ghost" id="btnRandomClean" title="Pick a random clean (non-detected) proxy">Random clean</button>
       <button class="btn ghost" id="btnSelectBest">Select best</button>
       <button class="btn ghost" id="btnDirect">Browse direct</button>
+      <button class="btn ghost" id="btnFetchList" title="Merge the public gateway list (proxy-sources.json)">Fetch list</button>
+      <button class="btn ghost" id="btnDefaults" title="Restore the built-in gateways">Defaults</button>
+      <button class="btn ghost" id="btnRelayInfo" title="About the local relay">Relay…</button>
       <button class="btn ghost" id="btnClear">Clear</button>
     </div>
     <div class="panel-controls">
@@ -238,12 +259,16 @@
     <iframe id="viewer" sandbox="allow-forms allow-same-origin" src="about:blank" title="Rewritten page viewer"></iframe>
     <div class="relay-down" id="relayDown">
       <div class="box">
-        <h2>relay not running</h2>
+        <h2>Local relay — optional</h2>
+        <p id="relayIntro">
+          This page is already browsing in <b>web mode</b>: pages are fetched through the
+          gateway pool in the proxy manager, rewritten here in the browser and rendered
+          in the frame behind this panel. Nothing is broken and nothing is waiting on you.
+        </p>
         <p>
-          The in-site browser renders pages through the local GhostShell relay
-          (<code>127.0.0.1</code> only, with an SSRF guard and proxy support).
-          On this static page it will always sit idle — that is expected.
-          Start it on your machine:
+          The local relay is what adds the parts a browser cannot do by itself —
+          <code>socks5://</code> / <code>http://</code> egress from your own pool, a real
+          cookie jar with one-click new identities, and the SSRF guard:
         </p>
         <pre>cd ghostshell
 ./tools/relay.sh --open        # Node 18+, zero dependencies
@@ -251,9 +276,11 @@
 # then open:
 http://127.0.0.1:8787/browser.html</pre>
         <p style="font-size:12.5px;color:var(--dim)">
-          Search, the embedded viewer and the proxy manager all light up once the relay answers.
+          Start it any time — this page notices within 30 seconds and switches to it
+          automatically. Pasting proxy lines works in both modes; only the relay can dial them.
         </p>
-        <button class="btn" id="btnRetry">Retry connection</button>
+        <button class="btn" id="btnRetry">Look for a relay</button>
+        <button class="btn ghost" id="btnCloseRelayDown">Close</button>
       </div>
     </div>
   </main>
