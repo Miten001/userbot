@@ -26,6 +26,7 @@ fallenmusic/.env
 fallenmusic/*.session
 fallenmusic/*.session-journal
 fallenmusic/fallenlogs.txt
+fallenmusic/fallenlogs.txt.[0-9]
 fallenmusic/downloads/
 fallenmusic/cache/
 fallenmusic/__pycache__/

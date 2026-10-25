@@ -18,7 +18,9 @@ services:
     runtime: docker
     plan: free
     region: singapore
-    branch: main
+    # This repo's default branch is "uncheck" — there is no "main" branch, so
+    # pointing the Blueprint at "main" made Render fail the import outright.
+    branch: uncheck
     autoDeployTrigger: checksPass
     dockerfilePath: ./fallenmusic/Dockerfile
     dockerContext: ./fallenmusic
