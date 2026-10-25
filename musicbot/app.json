@@ -1,0 +1,18 @@
+{
+  "name": "Apex Telegram Music Bot",
+  "description": "Telegram group voice chat YouTube music player.",
+  "repository": "https://github.com/Miten001/userbot",
+  "keywords": ["python", "telegram", "music", "pyrogram", "pytgcalls"],
+  "buildpacks": [
+    { "url": "https://github.com/jonathanong/heroku-buildpack-ffmpeg-latest" },
+    { "url": "heroku/python" }
+  ],
+  "env": {
+    "API_ID": { "description": "my.telegram.org se API_ID" },
+    "API_HASH": { "description": "my.telegram.org se API_HASH" },
+    "BOT_TOKEN": { "description": "@BotFather ka bot token" },
+    "SESSION_STRING": { "description": "generate_session.py se nikala string" },
+    "OWNER_ID": { "description": "Apna numeric Telegram ID" },
+    "BOT_USERNAME": { "description": "Bot ka username bina @ ke" }
+  }
+}
