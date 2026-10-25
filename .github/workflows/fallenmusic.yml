@@ -122,6 +122,32 @@ jobs:
       - name: Verify ffmpeg is inside the image
         run: docker run --rm --entrypoint ffmpeg fallen-music:ci -version | head -1
 
+      # py-tgcalls 0.9.7 spawns `node dist/index.js` for voice chat and raises
+      # NodeJSNotInstalled from check_environment() when `node -v` is empty.
+      # Minimum version is 15.0.0 (pytgcalls/scaffold.py).
+      - name: Verify Node.js is inside the image (needed by py-tgcalls)
+        run: |
+          docker run --rm --entrypoint node fallen-music:ci -v | tee /tmp/node.txt
+          major=$(tr -d 'v' < /tmp/node.txt | cut -d. -f1)
+          echo "node major version: $major"
+          [ "$major" -ge 15 ]
+
+      # This is the exact check pytgcalls/environment.py performs at runtime.
+      # If it fails inside the image, /play can never work.
+      - name: Verify pytgcalls environment check passes inside the image
+        run: |
+          docker run --rm --entrypoint python fallen-music:ci -c "
+          from pytgcalls.environment import Environment
+          from pytgcalls.scaffold import Scaffold
+          Environment(
+              Scaffold._REQUIRED_NODEJS_VERSION,
+              Scaffold._REQUIRED_PYROGRAM_VERSION,
+              Scaffold._REQUIRED_TELETHON_VERSION,
+              'pyrogram',
+          ).check_environment()
+          print('pytgcalls check_environment() PASSED inside image')
+          "
+
       - name: Verify web.py is the entrypoint
         run: |
           docker image inspect fallen-music:ci \

@@ -1,17 +1,30 @@
 # Fallen Music — Render-ready image
 #
-# Upstream used nikolaik/python-nodejs:python3.9-nodejs18.  Node is not needed
-# (py-tgcalls 0.9.7 shells out to the ffmpeg binary, it does not use a Node
-# library), so this uses the slim Python image: much smaller and faster builds.
-# Python 3.11 is verified against the pinned requirements (numpy 1.26.4,
-# pillow 10.2.0 and py-tgcalls 0.9.7 all have 3.11 wheels).
+# BOTH ffmpeg AND Node.js are required:
+#   - ffmpeg      : py-tgcalls transcodes audio through the ffmpeg binary.
+#   - Node.js     : py-tgcalls 0.9.7 runs its voice-chat core as a Node
+#                   subprocess.  pytgcalls/binding.py literally does
+#                   create_subprocess_exec('node', <pkg>/dist/index.js), and
+#                   pytgcalls/environment.py raises NodeJSNotInstalled when
+#                   `node -v` returns nothing.  Minimum version is 15.0.0
+#                   (pytgcalls/scaffold.py: _REQUIRED_NODEJS_VERSION).
+#
+# An earlier revision of this file dropped Node on the reasoning that
+# py-tgcalls only needed ffmpeg.  That was wrong: the image built fine and the
+# bot + assistant connected, but pytgcalls.start() died in check_environment(),
+# so /play never worked.
+#
+# Debian bookworm (what python:3.11-slim is based on) ships Node 18.x, which
+# satisfies the >=15 requirement.
 
 FROM python:3.11-slim
 
-# pytgcalls transcodes through ffmpeg — without it /play joins the voice chat
-# and then produces silence.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg curl ca-certificates \
+    && apt-get install -y --no-install-recommends \
+        ffmpeg \
+        nodejs \
+        curl \
+        ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PYTHONUNBUFFERED=1 \
@@ -28,6 +41,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 RUN mkdir -p downloads cache
+
+# Fail the build instead of the deploy if either binary is missing.  Without
+# this the image builds cleanly and only breaks at runtime, deep inside
+# pytgcalls.start().
+RUN ffmpeg -version > /dev/null \
+    && node -v \
+    && python -c "import pytgcalls, pyrogram; print('imports ok')"
 
 # Render injects PORT; config.py falls back to 10000 for local runs.
 EXPOSE 10000
