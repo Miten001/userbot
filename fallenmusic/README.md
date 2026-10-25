@@ -22,7 +22,28 @@ lost on every restart.
 | `JOIN_UPSTREAM_CHATS` defaults to **0** | Upstream made your assistant silently join the author's two chats on every boot. |
 | `config.py` reports which variable is missing | Upstream did `int(getenv("API_ID"))` → bare `TypeError: int() argument must be...` with no clue what was unset. |
 | `SUNAME` parsed defensively | Upstream's `SUPPORT_CHAT.split("me/")[1]` raised `IndexError` on any non-`t.me` value. |
-| Dockerfile: `python:3.11-slim` instead of `nikolaik/python-nodejs:python3.9-nodejs18` | Node isn't used — py-tgcalls 0.9.7 shells out to the `ffmpeg` binary. Smaller, faster builds. |
+| Dockerfile: `python:3.11-slim` + ffmpeg **+ nodejs** instead of `nikolaik/python-nodejs:python3.9-nodejs18` | Keeps the verified Python 3.11 pinning. Node is **required** — see the warning below. |
+
+### ⚠️ Node.js is required, not optional
+
+An earlier revision of the Dockerfile dropped Node, reasoning that py-tgcalls
+only needed ffmpeg. That was **wrong** and it broke `/play` in production while
+the image still built and the bot still connected.
+
+py-tgcalls 0.9.7 runs its voice-chat core as a **Node subprocess**:
+
+- `pytgcalls/binding.py` → `create_subprocess_exec('node', <pkg>/dist/index.js)`
+- `pytgcalls/environment.py` → raises `NodeJSNotInstalled` when `node -v` is empty
+- `pytgcalls/scaffold.py` → `_REQUIRED_NODEJS_VERSION = '15.0.0'`
+
+Because `PyTgCalls.start()` sets `_is_running = True` *before* calling
+`check_environment()`, the first attempt fails with `NodeJSNotInstalled` and
+every retry after it reports the misleading `PyTgCallsAlreadyRunning`. `web.py`
+now resets that flag between attempts so the real error stays visible.
+
+Both binaries are asserted at **build time** (see the `RUN` near the end of the
+Dockerfile) and again in CI, so a missing one fails the build rather than the
+deploy.
 
 The original worker entrypoint (`bash fallen` → `python3 -m FallenMusic`) is
 untouched, so this still runs as a plain Background Worker or on a VPS.
@@ -92,8 +113,10 @@ cd fallenmusic
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 
-# ffmpeg is required for audio — without it the bot joins the VC and plays silence
+# BOTH are required — without ffmpeg the bot joins the VC and plays silence,
+# and without Node (>=15) pytgcalls.start() dies in check_environment().
 ffmpeg -version
+node -v
 
 cp .env.example .env   # then fill it in
 .venv/bin/python web.py

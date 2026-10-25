@@ -118,8 +118,14 @@ async def _stop_clients(fm) -> None:
     unable to ever recover — and hides the real error behind it.
 
     ``Client.stop()`` is ``terminate()`` + ``disconnect()``; both raise when the
-    client is already down, so each call is guarded.  Note that PyTgCalls 0.9.7
-    has no ``stop()`` (only ``start``), so it is deliberately not called here.
+    client is already down, so each call is guarded.
+
+    py-tgcalls 0.9.7 has no ``stop()``, and it has the same trap one level down:
+    ``start()`` sets ``self._is_running = True`` *before* doing any work, then
+    runs ``check_environment()`` / ``_init_mtproto()`` / ``_start_binding()``.
+    If any of those raise, the flag stays set and every later attempt dies with
+    ``PyTgCallsAlreadyRunning`` — hiding the real cause (in this deployment it
+    was Node.js missing from the image).  So reset the flag by hand.
     """
     for name in ("app2", "app"):
         client = getattr(fm, name, None)
@@ -132,6 +138,11 @@ async def _stop_clients(fm) -> None:
             LOGGER.debug(
                 f"[•] cleanup: {name}.stop() -> {type(exc).__name__}: {exc}"
             )
+
+    calls = getattr(fm, "pytgcalls", None)
+    if calls is not None and getattr(calls, "_is_running", False):
+        calls._is_running = False
+        LOGGER.info("[•] cleanup: pytgcalls._is_running reset.")
 
 
 async def boot_bot() -> None:
@@ -210,7 +221,9 @@ async def boot_bot() -> None:
                 "'connect clients' -> wrong API_ID/API_HASH, expired SESSION "
                 "string, or BOT_TOKEN revoked; "
                 "'load modules' -> a code/import error; "
-                "'start pytgcalls' -> missing ffmpeg binary or a voice-chat "
+                "'start pytgcalls' -> NodeJSNotInstalled (py-tgcalls 0.9.7 runs "
+                "its voice-chat core as a `node` subprocess and needs Node >=15 "
+                "in the image), a missing ffmpeg binary, or a voice-chat "
                 "backend problem."
             )
             await asyncio.sleep(config.RETRY_SECONDS)
