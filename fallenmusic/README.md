@@ -120,8 +120,25 @@ Valid names for yt-dlp 2026.10.21: `android, android_vr, ios, mweb, tv,
 tv_downgraded, tv_samsung, tv_simply, visionos, web, web_creator, web_embedded,
 web_music, web_safari`.
 
-The yt-dlp build is logged at every boot, because a stale yt-dlp produces the
-same message as a blocked IP and the error text does not tell them apart.
+The yt-dlp build is logged at every boot **and** printed during the Docker
+build, because a stale yt-dlp produces the same message as a blocked IP and the
+error text does not tell them apart.
+
+### Bumping yt-dlp
+
+`yt-dlp` is **pinned** in `requirements.txt` (`yt-dlp==2026.10.21`). That is
+deliberate: the Dockerfile's `pip install` layer is cached off
+`requirements.txt`, so an unpinned dependency with an unchanged file reuses the
+layer and silently keeps whatever version shipped in the *first* build.
+
+When YouTube starts refusing requests:
+
+1. Check the newest release: <https://pypi.org/pypi/yt-dlp/json>
+2. Bump the pin in `requirements.txt`
+3. Redeploy — the changed file invalidates the cached layer
+
+CI asserts the pinned version equals the version actually installed in the
+built image.
 
 ### ⚠️ This may not be enough
 

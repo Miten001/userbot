@@ -152,3 +152,15 @@ jobs:
         run: |
           docker image inspect fallen-music:ci \
             --format '{{json .Config.Cmd}} {{json .Config.ExposedPorts}}'
+
+      # requirements.txt pins yt-dlp because the pip layer is cached off it:
+      # an unchanged file reuses the layer and keeps the version from the first
+      # build.  This asserts the pinned version is really what is installed.
+      - name: Verify the pinned yt-dlp version is the one installed
+        run: |
+          pinned=$(grep -E '^yt-dlp==' fallenmusic/requirements.txt | cut -d= -f3)
+          installed=$(docker run --rm --entrypoint python fallen-music:ci \
+            -c "import yt_dlp; print(yt_dlp.version.__version__)")
+          echo "pinned=$pinned installed=$installed"
+          [ -n "$pinned" ]
+          [ "$pinned" = "$installed" ]
