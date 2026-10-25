@@ -97,6 +97,46 @@ Render's own docs are explicit that free instances aren't for production:
 
 ---
 
+## YouTube extraction on datacentre IPs
+
+`/play` downloads through yt-dlp. On a datacentre IP (Render, Heroku, most VPS
+hosts) YouTube frequently refuses the clients yt-dlp asks for by default and
+raises:
+
+```
+Failed to extract any player response
+```
+
+`FallenMusic/Helpers/yt_fallback.py` walks an ordered list of player clients
+until one answers, and logs which one worked. Configure it with
+`YTDLP_CLIENTS`. The default order puts the clients that generally do **not**
+need a GVS PO token first:
+
+```
+YTDLP_CLIENTS=web_embedded,tv_downgraded,tv_simply,mweb,android,tv
+```
+
+Valid names for yt-dlp 2026.10.21: `android, android_vr, ios, mweb, tv,
+tv_downgraded, tv_samsung, tv_simply, visionos, web, web_creator, web_embedded,
+web_music, web_safari`.
+
+The yt-dlp build is logged at every boot, because a stale yt-dlp produces the
+same message as a blocked IP and the error text does not tell them apart.
+
+### ⚠️ This may not be enough
+
+**If every client is refused, the host's egress IP is being walled by YouTube and
+no flag in this repository can change that.** Real fixes, in order of
+effectiveness:
+
+1. **Cookies from a real YouTube account** — `cookiesfile` in the yt-dlp opts.
+2. **Deploy somewhere with a different IP** — a VPS, or a fresh Render service
+   (which gets a different egress address).
+3. **A residential proxy** via yt-dlp's `proxy` option.
+
+The bot logs an explicit message when all clients were refused, so this case is
+distinguishable from a normal failure.
+
 ## Environment variables
 
 See [`.env.example`](./.env.example). Locally: `cp .env.example .env` and fill
