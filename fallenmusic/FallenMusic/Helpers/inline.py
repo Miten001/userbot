@@ -58,7 +58,13 @@ pm_buttons = [
         InlineKeyboardButton(
             text="☁️ sᴏᴜʀᴄᴇ ☁️", url="https://github.com/AnonymousX1025/FallenMusic"
         ),
-        InlineKeyboardButton(text="🥀 ᴅᴇᴠᴇʟᴏᴩᴇʀ 🥀", user_id=config.OWNER_ID),
+        # tg:// deep link, NOT user_id=.  A user_id button makes pyrogram call
+        # resolve_peer(), which needs the owner in the bot's peer cache; on
+        # Render's ephemeral filesystem that cache is empty after every restart,
+        # so /start died with PEER_ID_INVALID.  A url button skips resolution.
+        InlineKeyboardButton(
+            text="🥀 ᴅᴇᴠᴇʟᴏᴩᴇʀ 🥀", url=f"tg://user?id={config.OWNER_ID}"
+        ),
     ],
 ]
 
@@ -78,7 +84,10 @@ gp_buttons = [
         InlineKeyboardButton(
             text="☁️ sᴏᴜʀᴄᴇ ☁️", url="https://github.com/TheAnonymous2005/FallenMusic"
         ),
-        InlineKeyboardButton(text="🥀 ᴅᴇᴠᴇʟᴏᴩᴇʀ 🥀", user_id=config.OWNER_ID),
+        # See the note in pm_buttons above: url= avoids resolve_peer().
+        InlineKeyboardButton(
+            text="🥀 ᴅᴇᴠᴇʟᴏᴩᴇʀ 🥀", url=f"tg://user?id={config.OWNER_ID}"
+        ),
     ],
 ]
 
