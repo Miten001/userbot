@@ -154,6 +154,42 @@ effectiveness:
 The bot logs an explicit message when all clients were refused, so this case is
 distinguishable from a normal failure.
 
+## Diagnosing YouTube from the deployed host
+
+`/play` failing leaves a wall of near-identical yt-dlp errors in the log, and the
+one question that actually matters is buried in it: **can this host reach YouTube
+at all?** So there is an endpoint for it:
+
+```
+GET https://<your-service>.onrender.com/diag/yt
+GET https://<your-service>.onrender.com/diag/yt?url=<any youtube url>
+```
+
+It walks the same client list `/play` uses (it calls the real `client_strategies()`
+and `make_ydl()`, not a copy) and returns JSON:
+
+```json
+{
+  "works": false,
+  "yt_dlp_version": "2026.10.21",
+  "failure_kind": "network",
+  "attempts": [{ "client": "web_embedded", "ok": false, "kind": "network", "error": "..." }],
+  "verdict": "..."
+}
+```
+
+`failure_kind` is the part worth reading, and it distinguishes two failures that
+look almost identical in a log:
+
+| `failure_kind` | Meaning | Fix |
+|---|---|---|
+| `refused` | YouTube **answered** and said no (403 / 429 / "sign in to confirm you're not a bot"). Your IP is walled. | Cookies, different egress IP, or a proxy. Not a config bug. |
+| `network` | Never got a usable reply (TLS / DNS / connection failure). YouTube's opinion of you is unknown. | Connectivity, DNS, proxy settings. |
+| `mixed` | Some of each — read `attempts`. | — |
+
+HTTP status is `200` when extraction works and `502` when it does not. Extraction
+runs with `download=False`, so this fetches no audio and writes nothing to disk.
+
 ## Disk usage
 
 Two things grow on disk over time, and both are capped because Render's
