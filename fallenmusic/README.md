@@ -154,6 +154,21 @@ effectiveness:
 The bot logs an explicit message when all clients were refused, so this case is
 distinguishable from a normal failure.
 
+## Disk usage
+
+Two things grow on disk over time, and both are capped because Render's
+filesystem is small **and** ephemeral:
+
+| What | Cap | Override |
+|---|---|---|
+| `fallenlogs.txt` | 5 MB × 3 rotated backups (~20 MB) | — |
+| `downloads/` track cache | 200 MB, oldest files evicted first | `DOWNLOAD_CACHE_MB` |
+
+Tracks are cached by video id so replaying a song doesn't re-download it. Once
+`downloads/` passes the cap the oldest files are dropped; the file currently
+being handed to the player is never evicted. The manual `/clean` command still
+wipes the folder immediately.
+
 ## Environment variables
 
 See [`.env.example`](./.env.example). Locally: `cp .env.example .env` and fill

@@ -56,6 +56,12 @@ services:
       # datacentre IPs; yt-dlp's own defaults are tried first regardless.
       - key: YTDLP_CLIENTS
         value: "web_embedded,tv_downgraded,tv_simply,mweb,android,tv"
+      # Cap on the downloads/ cache in MB.  Tracks are cached so replays don't
+      # re-download; the oldest files are dropped once the folder passes this.
+      # Render's disk is small and ephemeral, so this keeps /play from slowly
+      # filling it.
+      - key: DOWNLOAD_CACHE_MB
+        value: "200"
       - key: START_IMG
         sync: false
       - key: PING_IMG

@@ -32,6 +32,12 @@ from FallenMusic.Helpers.yt_fallback import (
 )
 from FallenMusic import LOGGER
 
+DOWNLOADS_DIR = "downloads"
+# audio_dl caches every track it fetches so replays are instant, but the cache
+# was never trimmed.  Cap it so a 24/7 bot cannot fill Render's small ephemeral
+# disk.  Override with DOWNLOAD_CACHE_MB.
+DOWNLOAD_CACHE_BYTES = int(os.getenv("DOWNLOAD_CACHE_MB", "200")) * 1024 * 1024
+
 ydl_opts = {
     "format": "bestaudio/best",
     "outtmpl": "downloads/%(id)s.%(ext)s",
@@ -54,6 +60,57 @@ ydl_opts = {
 }
 
 
+def prune_downloads(limit: int = DOWNLOAD_CACHE_BYTES, keep: str | None = None) -> int:
+    """Trim the downloads/ cache down to `limit` bytes, oldest files first.
+
+    ``audio_dl`` caches by video id so replays don't re-download, but nothing
+    ever removed those files — only the manual ``/clean`` command did.  Render
+    gives the container a small ephemeral disk and this bot runs 24/7, so a busy
+    deployment would slowly fill it and then start failing on unrelated
+    operations.
+
+    Returns how many files were removed.  `keep` (a path we just handed back to
+    the player) is never deleted, even if it alone exceeds the limit.
+    """
+    entries: list[tuple[float, int, str]] = []
+    total = 0
+    try:
+        names = os.listdir(DOWNLOADS_DIR)
+    except FileNotFoundError:
+        return 0
+
+    for name in names:
+        path = os.path.join(DOWNLOADS_DIR, name)
+        if not os.path.isfile(path):
+            continue
+        try:
+            stat = os.stat(path)
+        except OSError:
+            continue
+        entries.append((stat.st_mtime, stat.st_size, path))
+        total += stat.st_size
+
+    if total <= limit:
+        return 0
+
+    removed = 0
+    for _mtime, size, path in sorted(entries):  # oldest first
+        if total <= limit:
+            break
+        if keep and os.path.abspath(path) == os.path.abspath(keep):
+            continue
+        try:
+            os.remove(path)
+        except OSError:
+            continue
+        total -= size
+        removed += 1
+
+    if removed:
+        LOGGER.info(f"[•] downloads cache trimmed: removed {removed} old file(s).")
+    return removed
+
+
 def audio_dl(url: str) -> str:
     """Download a track as MP3, trying alternate player clients on refusal.
 
@@ -73,12 +130,15 @@ def audio_dl(url: str) -> str:
         try:
             ydl = make_ydl(ydl_opts, client)
             sin = ydl.extract_info(url, False)
-            x_file = os.path.join("downloads", f"{sin['id']}.mp3")
+            x_file = os.path.join(DOWNLOADS_DIR, f"{sin['id']}.mp3")
             if os.path.exists(x_file):
                 return x_file
             ydl.download([url])
             if client:
                 LOGGER.info(f"[•] YouTube extracted via player client '{client}'.")
+            # Only after a real download: a cache hit added nothing to the disk.
+            # `keep` protects the file we are about to hand to the player.
+            prune_downloads(keep=x_file)
             return x_file
         except DownloadError as exc:
             if not is_retryable(exc):
