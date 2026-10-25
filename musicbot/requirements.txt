@@ -1,0 +1,8 @@
+pyrofork==2.3.69
+tgcrypto==1.2.5
+pytgcalls==3.0.0.dev27
+yt-dlp
+requests==2.32.3
+python-dotenv==1.0.1
+aiohttp
+Pillow

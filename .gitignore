@@ -13,3 +13,9 @@ next-env.d.ts
 
 # GhostShell local build output
 _site/
+musicbot/.env
+musicbot/_gen/
+musicbot/__pycache__/
+musicbot/*.session
+musicbot/venv/
+musicbot/ffmpeg.exe
