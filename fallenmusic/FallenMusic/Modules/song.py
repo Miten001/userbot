@@ -34,6 +34,7 @@ from FallenMusic.Helpers.yt_fallback import (
     client_strategies,
     is_retryable,
     make_ydl,
+    strip_playlist,
 )
 
 
@@ -46,10 +47,13 @@ async def song(_, message: Message):
     m = await message.reply_text("🔎")
 
     query = "".join(" " + str(i) for i in message.command[1:])
-    ydl_opts = {"format": "bestaudio[ext=m4a]"}
+    ydl_opts = {"format": "bestaudio[ext=m4a]", "noplaylist": True}
     try:
         results = YoutubeSearch(query, max_results=5).to_dict()
-        link = f"https://youtube.com{results[0]['url_suffix']}"
+        # YouTube's own search payload often returns a Mix link
+        # (/watch?v=<id>&list=RD<id>&start_radio=1).  Strip it, or yt-dlp
+        # switches to the youtube:tab playlist extractor and the request fails.
+        link = strip_playlist(f"https://youtube.com{results[0]['url_suffix']}")
         title = results[0]["title"][:40]
         thumbnail = results[0]["thumbnails"][0]
         thumb_name = f"thumb{title}.jpg"
