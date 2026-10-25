@@ -16,6 +16,8 @@ retry instead.
 Run it:      python3 web.py
 Health:      GET /health        -> 200 always, JSON status
              GET /health/strict -> 503 until the bot is actually connected
+Diagnosis:   GET /diag/yt       -> can YouTube be reached from this host?
+             GET /diag/yt?url=<youtube url>
 """
 
 from __future__ import annotations
@@ -92,11 +94,199 @@ async def handle_root(request: web.Request) -> web.Response:
     )
 
 
+DEFAULT_DIAG_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+
+# Message fragments that mean "we never got a usable reply from YouTube" rather
+# than "YouTube answered and said no".  Only used as a fallback when the
+# exception chain does not tell us.
+_NETWORK_MARKERS = (
+    "unable to download",
+    "tls/ssl",
+    "certificate",
+    "name or service not known",
+    "temporary failure in name resolution",
+    "network is unreachable",
+    "connection refused",
+    "connection reset",
+    "connection aborted",
+    "eof occurred",
+    "timed out",
+    "failed to resolve",
+    "no route to host",
+    "getaddrinfo",
+)
+
+
+def _classify_failure(exc: BaseException) -> str:
+    """Return "refused" (YouTube answered and said no) or "network" (never got there).
+
+    These look similar in the log and mean opposite things, so the distinction
+    is worth getting right:
+
+      * "refused" — an HTTP response arrived (403/429/"sign in to confirm
+        you're not a bot").  YouTube is reachable and actively blocking this
+        host.  Cookies, a different egress IP, or a proxy can help.
+      * "network" — no usable reply at all (TLS/DNS/connection failure).  Nothing
+        about YouTube's opinion of us is known yet; fix connectivity first.
+
+    Walks the real exception chain (``__cause__``/``__context__``/``exc_info``)
+    and only falls back to message matching if that is inconclusive.
+    """
+    from yt_dlp.networking.exceptions import HTTPError, TransportError
+
+    seen: set[int] = set()
+    stack = [exc]
+    # DownloadError stashes the original exception as a sys.exc_info() tuple.
+    stack.extend(x for x in (getattr(exc, "exc_info", None) or ()) if isinstance(x, BaseException))
+
+    while stack:
+        current = stack.pop()
+        if current is None or id(current) in seen:
+            continue
+        seen.add(id(current))
+        if isinstance(current, HTTPError):
+            return "refused"  # got a status line back -> we reached YouTube
+        if isinstance(current, TransportError):
+            return "network"
+        stack.append(getattr(current, "__cause__", None))
+        stack.append(getattr(current, "__context__", None))
+
+    msg = str(exc).lower()
+    if any(marker in msg for marker in _NETWORK_MARKERS):
+        return "network"
+    return "refused"
+
+
+def _run_yt_diagnosis(url: str) -> dict:
+    """Try every shipped player client against `url` and report what happened.
+
+    Deliberately calls the *same* helpers /play uses (``client_strategies`` and
+    ``make_ydl`` from ``FallenMusic.Helpers.yt_fallback``) so this reports the
+    real code path instead of a re-implementation that could drift from it.
+
+    ``download=False`` — we only need to know whether extraction succeeds, so no
+    audio is fetched and nothing touches the disk.
+    """
+    from yt_dlp import version as ydl_version
+    from yt_dlp.utils import DownloadError
+
+    from FallenMusic.Helpers.yt_fallback import (
+        client_strategies,
+        is_retryable,
+        make_ydl,
+        strip_playlist,
+    )
+    from FallenMusic.Helpers.downloaders import ydl_opts
+
+    clean_url = strip_playlist(url)
+    attempts = []
+    first_error = None
+
+    for client in client_strategies():
+        label = client or "yt-dlp default"
+        entry = {"client": label}
+        try:
+            ydl = make_ydl(ydl_opts, client)
+            info = ydl.extract_info(clean_url, download=False)
+            entry["ok"] = True
+            entry["id"] = info.get("id")
+            entry["title"] = (info.get("title") or "")[:80]
+            entry["formats"] = len(info.get("formats") or [])
+            attempts.append(entry)
+            return {
+                "url": clean_url,
+                "works": True,
+                "yt_dlp_version": ydl_version.__version__,
+                "winning_client": label,
+                "attempts": attempts,
+                "verdict": (
+                    f"YouTube extraction works from this host via '{label}'. "
+                    "If /play still fails the problem is elsewhere."
+                ),
+            }
+        except DownloadError as exc:
+            msg = str(exc)
+            entry["ok"] = False
+            entry["retryable"] = is_retryable(exc)
+            entry["kind"] = _classify_failure(exc)
+            entry["error"] = msg[:400]
+            first_error = first_error or msg
+            attempts.append(entry)
+        except Exception as exc:  # noqa: BLE001 — diagnostics must not raise
+            entry["ok"] = False
+            entry["retryable"] = False
+            entry["kind"] = _classify_failure(exc)
+            entry["error"] = f"{type(exc).__name__}: {exc}"[:400]
+            first_error = first_error or entry["error"]
+            attempts.append(entry)
+
+    kinds = {a.get("kind") for a in attempts if not a["ok"]}
+    return {
+        "url": clean_url,
+        "works": False,
+        "yt_dlp_version": ydl_version.__version__,
+        "winning_client": None,
+        "attempts": attempts,
+        "last_error": first_error,
+        "failure_kind": "network" if kinds == {"network"} else (
+            "refused" if kinds == {"refused"} else "mixed"
+        ),
+        "verdict": _verdict(kinds),
+    }
+
+
+def _verdict(kinds: set) -> str:
+    if kinds == {"network"}:
+        return (
+            "Could not reach YouTube at all — every attempt failed at the "
+            "network layer (TLS/DNS/connection), before YouTube could accept or "
+            "refuse anything. This says nothing about whether your IP is "
+            "blocked. Fix outbound connectivity first: check DNS, any proxy "
+            "settings, and that the container can reach the internet. Note that "
+            "yt-dlp is up to date here, so a version bump is not the answer."
+        )
+    if kinds == {"refused"}:
+        return (
+            "Every player client was refused *after* YouTube answered. That is "
+            "the signature of this host's egress IP being walled by YouTube, "
+            "not a config bug — no yt-dlp flag or version bump will fix it. "
+            "Real fixes: cookies from a real YouTube account, a different "
+            "egress IP (VPS / fresh Render service), or a residential proxy."
+        )
+    return (
+        "Mixed failures across clients — some looked like network trouble and "
+        "some like YouTube refusals. See 'attempts' for the per-client detail."
+    )
+
+
+async def handle_diag_yt(request: web.Request) -> web.Response:
+    """GET /diag/yt[?url=...] — can YouTube be reached from this host?
+
+    Answers the one question the logs make hard to answer at a glance, and it is
+    the question that decides whether /play can ever work here.  yt-dlp is
+    blocking, so it runs in a worker thread and the event loop stays free.
+    """
+    url = request.query.get("url") or DEFAULT_DIAG_URL
+    if not url.lower().startswith(("http://", "https://")):
+        return web.json_response(
+            {"error": "url must start with http:// or https://"}, status=400
+        )
+    try:
+        payload = await asyncio.to_thread(_run_yt_diagnosis, url)
+    except Exception as exc:  # noqa: BLE001
+        return web.json_response(
+            {"url": url, "works": False, "error": f"{type(exc).__name__}: {exc}"},
+            status=500,
+        )
+    return web.json_response(payload, status=200 if payload["works"] else 502)
+
+
 async def start_health_server() -> web.AppRunner:
     app = web.Application()
     app.router.add_get("/", handle_root)
     app.router.add_get("/health", handle_health)
     app.router.add_get("/health/strict", handle_health_strict)
+    app.router.add_get("/diag/yt", handle_diag_yt)
 
     runner = web.AppRunner(app)
     await runner.setup()
