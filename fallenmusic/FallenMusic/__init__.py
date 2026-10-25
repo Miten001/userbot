@@ -24,6 +24,7 @@ import asyncio
 import logging
 import os
 import time
+from logging.handlers import RotatingFileHandler
 
 from pyrogram import Client, filters
 from pytgcalls import PyTgCalls
@@ -36,10 +37,18 @@ DEFER_STARTUP = os.getenv("FALLEN_DEFER_STARTUP", "0") == "1"
 
 StartTime = time.time()
 
+# Render gives the container a small ephemeral disk and this bot is meant to run
+# 24/7, so an unbounded log file would eventually fill it and take the service
+# down.  Rotate instead: 5 MB x 3 backups keeps at most ~20 MB on disk.
 logging.basicConfig(
     format="[%(asctime)s - %(levelname)s] - %(name)s - %(message)s",
     datefmt="%d-%b-%y %H:%M:%S",
-    handlers=[logging.FileHandler("fallenlogs.txt"), logging.StreamHandler()],
+    handlers=[
+        RotatingFileHandler(
+            "fallenlogs.txt", maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8"
+        ),
+        logging.StreamHandler(),
+    ],
     level=logging.INFO,
 )
 logging.getLogger("pyrogram").setLevel(logging.ERROR)

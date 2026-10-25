@@ -30,6 +30,7 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from youtube_search import YoutubeSearch
 
 from FallenMusic import BOT_MENTION, BOT_USERNAME, LOGGER, app
+from FallenMusic.Helpers.formatters import safe_filename
 from FallenMusic.Helpers.yt_fallback import (
     client_strategies,
     is_retryable,
@@ -56,7 +57,11 @@ async def song(_, message: Message):
         link = strip_playlist(f"https://youtube.com{results[0]['url_suffix']}")
         title = results[0]["title"][:40]
         thumbnail = results[0]["thumbnails"][0]
-        thumb_name = f"thumb{title}.jpg"
+        # Titles reach us straight from YouTube and routinely contain "/", ":",
+        # "?" and newlines.  "AC/DC - Back In Black" used to make open() read
+        # the slash as a directory separator and die with FileNotFoundError, so
+        # /song failed outright on a large slice of real search results.
+        thumb_name = f"thumb{safe_filename(title)}.jpg"
         thumb = requests.get(thumbnail, allow_redirects=True)
         open(thumb_name, "wb").write(thumb.content)
         duration = results[0]["duration"]
