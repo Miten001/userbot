@@ -1,0 +1,62 @@
+# Render Blueprint — Fallen Music bot
+#
+# NOTE ON PATHS: dockerfilePath / dockerContext are deliberately written
+# repo-root-relative and this service does NOT set rootDir.  Render's Blueprint
+# spec documents those two fields as repo-root-relative, but its monorepo docs
+# (and several projects that hit the bug) resolve them against rootDir instead,
+# which double-prefixes to fallenmusic/fallenmusic and fails the build.  With no
+# rootDir set, both readings agree.
+#
+# NOTE ON PLAN: plan: free is a *Web Service* only.  Render has no free
+# Background Worker, and a free web service sleeps after 15 idle minutes — so
+# this service serves HTTP on $PORT and an external uptime pinger keeps it warm.
+# For 24/7 reliability without a pinger, switch to plan: 0.5c-512mb ($7/month).
+
+services:
+  - type: web
+    name: fallen-music
+    runtime: docker
+    plan: free
+    region: singapore
+    branch: main
+    autoDeployTrigger: checksPass
+    dockerfilePath: ./fallenmusic/Dockerfile
+    dockerContext: ./fallenmusic
+    healthCheckPath: /health
+    buildFilter:
+      paths:
+        - fallenmusic/**
+        - render.yaml
+    envVars:
+      # --- required (fill these in the Render dashboard) ---
+      - key: API_ID
+        sync: false
+      - key: API_HASH
+        sync: false
+      - key: BOT_TOKEN
+        sync: false
+      - key: SESSION
+        sync: false
+      - key: OWNER_ID
+        sync: false
+      # --- optional (safe defaults live in config.py) ---
+      - key: SUDO_USERS
+        sync: false
+      - key: SUPPORT_CHAT
+        sync: false
+      - key: SUPPORT_CHANNEL
+        sync: false
+      - key: DURATION_LIMIT
+        value: "90"
+      - key: RETRY_SECONDS
+        value: "30"
+      - key: START_IMG
+        sync: false
+      - key: PING_IMG
+        sync: false
+      # Keep both at "0". ADD_UPSTREAM_SUDO=1 would give the upstream author
+      # sudo on your bot, including /eval (arbitrary Python execution).
+      - key: ADD_UPSTREAM_SUDO
+        value: "0"
+      - key: JOIN_UPSTREAM_CHATS
+        value: "0"
