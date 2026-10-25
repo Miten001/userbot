@@ -10,4 +10,10 @@ tgcrypto==1.2.5
 speedtest-cli==2.1.3
 youtube-search-python==1.6.6
 youtube_search==2.1.2
-yt-dlp
+# Pinned on purpose.  YouTube breaks yt-dlp often, but leaving this unpinned is
+# worse here: the Dockerfile's `pip install` layer is cached off
+# requirements.txt, so an unchanged file means a REUSED layer and whatever
+# yt-dlp was baked in at the very first build.  The startup log prints the real
+# version — when YouTube starts refusing requests, bump this to the newest
+# release from https://pypi.org/pypi/yt-dlp/json and redeploy.
+yt-dlp==2026.10.21
