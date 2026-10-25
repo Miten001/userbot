@@ -83,6 +83,17 @@ See [**`SETUP.md`**](./SETUP.md) for the full deploy guide.
 
 ---
 
+## Also in this repo
+
+| Directory | What it is | Deploy target |
+|---|---|---|
+| `fallenmusic/` | Telegram voice-chat music bot (YouTube → group VC), vendored from `AnonymousX1025/FallenMusic` @ `b2d8297` | Render — [`fallenmusic/README.md`](./fallenmusic/README.md) |
+| `musicbot/` | Earlier hand-written Pyrofork music bot | Windows / Render / Heroku |
+| `gameshub/` | Games hub Next.js app | Vercel |
+| `ghostshell/` | GhostShell site + tooling | GitHub Pages |
+
+---
+
 ## License
 
 Proprietary — all rights reserved.

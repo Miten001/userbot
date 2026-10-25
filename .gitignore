@@ -19,3 +19,14 @@ musicbot/__pycache__/
 musicbot/*.session
 musicbot/venv/
 musicbot/ffmpeg.exe
+
+# FallenMusic (vendored Telegram music bot)
+fallenmusic/.venv/
+fallenmusic/.env
+fallenmusic/*.session
+fallenmusic/*.session-journal
+fallenmusic/fallenlogs.txt
+fallenmusic/downloads/
+fallenmusic/cache/
+fallenmusic/__pycache__/
+fallenmusic/**/__pycache__/
