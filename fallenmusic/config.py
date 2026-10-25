@@ -38,6 +38,38 @@ def _required_int(name: str) -> int:
         raise SystemExit(2)
 
 
+def _optional_int(name: str, default: int, minimum: int | None = None) -> int:
+    """Return an optional integer env var, falling back to `default`.
+
+    Unlike ``_required_int`` this must never take the bot down: these variables
+    all have working defaults, so one typo in the Render dashboard should not
+    stop the service from starting.  A bare ``int(getenv(...))`` did exactly
+    that — ``DURATION_LIMIT=``, ``RETRY_SECONDS=`` or ``PORT=`` left blank in the
+    dashboard raised ``ValueError`` at import time, and the traceback pointed at
+    import machinery instead of at the variable that was wrong.
+
+    `minimum`, when given, clamps values too small to be useful back to the
+    default.
+    """
+    raw = getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        value = int(raw.strip())
+    except ValueError:
+        sys.stderr.write(
+            f"[config] WARNING: {name}={raw!r} is not an integer; using {default}.\n"
+        )
+        return default
+    if minimum is not None and value < minimum:
+        sys.stderr.write(
+            f"[config] WARNING: {name}={value} is below the minimum of "
+            f"{minimum}; using {default}.\n"
+        )
+        return default
+    return value
+
+
 # --- Telegram credentials (all required) -------------------------------------
 API_ID = _required_int("API_ID")
 API_HASH = _required("API_HASH")
@@ -51,7 +83,7 @@ OWNER_ID = _required_int("OWNER_ID")
 
 # --- Behaviour ---------------------------------------------------------------
 # Max track length in MINUTES that /play will accept.
-DURATION_LIMIT = int(getenv("DURATION_LIMIT", "90"))
+DURATION_LIMIT = _optional_int("DURATION_LIMIT", 90, minimum=1)
 
 # Images used by /start and /ping.
 START_IMG = getenv("START_IMG", "https://te.legra.ph/file/f8ba75bdbb9931cbc8229.jpg")
@@ -83,6 +115,6 @@ UPSTREAM_CHATS = ("DevilsHeavenMF", "FallenAssociation")
 
 # --- Health endpoint ---------------------------------------------------------
 # web.py binds to $PORT (Render injects it). Fallback keeps local runs simple.
-PORT = int(getenv("PORT", "10000"))
+PORT = _optional_int("PORT", 10000, minimum=1)
 # Seconds to wait between reconnect attempts when Telegram is unreachable.
-RETRY_SECONDS = int(getenv("RETRY_SECONDS", "30"))
+RETRY_SECONDS = _optional_int("RETRY_SECONDS", 30, minimum=1)
