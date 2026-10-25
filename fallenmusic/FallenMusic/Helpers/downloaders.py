@@ -33,10 +33,45 @@ from FallenMusic.Helpers.yt_fallback import (
 from FallenMusic import LOGGER
 
 DOWNLOADS_DIR = "downloads"
+_DEFAULT_CACHE_MB = 200
+# A zero or negative cap would make prune_downloads() delete every cached track
+# immediately, so treat anything below this as the default.
+_MIN_CACHE_MB = 10
+
+
+def _cache_limit_bytes() -> int:
+    """Read DOWNLOAD_CACHE_MB, tolerating empty/invalid/silly values.
+
+    This runs at import time, so a bare ``int(os.getenv(...))`` would turn a
+    typo in one optional env var into a hard crash that stops the bot from
+    starting at all — and the traceback would point at import machinery, not at
+    the variable that is actually wrong.  Fall back to the default and log why.
+    """
+    raw = os.getenv("DOWNLOAD_CACHE_MB")
+    if raw is None or not raw.strip():
+        return _DEFAULT_CACHE_MB * 1024 * 1024
+    try:
+        mb = int(raw.strip())
+    except ValueError:
+        LOGGER.warning(
+            f"[•] DOWNLOAD_CACHE_MB={raw!r} is not a number; using "
+            f"{_DEFAULT_CACHE_MB} MB."
+        )
+        return _DEFAULT_CACHE_MB * 1024 * 1024
+    if mb < _MIN_CACHE_MB:
+        LOGGER.warning(
+            f"[•] DOWNLOAD_CACHE_MB={mb} is below {_MIN_CACHE_MB}; using "
+            f"{_DEFAULT_CACHE_MB} MB instead so the cache is not emptied "
+            "immediately after every download."
+        )
+        return _DEFAULT_CACHE_MB * 1024 * 1024
+    return mb * 1024 * 1024
+
+
 # audio_dl caches every track it fetches so replays are instant, but the cache
 # was never trimmed.  Cap it so a 24/7 bot cannot fill Render's small ephemeral
 # disk.  Override with DOWNLOAD_CACHE_MB.
-DOWNLOAD_CACHE_BYTES = int(os.getenv("DOWNLOAD_CACHE_MB", "200")) * 1024 * 1024
+DOWNLOAD_CACHE_BYTES = _cache_limit_bytes()
 
 ydl_opts = {
     "format": "bestaudio/best",
