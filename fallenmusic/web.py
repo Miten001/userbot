@@ -44,6 +44,7 @@ STATE = {
     "assistant_online": False,
     "pytgcalls_online": False,
     "attempts": 0,
+    "stage": None,
     "last_error": None,
 }
 
@@ -107,6 +108,32 @@ async def start_health_server() -> web.AppRunner:
 
 # --- Bot bootstrap -----------------------------------------------------------
 
+async def _stop_clients(fm) -> None:
+    """Tear down partially-started clients so the next attempt can reconnect.
+
+    pyrogram sets ``is_connected = True`` at the end of a successful
+    ``connect()``, so a failure *after* ``app.start()`` leaves that client
+    connected.  ``connect()`` then raises ``ConnectionError("Client is already
+    connected")`` on every subsequent attempt, which makes the retry loop
+    unable to ever recover — and hides the real error behind it.
+
+    ``Client.stop()`` is ``terminate()`` + ``disconnect()``; both raise when the
+    client is already down, so each call is guarded.  Note that PyTgCalls 0.9.7
+    has no ``stop()`` (only ``start``), so it is deliberately not called here.
+    """
+    for name in ("app2", "app"):
+        client = getattr(fm, name, None)
+        if client is None:
+            continue
+        try:
+            await client.stop()
+            LOGGER.info(f"[•] cleanup: {name} stopped.")
+        except Exception as exc:  # noqa: BLE001 — cleanup must never raise
+            LOGGER.debug(
+                f"[•] cleanup: {name}.stop() -> {type(exc).__name__}: {exc}"
+            )
+
+
 async def boot_bot() -> None:
     """Connect bot + assistant + pytgcalls, retrying forever on failure."""
     import FallenMusic as fm
@@ -117,6 +144,10 @@ async def boot_bot() -> None:
 
     while True:
         STATE["attempts"] += 1
+        # Names the failing step in the log, so "attempt N failed" says *what*
+        # failed instead of leaving the reader to reconstruct it from a
+        # traceback.
+        stage = "connect clients"
         try:
             # Order matters: fallen_startup() connects both clients and fills in
             # BOT_ID / BOT_NAME / BOT_USERNAME / BOT_MENTION / fallendb.  Several
@@ -126,6 +157,7 @@ async def boot_bot() -> None:
             STATE["bot_online"] = True
             STATE["assistant_online"] = True
 
+            stage = "load modules"
             LOGGER.info("[•] Loading Modules...")
             for module in ALL_MODULES:
                 importlib.import_module("FallenMusic.Modules." + module)
@@ -134,9 +166,11 @@ async def boot_bot() -> None:
 
             # Must happen after the modules are imported: watcher.py registers
             # its @pytgcalls.on_stream_end() handler at import time.
+            stage = "start pytgcalls"
             await fm.pytgcalls.start()
             STATE["pytgcalls_online"] = True
             STATE["last_error"] = None
+            STATE["stage"] = "ready"
 
             LOGGER.info(
                 "[•] Bot Started As "
@@ -153,19 +187,31 @@ async def boot_bot() -> None:
         except Exception as exc:  # noqa: BLE001 — keep the process alive on purpose
             detail = f"{type(exc).__name__}: {exc}"
             STATE["last_error"] = detail
+            STATE["stage"] = f"failed during: {stage}"
             LOGGER.error(
-                f"[•] Startup attempt {STATE['attempts']} failed -> {detail}. "
-                f"Retrying in {config.RETRY_SECONDS}s."
+                f"[•] Startup attempt {STATE['attempts']} failed during "
+                f"'{stage}' -> {detail}. Retrying in {config.RETRY_SECONDS}s."
             )
             # Full traceback: the one-line summary above is often useless on its
             # own.  e.g. a blocked network shows up as an opaque
             # "KeyError: 0" from pyrogram's TLObject.read(), which only makes
             # sense once you can see it came from the DC handshake.
             LOGGER.error("Traceback follows:\n%s", traceback.format_exc())
+
+            # Without this the next attempt dies instantly with
+            # "Client is already connected" and the loop can never recover.
+            await _stop_clients(fm)
+            STATE["bot_online"] = False
+            STATE["assistant_online"] = False
+            STATE["pytgcalls_online"] = False
+
             LOGGER.error(
-                "[•] Usual causes: wrong API_ID/API_HASH, expired SESSION string, "
-                "BOT_TOKEN revoked by BotFather, or outbound traffic to "
-                "Telegram's data centres blocked by the network/firewall."
+                "[•] Usual causes by stage: "
+                "'connect clients' -> wrong API_ID/API_HASH, expired SESSION "
+                "string, or BOT_TOKEN revoked; "
+                "'load modules' -> a code/import error; "
+                "'start pytgcalls' -> missing ffmpeg binary or a voice-chat "
+                "backend problem."
             )
             await asyncio.sleep(config.RETRY_SECONDS)
 
