@@ -28,6 +28,7 @@ from FallenMusic.Helpers.yt_fallback import (
     client_strategies,
     is_retryable,
     make_ydl,
+    strip_playlist,
 )
 from FallenMusic import LOGGER
 
@@ -39,6 +40,10 @@ ydl_opts = {
     "quiet": True,
     "no_warnings": True,
     "prefer_ffmpeg": True,
+    # /play always wants exactly one track.  Without this, a search result that
+    # is a YouTube Mix sends yt-dlp down the youtube:tab playlist extractor and
+    # the request fails on the playlist API page.
+    "noplaylist": True,
     "postprocessors": [
         {
             "key": "FFmpegExtractAudio",
@@ -61,6 +66,7 @@ def audio_dl(url: str) -> str:
     immediately instead of being retried under five more clients.
     """
     last_error: DownloadError | None = None
+    url = strip_playlist(url)
 
     for client in client_strategies():
         label = client or "yt-dlp default"

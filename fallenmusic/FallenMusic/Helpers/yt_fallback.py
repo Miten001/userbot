@@ -30,11 +30,20 @@ from __future__ import annotations
 
 import logging
 import os
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
 
 LOGGER = logging.getLogger("FallenMusic.yt")
+
+#: Query params that make yt-dlp switch from the video extractor to the
+#: playlist/tab extractor.  ``youtube_search`` builds its links straight from
+#: YouTube's own ``webCommandMetadata.url``, which frequently includes a Mix:
+#: ``/watch?v=<id>&list=RD<id>&start_radio=1``.  Left alone, yt-dlp then tries to
+#: walk the whole Mix through the ``youtube:tab`` extractor, which player_client
+#: fallbacks cannot rescue at all.
+_PLAYLIST_PARAMS = ("list", "start_radio", "index")
 
 #: Clients tried in order.  These are the ones that generally do not require a
 #: GVS PO token, which is what a headless datacentre request cannot supply.
@@ -64,11 +73,36 @@ def client_strategies() -> list[str | None]:
     return [None, *clients]
 
 
+def strip_playlist(url: str) -> str:
+    """Drop playlist params so yt-dlp fetches a single video, not a Mix.
+
+    ``/play`` only ever wants one track.  Without this, a search result that
+    happens to be a Mix sends yt-dlp down the ``youtube:tab`` extractor and the
+    request fails on the playlist API page instead of the video.
+    """
+    parts = urlsplit(url)
+    if not parts.query:
+        return url
+    kept = [
+        (k, v)
+        for k, v in parse_qsl(parts.query, keep_blank_values=True)
+        if k not in _PLAYLIST_PARAMS
+    ]
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(kept), parts.fragment))
+
+
 def is_retryable(exc: BaseException) -> bool:
-    """True when trying a different player client could plausibly help."""
+    """True when trying a different player client could plausibly help.
+
+    A ``[youtube:tab]`` failure is the *playlist* extractor, which player_client
+    does not affect — retrying it under six more clients just burns time and
+    produces misleading logs, so it is excluded explicitly.
+    """
     if not isinstance(exc, DownloadError):
         return False
     text = str(exc).lower()
+    if "[youtube:tab]" in text:
+        return False
     return any(marker in text for marker in _RETRYABLE)
 
 
