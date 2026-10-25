@@ -175,6 +175,12 @@ async def boot_bot() -> None:
             STATE["modules_loaded"] = len(ALL_MODULES)
             LOGGER.info(f"[•] Loaded {len(ALL_MODULES)} Modules.")
 
+            # A stale yt-dlp looks exactly like a blocked IP in the error text,
+            # so log the build once per boot to remove the guesswork.
+            from FallenMusic.Helpers.yt_fallback import log_version
+
+            log_version()
+
             # Must happen after the modules are imported: watcher.py registers
             # its @pytgcalls.on_stream_end() handler at import time.
             stage = "start pytgcalls"

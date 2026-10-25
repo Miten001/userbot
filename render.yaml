@@ -50,6 +50,10 @@ services:
         value: "90"
       - key: RETRY_SECONDS
         value: "30"
+      # Player clients to try when YouTube refuses a request.  Common on
+      # datacentre IPs; yt-dlp's own defaults are tried first regardless.
+      - key: YTDLP_CLIENTS
+        value: "web_embedded,tv_downgraded,tv_simply,mweb,android,tv"
       - key: START_IMG
         sync: false
       - key: PING_IMG

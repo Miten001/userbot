@@ -30,6 +30,11 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from youtube_search import YoutubeSearch
 
 from FallenMusic import BOT_MENTION, BOT_USERNAME, LOGGER, app
+from FallenMusic.Helpers.yt_fallback import (
+    client_strategies,
+    is_retryable,
+    make_ydl,
+)
 
 
 @app.on_message(filters.command(["song", "vsong", "video", "music"]))
@@ -60,10 +65,28 @@ async def song(_, message: Message):
 
     await m.edit_text("» ᴅᴏᴡɴʟᴏᴀᴅɪɴɢ sᴏɴɢ,\n\nᴘʟᴇᴀsᴇ ᴡᴀɪᴛ...")
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info_dict = ydl.extract_info(link, download=False)
-            audio_file = ydl.prepare_filename(info_dict)
-            ydl.process_info(info_dict)
+        # Walk alternate player clients: on a datacentre IP YouTube refuses the
+        # defaults and yt-dlp raises "Failed to extract any player response".
+        info_dict = audio_file = None
+        for client in client_strategies():
+            try:
+                with make_ydl(ydl_opts, client) as ydl:
+                    info_dict = ydl.extract_info(link, download=False)
+                    audio_file = ydl.prepare_filename(info_dict)
+                    ydl.process_info(info_dict)
+                break
+            except yt_dlp.utils.DownloadError as exc:
+                if not is_retryable(exc):
+                    raise
+                LOGGER.warning(
+                    f"[•] /song player client '{client or 'yt-dlp default'}' "
+                    f"refused ({exc}); trying next."
+                )
+        if info_dict is None:
+            return await m.edit_text(
+                "ғɪʟᴇᴅ ᴛᴏ ᴅᴏᴡɴʟᴏᴀᴅ.\n\n"
+                "**ʀᴇᴀsᴏɴ :** `ᴀʟʟ ʏᴏᴜᴛᴜʙᴇ ᴘʟᴀʏᴇʀ ᴄʟɪᴇɴᴛs ʀᴇғᴜsᴇᴅ`"
+            )
         rep = f"☁️ **ᴛɪᴛʟᴇ :** [{title[:23]}]({link})\n⏱️ **ᴅᴜʀᴀᴛɪᴏɴ :** `{duration}`\n🥀 **ᴜᴘʟᴏᴀᴅᴇᴅ ʙʏ :** {BOT_MENTION}"
         secmul, dur, dur_arr = 1, 0, duration.split(":")
         for i in range(len(dur_arr) - 1, -1, -1):

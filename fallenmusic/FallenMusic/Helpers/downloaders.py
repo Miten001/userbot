@@ -22,7 +22,14 @@
 
 import os
 
-from yt_dlp import YoutubeDL
+from yt_dlp.utils import DownloadError
+
+from FallenMusic.Helpers.yt_fallback import (
+    client_strategies,
+    is_retryable,
+    make_ydl,
+)
+from FallenMusic import LOGGER
 
 ydl_opts = {
     "format": "bestaudio/best",
@@ -40,13 +47,49 @@ ydl_opts = {
         }
     ],
 }
-ydl = YoutubeDL(ydl_opts)
 
 
 def audio_dl(url: str) -> str:
-    sin = ydl.extract_info(url, False)
-    x_file = os.path.join("downloads", f"{sin['id']}.mp3")
-    if os.path.exists(x_file):
-        return x_file
-    ydl.download([url])
-    return x_file
+    """Download a track as MP3, trying alternate player clients on refusal.
+
+    Upstream used one module-level ``YoutubeDL`` with yt-dlp's default clients.
+    On a datacentre IP those defaults are frequently refused, so every single
+    ``/play`` failed with "Failed to extract any player response".  This walks
+    the client list until one answers.
+
+    Non-retryable errors (private video, deleted video, bad URL) are raised
+    immediately instead of being retried under five more clients.
+    """
+    last_error: DownloadError | None = None
+
+    for client in client_strategies():
+        label = client or "yt-dlp default"
+        try:
+            ydl = make_ydl(ydl_opts, client)
+            sin = ydl.extract_info(url, False)
+            x_file = os.path.join("downloads", f"{sin['id']}.mp3")
+            if os.path.exists(x_file):
+                return x_file
+            ydl.download([url])
+            if client:
+                LOGGER.info(f"[•] YouTube extracted via player client '{client}'.")
+            return x_file
+        except DownloadError as exc:
+            if not is_retryable(exc):
+                raise
+            last_error = exc
+            LOGGER.warning(
+                f"[•] player client '{label}' refused ({exc}); trying next."
+            )
+
+    # Every client was refused — almost always means the host's egress IP is
+    # blocked by YouTube.  Say so, because no client flag can fix that.
+    LOGGER.error(
+        "[•] All player clients were refused. The host's egress IP is very "
+        "likely blocked by YouTube. Real fixes: supply cookies from a real "
+        "account (YTDLP_COOKIES), deploy somewhere with a different IP, or "
+        "route through a proxy."
+    )
+    if last_error is not None:
+        raise last_error
+    raise DownloadError("No YouTube player client succeeded")
